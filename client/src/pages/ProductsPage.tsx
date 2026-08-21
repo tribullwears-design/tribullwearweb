@@ -1,15 +1,16 @@
 import {
+  ArrowLeft,
   Check,
   Heart,
   ShoppingCart,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 
 type ProductCategory = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
 type SortOption = "featured" | "newest" | "low" | "high" | "selling";
 
-type Product = {
+export type Product = {
   id: string;
   name: string;
   category: ProductCategory;
@@ -26,7 +27,7 @@ const categories: { id: ProductCategory; label: string; icon: string }[] = [
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
 
-const products: Product[] = [
+export const products: Product[] = [
   { id: "mass", name: "Thalapathy Vijay - Mass", category: "round-neck", price: 599, image: "/products/front-white.png", created: 4, sold: 94 },
   { id: "thala", name: "Ajith Kumar - Thala", category: "round-neck", price: 599, image: "/products/back-black.png", created: 3, sold: 88 },
   { id: "naan", name: "Vikram - Naan Maatram Illai", category: "round-neck", price: 599, image: "/products/flat-white.png", created: 2, sold: 81 },
@@ -57,6 +58,7 @@ function readStorage<T>(key: string, fallback: T): T {
 }
 
 export default function ProductsPage() {
+  const [, setLocation] = useLocation();
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
@@ -85,6 +87,11 @@ export default function ProductsPage() {
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = categories.find((category) => category.id === selectedCategory)?.label;
 
+  const goBack = () => {
+    if (window.history.length > 1) window.history.back();
+    else setLocation("/");
+  };
+
   const toggleWishlist = (productId: string) => {
     setWishlist((current) => current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]);
   };
@@ -98,6 +105,10 @@ export default function ProductsPage() {
   return (
     <div className="products-page">
       <div className="products-page__topbar">
+        <button type="button" className="products-page__back" onClick={goBack} aria-label="Go back">
+          <ArrowLeft size={18} />
+          <span>Back</span>
+        </button>
         <Link href="/" className="products-page__brand" aria-label="Back to Tribull home">
           <img src="/products/logo.png" alt="TRIBULL" />
         </Link>
@@ -148,13 +159,25 @@ export default function ProductsPage() {
             const isWishlisted = wishlist.includes(product.id);
             const isAdded = addedProduct === product.id;
             return (
-              <article className="catalog-product-card" key={product.id}>
+              <article
+                className="catalog-product-card"
+                key={product.id}
+                role="link"
+                tabIndex={0}
+                onClick={() => setLocation(`/product/${product.category}-${products.findIndex((item) => item.id === product.id)}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setLocation(`/product/${product.category}-${products.findIndex((item) => item.id === product.id)}`);
+                  }
+                }}
+              >
                 <div className="catalog-product-card__image">
                   <img src={product.image} alt={product.name} loading="lazy" />
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}
-                    onClick={() => toggleWishlist(product.id)}
+                    onClick={(event) => { event.stopPropagation(); toggleWishlist(product.id); }}
                     aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
                     aria-pressed={isWishlisted}
                   >
@@ -166,7 +189,7 @@ export default function ProductsPage() {
                     <h2>{product.name}</h2>
                     <p>{formatPrice(product.price)}</p>
                   </div>
-                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={() => addToCart(product.id)} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
+                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id); }} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
                     {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}
                   </button>
                 </div>

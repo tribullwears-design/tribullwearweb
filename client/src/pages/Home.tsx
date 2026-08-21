@@ -33,6 +33,8 @@ const bestSelling = [
   [productImages.hangerWhite, "Spider Graphic Tee", "₹1,669"],
 ];
 
+const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
+
 const categories = [
   { slug: "cinema", label: "Cinema", image: brandAssets.cinema, subcategories: ["oversized", "tshirt"] },
   { slug: "sports", label: "Sports", image: brandAssets.sports, subcategories: ["hoodie", "half-sleeve"] },
@@ -167,14 +169,6 @@ export default function Home() {
                     <span>{label}</span>
                     <ArrowUpRight size={17} />
                   </a>
-                  <nav className="category-subnav" aria-label={`${label} products`}>
-                    {subcategories.map((subcategory) => (
-                      <a href={`/category/${slug}`} className="category-subnav__link" key={subcategory}>
-                        <span>{subcategory.replace("-", " ")}</span>
-                        <ArrowUpRight size={13} aria-hidden="true" />
-                      </a>
-                    ))}
-                  </nav>
                 </div>
               ))}
             </Reveal>
@@ -186,12 +180,12 @@ export default function Home() {
             <Reveal>
               <div className="section-heading">
                 <Reveal variant="left"><div><p className="eyebrow"></p><h2>New Arrivals</h2></div></Reveal>
-                <Reveal variant="right"><a className="text-link" href="#best-selling">View all <ArrowUpRight size={16} /></a></Reveal>
               </div>
             </Reveal>
             <div className="product-grid">
               {newArrivals.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
             </div>
+            <a className="view-all text-link" href="#best-selling">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
@@ -200,12 +194,12 @@ export default function Home() {
             <Reveal>
               <div className="section-heading">
                 <Reveal variant="left"><div><p className="eyebrow"></p><h2>Best Selling</h2></div></Reveal>
-                <Reveal variant="right"><a className="text-link" href="#essentials">View all <ArrowUpRight size={16} /></a></Reveal>
               </div>
             </Reveal>
             <div className="product-grid">
               {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
             </div>
+            <a className="view-all text-link" href="#essentials">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
@@ -223,17 +217,23 @@ export default function Home() {
         </div>
 
         <div className="peach-wrapper">
-          <div className="cooperate">
-            <div className="cooperate__container">
-              <Reveal variant="left" className="cooperate__copy">
-                <p className="eyebrow">Build your own uniform</p>
-                <h2>Cooperate<br /><em>banner</em></h2>
-                <a className="button button--green pulse-glow" href="#arrivals">Shop now <ArrowUpRight size={17} /></a>
-              </Reveal>
-              <Reveal variant="right" className="cooperate__texture">
-                <img src={productImages.hangerWhite} alt="White spider graphic T-shirt" />
-              </Reveal>
-            </div>
+          <div className="cooperate-options">
+            <Reveal variant="left" className="cooperate-option cooperate-option--corporate">
+              <div className="cooperate-option__copy">
+                <h2>Corporate</h2>
+                <p>Anything &amp; Anything for<br />your Teams / Office</p>
+                <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
+              </div>
+              <img src="/products/hoodieicon.png" alt="Custom team hoodie" />
+            </Reveal>
+            <Reveal variant="right" className="cooperate-option cooperate-option--custom">
+              <div className="cooperate-option__copy">
+                <h2>Customize</h2>
+                <p>Design your own t-shirts<br />hoodies &amp; more with Dudeme!</p>
+                <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
+              </div>
+              <img src="/products/tshirt.jpg" alt="Custom graphic T-shirt" />
+            </Reveal>
           </div>
         </div>
 

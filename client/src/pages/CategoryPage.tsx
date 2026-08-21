@@ -258,7 +258,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
 
 function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: () => void; onAddToCart: () => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
-  const productLink = `/product/${category}-${index}`;
+  const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`;
 
   return (
     <Link href={productLink} className="block h-full">
@@ -315,7 +315,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   const [cart, setCart] = useState<Record<string, number>>({});
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
 
-  const tabCatalogs = useMemo<Record<CatalogTab, CategoryProduct[]>>(() => ({
+  const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
     "round-neck": catalog,
     oversized: [
       { name: "Daily Uniform Oversized Tee", price: "₹799", image: rotationImages[0] },
@@ -335,7 +335,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[1] },
       { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[2] },
     ],
-  }), [catalog]);
+  };
 
   const visibleCatalog = useMemo(() => {
     const items = [...tabCatalogs[selectedTab]];
@@ -345,7 +345,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     if (sort === "newest") items.reverse();
     if (sort === "selling") items.sort((a, b) => b.name.length - a.name.length);
     return items;
-  }, [selectedTab, sort, tabCatalogs]);
+  }, [catalog, selectedTab, sort]);
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
@@ -381,13 +381,16 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
               <option value="selling">Best Selling</option>
             </select>
           </label>
-          <span className="category-catalog-cart-count"><ShoppingCart size={15} /> {cartCount}</span>
+          <button type="button" className="category-catalog-cart-button" aria-label={`${cartCount} items in cart`}>
+            <ShoppingCart size={18} />
+            {cartCount > 0 && <span>{cartCount}</span>}
+          </button>
         </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${selectedTab}-${item.name}`} item={item} delay={0.04 * index} category={selectedTab} index={index} isWishlisted={wishlist.includes(key)} onWishlist={() => setWishlist((current) => current.includes(key) ? current.filter((id) => id !== key) : [...current, key])} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={() => setWishlist((current) => current.includes(key) ? current.filter((id) => id !== key) : [...current, key])} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
