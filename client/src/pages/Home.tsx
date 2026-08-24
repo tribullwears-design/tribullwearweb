@@ -51,10 +51,6 @@ const categoryNavItems = [
   { label: "Sports", image: brandAssets.sports, href: "/category/sports" },
   { label: "Games", image: brandAssets.games, href: "/category/games" },
   { label: "MotoSports", image: brandAssets.motorsports, href: "/category/motorsports" },
-  { label: "Round Neck", image: "/products/roundneckicon.png", href: "/products" },
-  { label: "Oversized", image: "/products/oversizedicon.png", href: "/products" },
-  { label: "Acid Wash", image: "/products/acidoverwashicon.png", href: "/products" },
-  { label: "Hoodies", image: "/products/hoodieicon.png", href: "/products" },
 ];
 
 function cls(...names: (string | false | null | undefined)[]) {
@@ -184,27 +180,6 @@ export default function Home() {
           </div>
           <div className="hero__stamp float-fast" ref={heroStampRef}>TRIBULL<br /><span>EST. 2024</span></div>
         </section>
-
-        <div className="peach-wrapper">
-          <div className="category-section" id="categories">
-            <Reveal variant="left">
-              <div className="section-lead section-lead--centered">
-                <h2>Shop by category</h2>
-              </div>
-            </Reveal>
-            <Reveal variant="scale" stagger className="category-grid">
-              {categories.map(({ slug, label, image, subcategories }) => (
-                <div className="category-item" key={label}>
-                  <a href={`/category/${slug}`} className="category-card parallax-tilt">
-                    <img src={image} alt="" loading="lazy" />
-                    <span>{label}</span>
-                    <ArrowUpRight size={17} />
-                  </a>
-                </div>
-              ))}
-            </Reveal>
-          </div>
-        </div>
 
         <div className="peach-wrapper">
           <div className="product-section" id="arrivals">
