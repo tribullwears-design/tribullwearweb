@@ -46,6 +46,17 @@ const categories = [
   { slug: "motorsports", label: "MotoSports", image: brandAssets.motorsports, subcategories: ["hoodie", "oversized"] },
 ];
 
+const categoryNavItems = [
+  { label: "Cinema", image: brandAssets.cinema, href: "/category/cinema" },
+  { label: "Sports", image: brandAssets.sports, href: "/category/sports" },
+  { label: "Games", image: brandAssets.games, href: "/category/games" },
+  { label: "MotoSports", image: brandAssets.motorsports, href: "/category/motorsports" },
+  { label: "Round Neck", image: "/products/roundneckicon.png", href: "/products" },
+  { label: "Oversized", image: "/products/oversizedicon.png", href: "/products" },
+  { label: "Acid Wash", image: "/products/acidoverwashicon.png", href: "/products" },
+  { label: "Hoodies", image: "/products/hoodieicon.png", href: "/products" },
+];
+
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
 }
@@ -140,6 +151,17 @@ export default function Home() {
         <Wordmark />
         <div className="header-actions"><button className="icon-button" aria-label="Search"><Search size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Account"><User size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Wishlist"><Heart size={19} strokeWidth={1.5} /></button><a className="icon-button" href="/product/hollywood-0" aria-label="Shopping bag"><ShoppingBag size={19} strokeWidth={1.5} /></a></div>
       </header>
+
+      <nav className="category-nav" aria-label="Shop categories">
+        <div className="category-nav__track">
+          {categoryNavItems.map(({ label, image, href }) => (
+            <a className="category-nav__item" href={href} key={label}>
+              <span className="category-nav__image"><img src={image} alt="" /></span>
+              <span className="category-nav__label">{label}</span>
+            </a>
+          ))}
+        </div>
+      </nav>
 
       <main>
         <section className="hero" aria-label="Tribull new collection">

@@ -77,12 +77,25 @@ main > * + * { margin-top: 0; }
 .ticker span { display:inline-flex; gap:8px; align-items:center; padding-right:34px; white-space:nowrap; }
 .ticker b { font-weight:600; text-decoration:underline; text-underline-offset:3px; }
 .ticker i { font-style:normal; opacity:.6; }
-.site-header { height: 88px; display:flex; align-items:center; justify-content:center; max-width: 1440px; margin:0 auto; padding: 0 48px; animation: headerReveal .6s var(--ease-out) both; position: relative; }
+.site-header { height: 88px; display:flex; align-items:center; justify-content:center; max-width: 1440px; margin:0 auto; padding: 0 48px; animation: headerReveal .6s var(--ease-out) both; position: relative; isolation:isolate; background:#F3EACB; }
+.site-header::before { content:""; position:absolute; z-index:-1; inset:0 calc((100vw - 100%)/-2); background:#F3EACB; }
 .nav-links { display:flex; gap:28px; font-size:11px; text-transform:uppercase; letter-spacing:.13em; font-family: Montserrat, sans-serif; font-weight: 700; }
 .nav-links--right { justify-content:flex-end; }
-.wordmark { display:inline-flex; align-items:center; justify-self:center; width:116px; height:46px; padding:5px 8px; background:#F1E8CB; }
+.wordmark { display:inline-flex; align-items:center; justify-self:center; width:116px; height:46px; padding:5px 8px; }
 .wordmark img { display:block; width:100%; height:100%; object-fit:contain; object-position:center; mix-blend-mode:multiply; }
 .wordmark--inverse img { filter:none; mix-blend-mode:multiply; }
+.category-nav { width:100%; background:#FFFFFF; padding:18px 24px 20px; }
+.category-nav__track { display:flex; justify-content:center; gap:28px; max-width:1100px; margin:0 auto; }
+.category-nav__item { flex:0 0 82px; display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--tribull-green); }
+.category-nav__image { display:block; width:64px; height:64px; overflow:hidden; border-radius:18px; background:#F3EACB; }
+.category-nav__image img { display:block; width:100%; height:100%; object-fit:cover; transition:transform .35s var(--ease-out); }
+.category-nav__item:hover .category-nav__image img { transform:scale(1.08); }
+.category-nav__label { font:600 9px/1.2 Montserrat,sans-serif; letter-spacing:.04em; text-align:center; white-space:nowrap; }
+@media (max-width: 900px) {
+  .category-nav { overflow-x:auto; scrollbar-width:none; }
+  .category-nav::-webkit-scrollbar { display:none; }
+  .category-nav__track { justify-content:flex-start; width:max-content; max-width:none; }
+}
 .header-actions { display:flex; justify-content:center; gap:6px; order: 2; position: absolute; right: 48px; top: 50%; transform: translateY(-50%); }
 .header-cart-button { position: relative; }
 .header-cart-button span { position: absolute; top: 0; right: 0; min-width: 15px; height: 15px; padding: 0 3px; border-radius: 9px; background: var(--tribull-green); color: #fff; font: 700 8px/15px Montserrat, sans-serif; text-align: center; }
@@ -616,14 +629,14 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .lifestyle-section { margin: 24px 40px; padding: 42px 48px 48px; color:var(--tribull-green); }
 .lifestyle-section h2 { margin:0 0 28px; font:700 clamp(18px, 1.8vw, 28px)/1.1 Montserrat,sans-serif; letter-spacing:.08em; text-align:center; text-transform:uppercase; }
 .lifestyle-slider { position:relative; }
-.lifestyle-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:20px; }
+.lifestyle-grid { display:grid; grid-template-columns:repeat(4, minmax(0, 180px)); justify-content:center; gap:20px; }
 .lifestyle-video { aspect-ratio:3 / 5; min-width:0; overflow:hidden; border-radius:14px; background:transparent; }
 .lifestyle-video video { display:block; width:100%; height:100%; object-fit:cover; transition:transform .5s var(--ease-out); }
 .lifestyle-video:hover video { transform:scale(1.04); }
 .lifestyle-slider__arrow { display:none; }
 @media (max-width: 900px) {
   .lifestyle-section { margin:18px 24px; padding:28px 48px; }
-  .lifestyle-grid { grid-template-columns:repeat(4, minmax(180px, 1fr)); gap:16px; }
+  .lifestyle-grid { grid-template-columns:repeat(4, minmax(0, 150px)); gap:16px; }
 }
 @media (max-width: 640px) {
   .lifestyle-section { margin:14px 12px; padding:28px 20px 32px; }
@@ -631,7 +644,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   .lifestyle-slider { padding:0 28px; }
   .lifestyle-grid { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory; scrollbar-width:none; overscroll-behavior-x:contain; }
   .lifestyle-grid::-webkit-scrollbar { display:none; }
-  .lifestyle-video { flex:0 0 min(72vw, 260px); scroll-snap-align:start; }
+  .lifestyle-video { flex:0 0 min(52vw, 180px); scroll-snap-align:start; }
   .lifestyle-slider__arrow { position:absolute; top:50%; z-index:1; display:grid; place-items:center; width:30px; height:30px; padding:0; border:1px solid var(--tribull-green); border-radius:50%; background:var(--tribull-green); color:var(--tribull-cream); transform:translateY(-50%); cursor:pointer; }
   .lifestyle-slider__arrow--left { left:0; }
   .lifestyle-slider__arrow--right { right:0; }
