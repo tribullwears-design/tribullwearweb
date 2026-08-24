@@ -1,5 +1,5 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
-import { ArrowUpRight, Instagram, MapPin, Menu, Search, ShoppingBag, User, Heart } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Menu, Search, ShoppingBag, User, Heart } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef } from "react";
 
@@ -17,6 +17,10 @@ const productImages = {
   frontWhite: "/products/front-white.png",
   hangerWhite: "/products/hanger-white.png",
   flatWhite: "/products/flat-white.png",
+  essentialMensShirt: "/products/essential-mens-shirt.png",
+  essentialTshirts: "/products/essential-tshirts.png",
+  essentialOversized: "/products/essential-oversized.png",
+  essentialHoodies: "/products/essential-hoodies.png",
 };
 
 const newArrivals = [
@@ -103,6 +107,11 @@ export default function Home() {
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const heroStampRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const lifestyleTrackRef = useRef<HTMLDivElement>(null);
+
+  const scrollLifestyle = (direction: "left" | "right") => {
+    lifestyleTrackRef.current?.scrollBy({ left: direction === "left" ? -320 : 320, behavior: "smooth" });
+  };
 
   useEffect(() => {
     let raf = 0;
@@ -210,9 +219,10 @@ export default function Home() {
             </div>
           </Reveal>
           <Reveal variant="scale" stagger className="essentials-grid">
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.backBlack} alt="Oversized black graphic T-shirt" /><span>over sized</span><ArrowUpRight size={17} /></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.frontWhite} alt="White spider graphic T-shirt" /><span>T shirt</span><ArrowUpRight size={17} /></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.hangerWhite} alt="White spider T-shirt" /><span>Hoodies</span><ArrowUpRight size={17} /></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialMensShirt} alt="Round Neck" /><span>Round Neck</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialTshirts} alt="Oversized" /><span>Oversized</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialOversized} alt="Acid Wash Oversized" /><span>Acid Wash Oversized</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialHoodies} alt="Hoodie" /><span>Hoodie</span></a>
           </Reveal>
         </div>
 
@@ -247,23 +257,25 @@ export default function Home() {
           </Reveal>
         </div>
 
-        <section className="clearance-banner">
+        <section className="lifestyle-section" aria-labelledby="lifestyle-heading">
           <Reveal variant="blur">
-            <p className="clearance-banner__eyebrow">GREAT DEALS!</p>
+            <h2 id="lifestyle-heading">Shop by Lifestyle</h2>
           </Reveal>
-          <Reveal variant="blur" delay={0.1}>
-            <h2 className="clearance-banner__title">CLEARANCE STORE UPTO 50%</h2>
-          </Reveal>
-          <Reveal variant="scale" delay={0.2}>
-            <div className="clearance-banner__sizes">
-              <span>SIZE XS</span>
-              <span>SIZE S</span>
-              <span>SIZE M</span>
-              <span>SIZE L</span>
-              <span>SIZE XL</span>
-              <span>SIZE 2XL</span>
+          <div className="lifestyle-slider">
+            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--left" type="button" aria-label="Previous lifestyle videos" onClick={() => scrollLifestyle("left")}>
+              <ArrowLeft size={18} strokeWidth={1.5} />
+            </button>
+            <div className="lifestyle-grid" ref={lifestyleTrackRef}>
+              {["video1", "video2", "video3", "video4"].map((video) => (
+                <div className="lifestyle-video" key={video}>
+                  <video src={`/products/${video}.mp4`} autoPlay loop muted playsInline preload="metadata" aria-label={`${video} lifestyle video`} />
+                </div>
+              ))}
             </div>
-          </Reveal>
+            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--right" type="button" aria-label="Next lifestyle videos" onClick={() => scrollLifestyle("right")}>
+              <ArrowRight size={18} strokeWidth={1.5} />
+            </button>
+          </div>
         </section>
       </main>
 

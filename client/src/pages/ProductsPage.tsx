@@ -104,6 +104,7 @@ export default function ProductsPage() {
 
   return (
     <div className="products-page">
+      <div className="ticker" aria-label="Announcement"><div className="ticker__track">{Array.from({ length: 7 }).map((_, i) => <span key={i}>100% Cotton.<b>Shop Now</b><i>✦</i></span>)}</div></div>
       <div className="products-page__topbar">
         <button type="button" className="products-page__back" onClick={goBack} aria-label="Go back">
           <ArrowLeft size={18} />
