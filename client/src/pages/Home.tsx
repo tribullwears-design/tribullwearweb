@@ -1,7 +1,7 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Menu, Search, ShoppingBag, User, Heart } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -115,9 +115,44 @@ export default function Home() {
   const heroStampRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
+  const lifestyleViewportRef = useRef<HTMLDivElement>(null);
+  const lifestyleSlideRef = useRef<HTMLDivElement>(null);
+  const [lifestyleIndex, setLifestyleIndex] = useState(1);
+  const [lifestyleStep, setLifestyleStep] = useState(0);
+  const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
+
+  const lifestyleVideos = ["video1", "video2", "video3", "video4"];
+  const lifestyleSlides = [lifestyleVideos[3], ...lifestyleVideos, lifestyleVideos[0]];
 
   const scrollLifestyle = (direction: "left" | "right") => {
-    lifestyleTrackRef.current?.scrollBy({ left: direction === "left" ? -320 : 320, behavior: "smooth" });
+    if (lifestyleTransitioning) return;
+    setLifestyleTransitioning(true);
+    setLifestyleIndex((currentIndex) => currentIndex + (direction === "left" ? -1 : 1));
+  };
+
+  useEffect(() => {
+    const updateLifestyleStep = () => {
+      const slide = lifestyleSlideRef.current;
+      const track = lifestyleTrackRef.current;
+      if (!slide || !track) return;
+      const styles = window.getComputedStyle(track);
+      setLifestyleStep(slide.getBoundingClientRect().width + parseFloat(styles.columnGap || styles.gap || "0"));
+    };
+
+    updateLifestyleStep();
+    const observer = new ResizeObserver(updateLifestyleStep);
+    if (lifestyleTrackRef.current) observer.observe(lifestyleTrackRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleLifestyleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
+    if (event.propertyName !== "transform") return;
+    if (lifestyleIndex === 0 || lifestyleIndex === lifestyleSlides.length - 1) {
+      setLifestyleTransitioning(false);
+      setLifestyleIndex(lifestyleIndex === 0 ? lifestyleVideos.length : 1);
+    } else {
+      setLifestyleTransitioning(false);
+    }
   };
 
   useEffect(() => {
@@ -259,17 +294,24 @@ export default function Home() {
             <h2 id="lifestyle-heading">Shop by Lifestyle</h2>
           </Reveal>
           <div className="lifestyle-slider">
-            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--left" type="button" aria-label="Previous lifestyle videos" onClick={() => scrollLifestyle("left")}>
+            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--left" type="button" aria-label="Previous lifestyle videos" disabled={lifestyleTransitioning || lifestyleStep === 0} onClick={() => scrollLifestyle("left")}>
               <ArrowLeft size={18} strokeWidth={1.5} />
             </button>
-            <div className="lifestyle-grid" ref={lifestyleTrackRef}>
-              {["video1", "video2", "video3", "video4"].map((video) => (
-                <div className="lifestyle-video" key={video}>
+            <div className="lifestyle-grid" ref={lifestyleViewportRef}>
+              <div
+                className="lifestyle-grid__track"
+                ref={lifestyleTrackRef}
+                onTransitionEnd={handleLifestyleTransitionEnd}
+                style={{ transform: `translate3d(calc(-${lifestyleIndex * lifestyleStep}px + var(--lifestyle-peek)), 0, 0)`, transition: lifestyleTransitioning ? undefined : "none" }}
+              >
+                {lifestyleSlides.map((video, index) => (
+                <div className={cls("lifestyle-video", index === lifestyleIndex ? "lifestyle-video--active" : null)} key={`${video}-${index}`} ref={index === 1 ? lifestyleSlideRef : undefined}>
                   <video src={`/products/${video}.mp4`} autoPlay loop muted playsInline preload="metadata" aria-label={`${video} lifestyle video`} />
                 </div>
-              ))}
+                ))}
+              </div>
             </div>
-            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--right" type="button" aria-label="Next lifestyle videos" onClick={() => scrollLifestyle("right")}>
+            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--right" type="button" aria-label="Next lifestyle videos" disabled={lifestyleTransitioning || lifestyleStep === 0} onClick={() => scrollLifestyle("right")}>
               <ArrowRight size={18} strokeWidth={1.5} />
             </button>
           </div>
