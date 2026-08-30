@@ -95,7 +95,7 @@ function Reveal({
   );
 }
 
-function ProductCard({ item, delay = 0 }: { item: string[]; delay?: number }) {
+function ProductCard({ item, delay = 0, showMeta = true }: { item: string[]; delay?: number; showMeta?: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   return (
     <article
@@ -104,7 +104,7 @@ function ProductCard({ item, delay = 0 }: { item: string[]; delay?: number }) {
       style={{ transitionDelay: `${delay}s` }}
     >
       <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
-      <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>
+      {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>}
     </article>
   );
 }
@@ -117,17 +117,23 @@ export default function Home() {
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
   const lifestyleSlideRef = useRef<HTMLDivElement>(null);
-  const [lifestyleIndex, setLifestyleIndex] = useState(1);
+  const [lifestyleIndex, setLifestyleIndex] = useState(0);
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
+  const touchStartX = useRef<number | null>(null);
 
   const lifestyleVideos = ["video1", "video2", "video3", "video4"];
-  const lifestyleSlides = [lifestyleVideos[3], ...lifestyleVideos, lifestyleVideos[0]];
+  const lifestyleSlides = Array.from({ length: 6 }, (_, index) => lifestyleVideos[index % lifestyleVideos.length]);
+  const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - 3);
 
   const scrollLifestyle = (direction: "left" | "right") => {
     if (lifestyleTransitioning) return;
+
+    const nextIndex = direction === "left" ? lifestyleIndex - 1 : lifestyleIndex + 1;
+    if (nextIndex < 0 || nextIndex > maxLifestyleIndex) return;
+
     setLifestyleTransitioning(true);
-    setLifestyleIndex((currentIndex) => currentIndex + (direction === "left" ? -1 : 1));
+    setLifestyleIndex(nextIndex);
   };
 
   useEffect(() => {
@@ -136,23 +142,35 @@ export default function Home() {
       const track = lifestyleTrackRef.current;
       if (!slide || !track) return;
       const styles = window.getComputedStyle(track);
-      setLifestyleStep(slide.getBoundingClientRect().width + parseFloat(styles.columnGap || styles.gap || "0"));
+      const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
+      setLifestyleStep(slide.getBoundingClientRect().width + gap);
     };
 
     updateLifestyleStep();
     const observer = new ResizeObserver(updateLifestyleStep);
     if (lifestyleTrackRef.current) observer.observe(lifestyleTrackRef.current);
     return () => observer.disconnect();
-  }, []);
+  }, [lifestyleSlides.length]);
 
   const handleLifestyleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "transform") return;
-    if (lifestyleIndex === 0 || lifestyleIndex === lifestyleSlides.length - 1) {
-      setLifestyleTransitioning(false);
-      setLifestyleIndex(lifestyleIndex === 0 ? lifestyleVideos.length : 1);
-    } else {
-      setLifestyleTransitioning(false);
-    }
+    setLifestyleTransitioning(false);
+  };
+
+  const handleLifestyleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    touchStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleLifestyleTouchEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartX.current === null) return;
+
+    const endX = event.changedTouches[0]?.clientX ?? touchStartX.current;
+    const deltaX = endX - touchStartX.current;
+    touchStartX.current = null;
+
+    if (Math.abs(deltaX) < 30) return;
+    if (deltaX > 0) scrollLifestyle("right");
+    else scrollLifestyle("left");
   };
 
   useEffect(() => {
@@ -176,7 +194,6 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      <div className="ticker" aria-label="Announcement"><div className="ticker__track">{Array.from({ length: 7 }).map((_, i) => <span key={i}>100% Cotton.<b>Shop Now</b><i>✦</i></span>)}</div></div>
       <header className="site-header">
         <button className="icon-button mobile-menu" aria-label="Open menu"><Menu size={20} strokeWidth={1.5} /></button>
         <Wordmark />
@@ -237,8 +254,8 @@ export default function Home() {
                 <Reveal variant="left"><div><p className="eyebrow"></p><h2>Best Selling</h2></div></Reveal>
               </div>
             </Reveal>
-            <div className="product-grid">
-              {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
+            <div className="product-grid product-grid--image-only">
+              {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} showMeta={false} />)}
             </div>
             <a className="view-all text-link" href="#essentials">View all <ArrowUpRight size={16} /></a>
           </div>
@@ -293,8 +310,14 @@ export default function Home() {
           <Reveal variant="blur">
             <h2 id="lifestyle-heading">Shop by Lifestyle</h2>
           </Reveal>
-          <div className="lifestyle-slider">
-            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--left" type="button" aria-label="Previous lifestyle videos" disabled={lifestyleTransitioning || lifestyleStep === 0} onClick={() => scrollLifestyle("left")}>
+          <div className="lifestyle-slider" onTouchStart={handleLifestyleTouchStart} onTouchEnd={handleLifestyleTouchEnd}>
+            <button
+              className="lifestyle-slider__arrow lifestyle-slider__arrow--left"
+              type="button"
+              aria-label="Previous lifestyle videos"
+              disabled={lifestyleTransitioning || lifestyleIndex <= 0 || lifestyleStep === 0}
+              onClick={() => scrollLifestyle("left")}
+            >
               <ArrowLeft size={18} strokeWidth={1.5} />
             </button>
             <div className="lifestyle-grid" ref={lifestyleViewportRef}>
@@ -302,16 +325,29 @@ export default function Home() {
                 className="lifestyle-grid__track"
                 ref={lifestyleTrackRef}
                 onTransitionEnd={handleLifestyleTransitionEnd}
-                style={{ transform: `translate3d(calc(-${lifestyleIndex * lifestyleStep}px + var(--lifestyle-peek)), 0, 0)`, transition: lifestyleTransitioning ? undefined : "none" }}
+                style={{
+                  transform: `translate3d(calc(-${lifestyleIndex * lifestyleStep}px + var(--lifestyle-peek)), 0, 0)`,
+                  transition: lifestyleTransitioning ? "transform 0.7s cubic-bezier(.23,1,.32,1)" : "none",
+                }}
               >
                 {lifestyleSlides.map((video, index) => (
-                <div className={cls("lifestyle-video", index === lifestyleIndex ? "lifestyle-video--active" : null)} key={`${video}-${index}`} ref={index === 1 ? lifestyleSlideRef : undefined}>
-                  <video src={`/products/${video}.mp4`} autoPlay loop muted playsInline preload="metadata" aria-label={`${video} lifestyle video`} />
-                </div>
+                  <div
+                    className={cls("lifestyle-video", index === lifestyleIndex ? "lifestyle-video--active" : null)}
+                    key={`${video}-${index}`}
+                    ref={index === 0 ? lifestyleSlideRef : undefined}
+                  >
+                    <video src={`/products/${video}.mp4`} autoPlay loop muted playsInline preload="metadata" aria-label={`${video} lifestyle video`} />
+                  </div>
                 ))}
               </div>
             </div>
-            <button className="lifestyle-slider__arrow lifestyle-slider__arrow--right" type="button" aria-label="Next lifestyle videos" disabled={lifestyleTransitioning || lifestyleStep === 0} onClick={() => scrollLifestyle("right")}>
+            <button
+              className="lifestyle-slider__arrow lifestyle-slider__arrow--right"
+              type="button"
+              aria-label="Next lifestyle videos"
+              disabled={lifestyleTransitioning || lifestyleIndex >= maxLifestyleIndex || lifestyleStep === 0}
+              onClick={() => scrollLifestyle("right")}
+            >
               <ArrowRight size={18} strokeWidth={1.5} />
             </button>
           </div>

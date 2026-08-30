@@ -202,7 +202,7 @@ export default function ProductDetailPage() {
                   key={i}
                   type="button"
                   onClick={() => setSelectedImage(image)}
-                  className={`flex-shrink-0 w-20 h-20 rounded-lg bg-gray-100 border-2 ${selectedImage === image ? "border-[var(--tribull-green)]" : "border-transparent"} hover:border-gray-400 overflow-hidden`}
+                  className={`flex-shrink-0 w-12 h-12 rounded-lg bg-gray-100 border-2 ${selectedImage === image ? "border-[var(--tribull-green)]" : "border-transparent"} hover:border-gray-400 overflow-hidden`}
                 >
                   <img
                     src={image}

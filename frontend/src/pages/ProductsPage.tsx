@@ -135,7 +135,9 @@ export default function ProductsPage() {
               onClick={() => setSelectedCategory(id)}
               aria-pressed={selectedCategory === id}
             >
-              <span className="product-category-tab__icon"><img src={icon} alt="" /></span>
+              <span className="product-category-tab__icon">
+                <img src={icon} alt="" style={{ width: 24, height: 24, objectFit: "contain", display: "block" }} />
+              </span>
               <span>{label}</span>
             </button>
           ))}

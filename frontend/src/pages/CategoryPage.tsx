@@ -301,6 +301,54 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
 type CatalogTab = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
 type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 
+function GlobalNavigation() {
+  return (
+    <div className="cinema-page-header">
+      <div className="cinema-marketbar" aria-label="Announcement">
+        <div className="cinema-marketbar__track">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <span key={i}>
+              <b>100% COTTON.</b> SHOP NOW
+              <i>✦</i>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <header className="site-header cinema-site-header">
+        <button className="icon-button mobile-menu" aria-label="Open menu"><span aria-hidden="true">☰</span></button>
+        <a className="wordmark" href="/" aria-label="Tribull home">
+          <img src="/products/logo.png" alt="TRIBULL" />
+        </a>
+        <div className="header-actions">
+          <button className="icon-button" aria-label="Search"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M16 16L21 21" /></svg></button>
+          <button className="icon-button" aria-label="Account"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="7" r="4" /></svg></button>
+          <button className="icon-button" aria-label="Wishlist"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.35-9.5-8.73C1.2 9.7 2.47 5 6.73 5c2.1 0 3.2 1.15 4.27 2.3C12.07 6.15 13.17 5 15.27 5c4.26 0 5.53 4.7 4.23 7.27C19.5 16.65 12 21 12 21z" /></svg></button>
+          <Link href="/product/hollywood-0" className="icon-button" aria-label="Shopping bag"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h2l2.4 9.68a1 1 0 0 0 .98.82h8.35a1 1 0 0 0 .98-.8L20 7H7" /><circle cx="10" cy="18.5" r="1.3" /><circle cx="17" cy="18.5" r="1.3" /></svg></Link>
+        </div>
+      </header>
+    </div>
+  );
+}
+
+function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
+  const definition = categoryDefinitions[categorySlug];
+  if (!definition) return null;
+
+  return (
+    <nav className="category-nav cinema-category-nav" aria-label={`${definition.title} categories`}>
+      <div className="category-nav__track">
+        {definition.subcategories.map(({ label, slug, image }) => (
+          <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>
+            <span className="category-nav__image"><img src={image} alt="" /></span>
+            <span className="category-nav__label">{label}</span>
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
   { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
   { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
@@ -403,18 +451,13 @@ export default function CategoryPage() {
 
   if (categorySlug === "cinema" && !lang) {
     const definition = categoryDefinitions.cinema;
+    const catalog = categoryProducts.cinema.hollywood;
+    const entrySlug = "hollywood";
 
     return (
       <div className="subcategory-page">
-        <div className="category-page__header">
-          <Link href="/" className="back-link">
-            <ArrowLeft size={18} /> Back
-          </Link>
-          <div className="category-page__title-wrap">
-            <p className="category-page__eyebrow">{definition.subtitle}</p>
-            <h1>{definition.title}</h1>
-          </div>
-        </div>
+        <GlobalNavigation />
+        <DynamicCategoryNav categorySlug="cinema" />
 
         <CategoryHero
           title={definition.title}
@@ -422,25 +465,31 @@ export default function CategoryPage() {
           image="/products/hero.png"
         />
 
-        <SubcategoryList categorySlug={categorySlug} items={definition.subcategories} />
+        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+          <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
+        </div>
+
+        <div className="product-grid product-grid--image-only">
+          {catalog.map((item, index) => (
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+            </Link>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (categorySlug === "sports" && !lang) {
     const definition = categoryDefinitions.sports;
+    const defaultSubcat = definition.subcategories[0];
+    const catalog = categoryProducts.sports[defaultSubcat.slug] || [];
+    const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
-        <div className="category-page__header">
-          <Link href="/" className="back-link">
-            <ArrowLeft size={18} /> Back
-          </Link>
-          <div className="category-page__title-wrap">
-            <p className="category-page__eyebrow">{definition.subtitle}</p>
-            <h1>{definition.title}</h1>
-          </div>
-        </div>
+        <GlobalNavigation />
+        <DynamicCategoryNav categorySlug="sports" />
 
         <CategoryHero
           title={definition.title}
@@ -448,25 +497,31 @@ export default function CategoryPage() {
           image="/products/sportsbanner.png"
         />
 
-        <SubcategoryList categorySlug={categorySlug} items={definition.subcategories} />
+        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+          <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
+        </div>
+
+        <div className="product-grid product-grid--image-only">
+          {catalog.map((item, index) => (
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+            </Link>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (categorySlug === "motorsports" && !lang) {
     const definition = categoryDefinitions.motorsports;
+    const defaultSubcat = definition.subcategories[0];
+    const catalog = categoryProducts.motorsports[defaultSubcat.slug] || [];
+    const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
-        <div className="category-page__header">
-          <Link href="/" className="back-link">
-            <ArrowLeft size={18} /> Back
-          </Link>
-          <div className="category-page__title-wrap">
-            <p className="category-page__eyebrow">{definition.subtitle}</p>
-            <h1>{definition.title}</h1>
-          </div>
-        </div>
+        <GlobalNavigation />
+        <DynamicCategoryNav categorySlug="motorsports" />
 
         <CategoryHero
           title={definition.title}
@@ -474,25 +529,31 @@ export default function CategoryPage() {
           image="/products/motosportsbanner.png"
         />
 
-        <SubcategoryList categorySlug={categorySlug} items={definition.subcategories} />
+        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+          <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
+        </div>
+
+        <div className="product-grid product-grid--image-only">
+          {catalog.map((item, index) => (
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+            </Link>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (categorySlug === "games" && !lang) {
     const definition = categoryDefinitions.games;
+    const defaultSubcat = definition.subcategories[0];
+    const catalog = categoryProducts.games[defaultSubcat.slug] || [];
+    const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
-        <div className="category-page__header">
-          <Link href="/" className="back-link">
-            <ArrowLeft size={18} /> Back
-          </Link>
-          <div className="category-page__title-wrap">
-            <p className="category-page__eyebrow">{definition.subtitle}</p>
-            <h1>{definition.title}</h1>
-          </div>
-        </div>
+        <GlobalNavigation />
+        <DynamicCategoryNav categorySlug="games" />
 
         <CategoryHero
           title={definition.title}
@@ -500,7 +561,17 @@ export default function CategoryPage() {
           image="/products/game banner.png"
         />
 
-        <SubcategoryList categorySlug={categorySlug} items={definition.subcategories} />
+        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+          <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
+        </div>
+
+        <div className="product-grid product-grid--image-only">
+          {catalog.map((item, index) => (
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+            </Link>
+          ))}
+        </div>
       </div>
     );
   }
@@ -513,15 +584,8 @@ export default function CategoryPage() {
 
     return (
       <div className="category-products-page">
-        <div className="category-page__header">
-          <Link href={`/category/${categorySlug}`} className="back-link">
-            <ArrowLeft size={18} /> Back
-          </Link>
-          <div className="category-page__title-wrap">
-            <p className="category-page__eyebrow">{category.title}</p>
-            <h1>{entry.label}</h1>
-          </div>
-        </div>
+        <GlobalNavigation />
+        <DynamicCategoryNav categorySlug={categorySlug} />
 
         <div className="category-hero" aria-label={`${entry.label} featured collection`}>
           <div className="category-hero__visual">
