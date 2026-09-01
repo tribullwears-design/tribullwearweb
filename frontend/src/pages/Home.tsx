@@ -28,6 +28,8 @@ const newArrivals = [
   [productImages.hangerWhite, "Classic Spider Tee", "₹1,739"],
   [productImages.flatWhite, "Graphic Cotton Tee", "₹1,599"],
   [productImages.backBlack, "Oversized Spider Tee", "₹2,499"],
+  [productImages.frontWhite, "Premium Spider Tee", "₹1,899"],
+  [productImages.hangerWhite, "Vintage Spider Print", "₹1,649"],
 ];
 
 const bestSelling = [
@@ -35,6 +37,8 @@ const bestSelling = [
   [productImages.frontWhite, "Spider Web Front Tee", "₹1,559"],
   [productImages.flatWhite, "Swinging Legends Tee", "₹1,369"],
   [productImages.hangerWhite, "Spider Graphic Tee", "₹1,669"],
+  [productImages.flatWhite, "Dark Spider Collection", "₹1,799"],
+  [productImages.backBlack, "Classic Spider Heritage", "₹1,929"],
 ];
 
 const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
@@ -261,20 +265,6 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="essentials" id="essentials">
-          <Reveal variant="blur">
-            <div className="section-heading section-heading--light">
-              <div><p className="eyebrow">The foundation</p><h2>OUR ESSENTIALS</h2></div>
-            </div>
-          </Reveal>
-          <Reveal variant="scale" stagger className="essentials-grid">
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialMensShirt} alt="Round Neck" /><span>Round Neck</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialTshirts} alt="Oversized" /><span>Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialOversized} alt="Acid Wash Oversized" /><span>Acid Wash Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialHoodies} alt="Hoodie" /><span>Hoodie</span></a>
-          </Reveal>
-        </div>
-
         <div className="peach-wrapper">
           <div className="cooperate-options">
             <Reveal variant="left" className="cooperate-option cooperate-option--corporate">
@@ -294,6 +284,20 @@ export default function Home() {
               <img src="/products/tshirt.jpg" alt="Custom graphic T-shirt" />
             </Reveal>
           </div>
+        </div>
+
+        <div className="essentials" id="essentials">
+          <Reveal variant="blur">
+            <div className="section-heading section-heading--light">
+              <div><p className="eyebrow">The foundation</p><h2>OUR ESSENTIALS</h2></div>
+            </div>
+          </Reveal>
+          <Reveal variant="scale" stagger className="essentials-grid">
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialMensShirt} alt="Round Neck" /><span>Round Neck</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialTshirts} alt="Oversized" /><span>Oversized</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialOversized} alt="Acid Wash Oversized" /><span>Acid Wash Oversized</span></a>
+            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialHoodies} alt="Hoodie" /><span>Hoodie</span></a>
+          </Reveal>
         </div>
 
         <div className="bottom-visuals">

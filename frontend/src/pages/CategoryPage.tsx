@@ -68,37 +68,59 @@ const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
       { name: "Kollywood Hero Tee", price: "₹1,699", image: rotationImages[2] },
       { name: "Kollywood Legend", price: "₹1,899", image: rotationImages[3] },
       { name: "Kollywood Power Tee", price: "₹2,099", image: rotationImages[1] },
-      { name: "Kollywood Crown", price: "₹1,599", image: rotationImages[0] },
-    ],
+      { name: "Kollywood Crown", price: "₹1,599", image: rotationImages[0] },      { name: "Kollywood Royale Tee", price: "₹1,749", image: rotationImages[0] },
+      { name: "Kollywood Star Print", price: "₹1,999", image: rotationImages[2] },
+      { name: "Kollywood Glory Tee", price: "₹1,849", image: rotationImages[3] },
+      { name: "Kollywood Charm Tee", price: "₹1,679", image: rotationImages[1] },    ],
     tollywood: [
       { name: "Tollywood Charm Tee", price: "₹1,649", image: rotationImages[1] },
       { name: "Tollywood Spotlight", price: "₹1,829", image: rotationImages[0] },
       { name: "Tollywood Mass Print", price: "₹1,949", image: rotationImages[3] },
       { name: "Tollywood Cinematic", price: "₹1,579", image: rotationImages[2] },
+      { name: "Tollywood Drama Queen", price: "₹1,729", image: rotationImages[2] },
+      { name: "Tollywood Prestige", price: "₹1,999", image: rotationImages[0] },
+      { name: "Tollywood Heritage", price: "₹1,879", image: rotationImages[1] },
+      { name: "Tollywood Pulse", price: "₹1,699", image: rotationImages[3] },
     ],
     mollywood: [
       { name: "Mollywood Motion Tee", price: "₹1,739", image: rotationImages[0] },
       { name: "Mollywood Storyline", price: "₹1,899", image: rotationImages[2] },
       { name: "Mollywood Sunset Print", price: "₹2,049", image: rotationImages[1] },
       { name: "Mollywood Classic", price: "₹1,629", image: rotationImages[3] },
+      { name: "Mollywood Waves Tee", price: "₹1,799", image: rotationImages[1] },
+      { name: "Mollywood Breeze", price: "₹1,969", image: rotationImages[2] },
+      { name: "Mollywood Vision Tee", price: "₹1,869", image: rotationImages[0] },
+      { name: "Mollywood Soul Tee", price: "₹1,699", image: rotationImages[3] },
     ],
     sandalwood: [
       { name: "Sandalwood Star Tee", price: "₹1,749", image: rotationImages[3] },
       { name: "Sandalwood Reel", price: "₹1,869", image: rotationImages[1] },
       { name: "Sandalwood Heritage", price: "₹1,979", image: rotationImages[2] },
       { name: "Sandalwood Gold", price: "₹1,599", image: rotationImages[0] },
+      { name: "Sandalwood Essence Tee", price: "₹1,819", image: rotationImages[2] },
+      { name: "Sandalwood Pride", price: "₹1,999", image: rotationImages[3] },
+      { name: "Sandalwood Breeze Tee", price: "₹1,899", image: rotationImages[0] },
+      { name: "Sandalwood Spirit", price: "₹1,729", image: rotationImages[1] },
     ],
     bollywood: [
       { name: "Bollywood Dazzle Tee", price: "₹1,649", image: rotationImages[1] },
       { name: "Bollywood Shimmer", price: "₹1,849", image: rotationImages[2] },
       { name: "Bollywood Drama Tee", price: "₹1,949", image: rotationImages[3] },
       { name: "Bollywood Gold", price: "₹1,549", image: rotationImages[0] },
+      { name: "Bollywood Sparkle Tee", price: "₹1,749", image: rotationImages[0] },
+      { name: "Bollywood Glam", price: "₹1,999", image: rotationImages[1] },
+      { name: "Bollywood Elegance Tee", price: "₹1,899", image: rotationImages[2] },
+      { name: "Bollywood Charm", price: "₹1,699", image: rotationImages[3] },
     ],
     hollywood: [
       { name: "Hollywood Icon Tee", price: "₹1,599", image: rotationImages[0] },
       { name: "Hollywood Star Print", price: "₹1,799", image: rotationImages[1] },
       { name: "Hollywood Blockbuster", price: "₹1,999", image: rotationImages[2] },
       { name: "Hollywood Classic", price: "₹1,499", image: rotationImages[3] },
+      { name: "Hollywood Legend Tee", price: "₹1,699", image: rotationImages[3] },
+      { name: "Hollywood Prestige", price: "₹1,999", image: rotationImages[0] },
+      { name: "Hollywood Premium Tee", price: "₹1,899", image: rotationImages[1] },
+      { name: "Hollywood Crown", price: "₹1,699", image: rotationImages[2] },
     ],
   },
   sports: {
@@ -107,18 +129,30 @@ const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
       { name: "Cricket Captain Print", price: "₹1,899", image: rotationImages[2] },
       { name: "Cricket Match Tee", price: "₹1,979", image: rotationImages[1] },
       { name: "Cricket Pace Tee", price: "₹1,599", image: rotationImages[3] },
+      { name: "Cricket Victory Tee", price: "₹1,749", image: rotationImages[1] },
+      { name: "Cricket Champion", price: "₹1,999", image: rotationImages[0] },
+      { name: "Cricket Glory Tee", price: "₹1,899", image: rotationImages[3] },
+      { name: "Cricket Legacy", price: "₹1,729", image: rotationImages[2] },
     ],
     football: [
       { name: "Football Flow Tee", price: "₹1,729", image: rotationImages[1] },
       { name: "Football League Print", price: "₹1,949", image: rotationImages[0] },
       { name: "Football Hustle Tee", price: "₹2,099", image: rotationImages[3] },
       { name: "Football Matchday", price: "₹1,649", image: rotationImages[2] },
+      { name: "Football Strike Tee", price: "₹1,799", image: rotationImages[2] },
+      { name: "Football Goal Print", price: "₹1,999", image: rotationImages[1] },
+      { name: "Football Elite Tee", price: "₹1,879", image: rotationImages[0] },
+      { name: "Football Momentum", price: "₹1,759", image: rotationImages[3] },
     ],
     gym: [
       { name: "Gym Lift Tee", price: "₹1,579", image: rotationImages[3] },
       { name: "Gym Drive Tee", price: "₹1,799", image: rotationImages[2] },
       { name: "Gym Motion Print", price: "₹1,989", image: rotationImages[0] },
       { name: "Gym Strong Tee", price: "₹1,679", image: rotationImages[1] },
+      { name: "Gym Beast Tee", price: "₹1,749", image: rotationImages[0] },
+      { name: "Gym Grind Print", price: "₹1,999", image: rotationImages[3] },
+      { name: "Gym Shred Tee", price: "₹1,899", image: rotationImages[2] },
+      { name: "Gym Flow", price: "₹1,729", image: rotationImages[1] },
     ],
   },
   motorsports: {
@@ -127,12 +161,20 @@ const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
       { name: "Car Racing Print", price: "₹1,999", image: rotationImages[1] },
       { name: "Car Speed Tee", price: "₹2,149", image: rotationImages[2] },
       { name: "Car Apex Tee", price: "₹1,799", image: rotationImages[3] },
+      { name: "Car Turbo Tee", price: "₹1,849", image: rotationImages[3] },
+      { name: "Car Nitro Print", price: "₹2,099", image: rotationImages[0] },
+      { name: "Car Track Tee", price: "₹1,999", image: rotationImages[1] },
+      { name: "Car Power", price: "₹1,829", image: rotationImages[2] },
     ],
     bike: [
       { name: "Bike Rush Tee", price: "₹1,699", image: rotationImages[3] },
       { name: "Bike Sprint Print", price: "₹1,949", image: rotationImages[2] },
       { name: "Bike Track Tee", price: "₹2,099", image: rotationImages[0] },
       { name: "Bike Torque Tee", price: "₹1,649", image: rotationImages[1] },
+      { name: "Bike Racer Tee", price: "₹1,799", image: rotationImages[1] },
+      { name: "Bike Velocity Print", price: "₹2,049", image: rotationImages[3] },
+      { name: "Bike Striker Tee", price: "₹1,949", image: rotationImages[2] },
+      { name: "Bike Ace", price: "₹1,729", image: rotationImages[0] },
     ],
   },
   games: {
@@ -141,12 +183,20 @@ const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
       { name: "PC Games Pro Print", price: "₹1,899", image: rotationImages[2] },
       { name: "PC Games Hero Tee", price: "₹2,099", image: rotationImages[1] },
       { name: "PC Games Charge Tee", price: "₹1,599", image: rotationImages[3] },
+      { name: "PC Games Quest Tee", price: "₹1,749", image: rotationImages[1] },
+      { name: "PC Games Master Print", price: "₹1,999", image: rotationImages[0] },
+      { name: "PC Games Legend Tee", price: "₹1,899", image: rotationImages[3] },
+      { name: "PC Games Victory", price: "₹1,729", image: rotationImages[2] },
     ],
     "mobile-games": [
       { name: "Mobile Games Boost Tee", price: "₹1,579", image: rotationImages[1] },
       { name: "Mobile Games Quest Print", price: "₹1,849", image: rotationImages[3] },
       { name: "Mobile Games Arcade Tee", price: "₹2,049", image: rotationImages[0] },
       { name: "Mobile Games Mode Tee", price: "₹1,699", image: rotationImages[2] },
+      { name: "Mobile Games Tap Tee", price: "₹1,749", image: rotationImages[2] },
+      { name: "Mobile Games Swipe Print", price: "₹1,999", image: rotationImages[1] },
+      { name: "Mobile Games Pulse Tee", price: "₹1,899", image: rotationImages[0] },
+      { name: "Mobile Games Rush", price: "₹1,729", image: rotationImages[3] },
     ],
   },
 };
@@ -469,7 +519,7 @@ export default function CategoryPage() {
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
-        <div className="product-grid product-grid--image-only">
+        <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
             <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
@@ -501,7 +551,7 @@ export default function CategoryPage() {
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
-        <div className="product-grid product-grid--image-only">
+        <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
             <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
@@ -533,7 +583,7 @@ export default function CategoryPage() {
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
-        <div className="product-grid product-grid--image-only">
+        <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
             <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
@@ -565,7 +615,7 @@ export default function CategoryPage() {
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
-        <div className="product-grid product-grid--image-only">
+        <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
             <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
