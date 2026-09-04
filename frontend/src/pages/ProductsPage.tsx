@@ -93,11 +93,16 @@ export default function ProductsPage() {
   };
 
   const toggleWishlist = (productId: string) => {
-    setWishlist((current) => current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]);
+    setWishlist((current) => {
+      const nextWishlist = current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId];
+      window.dispatchEvent(new Event("tribull-wishlist-updated"));
+      return nextWishlist;
+    });
   };
 
   const addToCart = (productId: string) => {
     setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + 1 }));
+    window.dispatchEvent(new Event("tribull-cart-updated"));
     setAddedProduct(productId);
     window.setTimeout(() => setAddedProduct((current) => current === productId ? null : current), 1200);
   };

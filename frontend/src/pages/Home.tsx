@@ -1,8 +1,9 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
-import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Search, ShoppingBag, User, Heart } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState } from "react";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import HeaderActions from "../components/HeaderActions";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -213,7 +214,7 @@ export default function Home() {
       <header className="site-header">
         <MobileCategoryMenu />
         <Wordmark />
-        <div className="header-actions"><button className="icon-button" aria-label="Search"><Search size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Account"><User size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Wishlist"><Heart size={19} strokeWidth={1.5} /></button><a className="icon-button" href="/product/hollywood-0" aria-label="Shopping bag"><ShoppingBag size={19} strokeWidth={1.5} /></a></div>
+        <HeaderActions />
       </header>
 
       <nav className="category-nav" aria-label="Shop categories">

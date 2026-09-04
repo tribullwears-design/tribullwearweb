@@ -3,6 +3,7 @@ import { Link, useParams } from "wouter";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import HeaderActions from "../components/HeaderActions";
 
 type CategoryProduct = {
   name: string;
@@ -371,12 +372,7 @@ function GlobalNavigation() {
         <a className="wordmark" href="/" aria-label="Tribull home">
           <img src="/products/logo.png" alt="TRIBULL" />
         </a>
-        <div className="header-actions">
-          <button className="icon-button" aria-label="Search"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="M16 16L21 21" /></svg></button>
-          <button className="icon-button" aria-label="Account"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0" /><circle cx="12" cy="7" r="4" /></svg></button>
-          <button className="icon-button" aria-label="Wishlist"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7.5-4.35-9.5-8.73C1.2 9.7 2.47 5 6.73 5c2.1 0 3.2 1.15 4.27 2.3C12.07 6.15 13.17 5 15.27 5c4.26 0 5.53 4.7 4.23 7.27C19.5 16.65 12 21 12 21z" /></svg></button>
-          <Link href="/product/hollywood-0" className="icon-button" aria-label="Shopping bag"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 5h2l2.4 9.68a1 1 0 0 0 .98.82h8.35a1 1 0 0 0 .98-.8L20 7H7" /><circle cx="10" cy="18.5" r="1.3" /><circle cx="17" cy="18.5" r="1.3" /></svg></Link>
-        </div>
+        <HeaderActions />
       </header>
     </div>
   );
@@ -410,8 +406,12 @@ const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
 function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: CategoryProduct[]; categorySlug: string; entrySlug: string }) {
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
   const [sort, setSort] = useState<CatalogSort>("featured");
-  const [wishlist, setWishlist] = useState<string[]>([]);
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [wishlist, setWishlist] = useState<string[]>(() => {
+    try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
+  });
+  const [cart, setCart] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
+  });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
 
   const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
@@ -452,7 +452,12 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 
   const addToCart = (item: CategoryProduct) => {
     const key = productKey(item);
-    setCart((current) => ({ ...current, [key]: (current[key] || 0) + 1 }));
+    setCart((current) => {
+      const nextCart = { ...current, [key]: (current[key] || 0) + 1 };
+      window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+      window.dispatchEvent(new Event("tribull-cart-updated"));
+      return nextCart;
+    });
     setAddedProduct(key);
     window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
@@ -489,7 +494,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={() => setWishlist((current) => current.includes(key) ? current.filter((id) => id !== key) : [...current, key])} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={() => setWishlist((current) => { const nextWishlist = current.includes(key) ? current.filter((id) => id !== key) : [...current, key]; window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>

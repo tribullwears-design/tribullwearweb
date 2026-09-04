@@ -1,4 +1,6 @@
-import { Check, Headphones, Heart, Menu, Package, Search, ShieldCheck, ShoppingBag, ShoppingCart, Star, Truck, User } from "lucide-react";
+import { Check, Headphones, Package, ShieldCheck, ShoppingCart, Star, Truck } from "lucide-react";
+import HeaderActions from "../components/HeaderActions";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
 
@@ -173,17 +175,9 @@ export default function ProductDetailPage() {
     <div className="product-detail-page">
       <div className="ticker" aria-label="Announcement"><div className="ticker__track">{Array.from({ length: 7 }).map((_, i) => <span key={i}>100% Cotton.<b>Shop Now</b><i>✦</i></span>)}</div></div>
       <header className="site-header">
-        <button className="icon-button mobile-menu" aria-label="Open menu"><Menu size={20} strokeWidth={1.5} /></button>
+        <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home"><img src="/products/logo.png" alt="TRIBULL" /></a>
-        <div className="header-actions">
-          <button className="icon-button" aria-label="Search"><Search size={19} strokeWidth={1.5} /></button>
-          <button className="icon-button" aria-label="Account"><User size={19} strokeWidth={1.5} /></button>
-          <button className="icon-button" aria-label="Wishlist"><Heart size={19} strokeWidth={1.5} /></button>
-          <button className="icon-button header-cart-button" type="button" aria-label={`${headerCartCount} items in cart`}>
-            <ShoppingBag size={19} strokeWidth={1.5} />
-            {headerCartCount > 0 && <span>{headerCartCount}</span>}
-          </button>
-        </div>
+        <HeaderActions />
       </header>
       <div className="product-detail-main max-w-7xl mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-12">

@@ -1,5 +1,6 @@
-import { ArrowLeft, Heart, ShoppingCart } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Link } from "wouter";
+import HeaderActions from "../components/HeaderActions";
 
 type AllProduct = {
   name: string;
@@ -37,14 +38,7 @@ export default function AllProductsPage() {
           <img src="/products/logo.png" alt="TRIBULL" />
         </Link>
 
-        <div className="all-products-actions">
-          <button type="button" className="all-products-icon" aria-label="Wishlist">
-            <Heart size={18} strokeWidth={1.8} />
-          </button>
-          <button type="button" className="all-products-icon" aria-label="Cart">
-            <ShoppingCart size={18} strokeWidth={1.8} />
-          </button>
-        </div>
+        <HeaderActions />
       </header>
 
       <main className="all-products-content">
