@@ -515,7 +515,7 @@ export default function CategoryPage() {
           image="/products/hero.png"
         />
 
-        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+        <div className="section-heading category-best-selling-heading">
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
@@ -547,7 +547,7 @@ export default function CategoryPage() {
           image="/products/sportsbanner.png"
         />
 
-        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+        <div className="section-heading category-best-selling-heading">
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
@@ -579,7 +579,7 @@ export default function CategoryPage() {
           image="/products/motosportsbanner.png"
         />
 
-        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+        <div className="section-heading category-best-selling-heading">
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 
@@ -611,7 +611,7 @@ export default function CategoryPage() {
           image="/products/game banner.png"
         />
 
-        <div className="section-heading" style={{ justifyContent: "center", marginBottom: "20px" }}>
+        <div className="section-heading category-best-selling-heading">
           <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
         </div>
 

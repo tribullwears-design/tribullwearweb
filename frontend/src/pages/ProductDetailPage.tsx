@@ -386,56 +386,6 @@ export default function ProductDetailPage() {
         </div>
       </section>
 
-      <footer className="product-detail-footer">
-        <div className="product-detail-footer__grid">
-          <div className="product-detail-footer__brand">
-            <img src="/products/logo.png" alt="TRIBULL" />
-            <p>100% cotton, always.</p>
-            <p>Made for everyday movement.</p>
-            <h3 className="product-detail-footer__follow-title">Follow Us:</h3>
-            <div className="product-detail-footer__socials" aria-label="Social media links">
-              <a href="#customer-reviews" aria-label="Facebook">f</a>
-              <a href="#customer-reviews" aria-label="X">𝕏</a>
-              <a href="#customer-reviews" aria-label="Instagram">◎</a>
-              <a href="#customer-reviews" aria-label="LinkedIn">in</a>
-              <a href="#customer-reviews" aria-label="Pinterest">p</a>
-              <a href="#customer-reviews" aria-label="YouTube">▶</a>
-            </div>
-          </div>
-          <div>
-            <h3>Need Help</h3>
-            <a href="#customer-reviews">Contact Us</a>
-            <a href="#customer-reviews">Track Order</a>
-            <a href="#customer-reviews">Returns &amp; Refunds</a>
-            <a href="#customer-reviews">FAQs</a>
-          </div>
-          <div>
-            <h3>Company</h3>
-            <a href="/">About Us</a>
-            <a href="/">Careers</a>
-            <a href="/">Community</a>
-            <a href="/">Contact</a>
-          </div>
-          <div>
-            <h3>Shopping</h3>
-            <a href="/">T-shirts</a>
-            <a href="/">Hoodies</a>
-            <a href="/">Corporate / Bulk</a>
-            <a href="/">Shipping</a>
-          </div>
-          <div className="product-detail-footer__shipping">
-            <h3>We're Shipping Globally</h3>
-            <div className="product-detail-footer__shipping-badge"><span>🇮🇳</span><strong>Homegrown<br />INDIAN BRAND</strong><span>🚚</span><strong>Free Shipping &amp;<br />Fast Processing</strong></div>
-            <div className="product-detail-footer__payments" aria-label="Payment methods">
-              <span>UPI</span><span>VISA</span><span>●●</span><span>a</span><span>RuPay</span><span>paytm</span><span>f</span>
-            </div>
-          </div>
-        </div>
-        <div className="product-detail-footer__bottom">
-          <span>© Tribull 2026. All rights reserved.</span>
-          <span>Privacy &nbsp; Terms &nbsp; Shipping</span>
-        </div>
-      </footer>
     </div>
   );
 }
