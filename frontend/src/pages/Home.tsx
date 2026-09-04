@@ -198,6 +198,14 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
+      <div className="ticker" aria-label="Announcement">
+        <div className="ticker__track">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <span key={index}>100% COTTON.<b>SHOP NOW</b><i>✦</i></span>
+          ))}
+        </div>
+      </div>
+
       <header className="site-header">
         <button className="icon-button mobile-menu" aria-label="Open menu"><Menu size={20} strokeWidth={1.5} /></button>
         <Wordmark />
