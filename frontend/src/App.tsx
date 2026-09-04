@@ -8,12 +8,14 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import CategoryPage from "./pages/CategoryPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import Home from "./pages/Home";
+import AllProductsPage from "./pages/AllProductsPage";
 
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/products"} component={AllProductsPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />
       <Route path={"/category/:slug"} component={CategoryPage} />

@@ -255,7 +255,7 @@ export default function Home() {
             <div className="product-grid">
               {newArrivals.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
             </div>
-            <a className="view-all text-link" href="#best-selling">View all <ArrowUpRight size={16} /></a>
+            <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
@@ -269,7 +269,7 @@ export default function Home() {
             <div className="product-grid product-grid--image-only">
               {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} showMeta={false} />)}
             </div>
-            <a className="view-all text-link" href="#essentials">View all <ArrowUpRight size={16} /></a>
+            <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
