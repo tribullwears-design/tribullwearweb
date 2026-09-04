@@ -1,7 +1,8 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
-import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Menu, Search, ShoppingBag, User, Heart } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Search, ShoppingBag, User, Heart } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState } from "react";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -75,12 +76,14 @@ function Reveal({
   stagger = false,
   className = "",
   delay = 0,
+  id,
 }: {
   children: React.ReactNode;
   variant?: "up" | "left" | "right" | "scale" | "blur";
   stagger?: boolean;
   className?: string;
   delay?: number;
+  id?: string;
 }) {
   const { ref, visible } = useScrollReveal<HTMLDivElement>();
   const base =
@@ -91,6 +94,7 @@ function Reveal({
   return (
     <div
       ref={ref}
+      id={id}
       className={cls(base, stagger ? "reveal-stagger" : null, visible ? "reveal-visible" : null, className)}
       style={delay ? { transitionDelay: `${delay}s` } : undefined}
     >
@@ -207,7 +211,7 @@ export default function Home() {
       </div>
 
       <header className="site-header">
-        <button className="icon-button mobile-menu" aria-label="Open menu"><Menu size={20} strokeWidth={1.5} /></button>
+        <MobileCategoryMenu />
         <Wordmark />
         <div className="header-actions"><button className="icon-button" aria-label="Search"><Search size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Account"><User size={19} strokeWidth={1.5} /></button><button className="icon-button" aria-label="Wishlist"><Heart size={19} strokeWidth={1.5} /></button><a className="icon-button" href="/product/hollywood-0" aria-label="Shopping bag"><ShoppingBag size={19} strokeWidth={1.5} /></a></div>
       </header>
@@ -275,7 +279,7 @@ export default function Home() {
 
         <div className="peach-wrapper">
           <div className="cooperate-options">
-            <Reveal variant="left" className="cooperate-option cooperate-option--corporate">
+            <Reveal variant="left" className="cooperate-option cooperate-option--corporate" id="corporate">
               <div className="cooperate-option__copy">
                 <h2>Corporate</h2>
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
@@ -283,7 +287,7 @@ export default function Home() {
               </div>
               <img src="/products/hoodieicon.png" alt="Custom team hoodie" />
             </Reveal>
-            <Reveal variant="right" className="cooperate-option cooperate-option--custom">
+            <Reveal variant="right" className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
                 <h2>Customize</h2>
                 <p>Design your own t-shirts<br />hoodies &amp; more with Dudeme!</p>

@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-reac
 import { Link, useParams } from "wouter";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
 
 type CategoryProduct = {
   name: string;
@@ -366,7 +367,7 @@ function GlobalNavigation() {
       </div>
 
       <header className="site-header cinema-site-header">
-        <button className="icon-button mobile-menu" aria-label="Open menu"><span aria-hidden="true">☰</span></button>
+        <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home">
           <img src="/products/logo.png" alt="TRIBULL" />
         </a>

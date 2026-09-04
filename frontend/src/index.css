@@ -86,6 +86,30 @@ main > * + * { margin-top: 0; }
 .wordmark--inverse img { filter:none; mix-blend-mode:multiply; }
 .header-actions { display:flex; justify-content:center; align-items:center; gap:2px; order:2; position:absolute; right:12px; top:50%; transform:translateY(-50%); }
 .mobile-menu { display:grid; position:absolute; left:16px; right:auto; top:50%; transform:translateY(-50%); order:0; }
+.mobile-category-menu { display:block; width:0; height:0; }
+.site-header:has(.mobile-category-menu__panel--open) { z-index:50; }
+.mobile-category-menu__overlay { display:block; position:fixed; z-index:100; inset:0; width:100%; height:100%; border:0; padding:0; background:rgba(8,18,15,.52); opacity:0; pointer-events:none; transition:opacity .35s ease; }
+.mobile-category-menu__panel { display:flex; flex-direction:column; position:fixed; z-index:101; inset:0 auto 0 0; width:min(380px, 82vw); max-width:100%; overflow-y:auto; padding:24px 28px 32px; color:var(--tribull-green); background:#F3EACB; box-shadow:16px 0 40px rgba(8,18,15,.16); transform:translateX(-105%); transition:transform .45s cubic-bezier(.23,1,.32,1); }
+.mobile-category-menu__panel--open { transform:translateX(0); }
+.mobile-category-menu__overlay:has(+ .mobile-category-menu__panel--open) { opacity:1; pointer-events:auto; }
+.mobile-category-menu__header { display:flex; align-items:center; justify-content:space-between; min-height:36px; margin-bottom:22px; border-bottom:1px solid rgba(27,54,45,.2); color:var(--tribull-green); font:700 13px/1 Montserrat,sans-serif; letter-spacing:.16em; text-transform:uppercase; }
+.mobile-category-menu__close { display:grid; place-items:center; width:30px; height:30px; margin-right:-7px; border:0; color:var(--tribull-green); background:transparent; cursor:pointer; }
+.mobile-category-menu__group { border-bottom:1px solid rgba(27,54,45,.18); }
+.mobile-category-menu__group:last-child { border-bottom:0; }
+.mobile-category-menu__trigger { display:flex; align-items:center; justify-content:space-between; width:100%; min-height:58px; padding:0 2px; border:0; background:transparent; color:var(--tribull-green); font:700 14px/1.2 Montserrat,sans-serif; letter-spacing:.1em; text-align:left; text-transform:uppercase; cursor:pointer; }
+.mobile-category-menu__arrow { transition:transform .35s var(--ease-out); }
+.mobile-category-menu__arrow--open { transform:rotate(90deg); }
+.mobile-category-menu__subcategories { display:flex; flex-direction:column; max-height:0; overflow:hidden; opacity:0; padding-left:12px; transition:max-height .4s var(--ease-out), opacity .25s ease, padding-bottom .4s var(--ease-out); }
+.mobile-category-menu__subcategories--open { max-height:320px; padding-bottom:12px; opacity:1; }
+.mobile-category-menu__subcategory { padding:9px 0; color:rgba(27,54,45,.72); font:600 13px/1.2 Montserrat,sans-serif; letter-spacing:.06em; }
+.mobile-category-menu__subcategory:hover { color:var(--tribull-green); }
+.mobile-category-menu__links { margin-top:18px; padding:14px 0 8px; border-top:1px solid rgba(27,54,45,.2); border-bottom:1px solid rgba(27,54,45,.2); }
+.mobile-category-menu__links a { display:block; padding:11px 2px; color:var(--tribull-green); font:700 14px/1.2 Montserrat,sans-serif; letter-spacing:.1em; text-transform:uppercase; }
+.mobile-category-menu__links a:hover { color:rgba(27,54,45,.68); }
+.mobile-category-menu__contact { margin-top:auto; padding-top:24px; border-top:1px solid rgba(27,54,45,.2); }
+.mobile-category-menu__contact span { display:block; margin-bottom:9px; color:var(--tribull-green); font:700 11px/1 Montserrat,sans-serif; letter-spacing:.14em; text-transform:uppercase; }
+.mobile-category-menu__contact a { color:rgba(27,54,45,.78); font:600 13px/1.3 Montserrat,sans-serif; word-break:break-word; }
+.mobile-category-menu__contact a:hover { color:var(--tribull-green); }
 .icon-button { display:grid; place-items:center; width:26px; height:26px; border:0; background:transparent; padding:0; transition:transform .18s var(--ease-out), opacity .18s ease; }
 .icon-button svg { width:15px; height:15px; stroke-width:1.8; }
 .icon-button:hover { transform:translateY(-2px); opacity:.65; }
