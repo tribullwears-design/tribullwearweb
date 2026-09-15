@@ -3,6 +3,7 @@ import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
+import { animateAddToCart } from "../lib/cartAnimation";
 
 interface ProductData {
   name: string;
@@ -155,10 +156,25 @@ export default function ProductDetailPage() {
   ])).slice(0, 4);
 
   const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
-  const addCurrentProductToCart = () => {
+  const addCurrentProductToCart = (source?: HTMLElement) => {
     const productId = `${category}-${index}`;
+    try {
+      const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify({
+        ...cartItems,
+        [productId]: {
+          name: product.name,
+          price: Number(product.price.replace(/[^0-9]/g, "")),
+          image: selectedImage || product.image,
+          variant: `Size: ${selectedSize}`,
+        },
+      }));
+    } catch {
+      // Keep the existing quantity cart usable if metadata storage is unavailable.
+    }
     setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + quantity }));
     window.dispatchEvent(new Event("tribull-cart-updated"));
+    if (source) animateAddToCart(source, selectedImage || product.image);
     setIsAdded(true);
     window.setTimeout(() => setIsAdded(false), 1200);
   };
@@ -273,7 +289,7 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              <button onClick={addCurrentProductToCart} className={`product-detail-add-to-cart flex-1 bg-[#333333] hover:bg-[#222222] text-white active:text-white focus:text-white font-bold py-3 px-6 rounded flex items-center justify-center gap-2 transition ${isAdded ? "bg-[#444444] text-white" : ""}`}>
+              <button onClick={(event) => addCurrentProductToCart(event.currentTarget)} className={`product-detail-add-to-cart flex-1 bg-[#333333] hover:bg-[#222222] text-white active:text-white focus:text-white font-bold py-3 px-6 rounded flex items-center justify-center gap-2 transition ${isAdded ? "bg-[#444444] text-white" : ""}`}>
                 {isAdded ? <Check size={20} /> : <ShoppingCart size={20} />}
                 {isAdded ? "ADDED TO CART" : "ADD TO CART"}
               </button>

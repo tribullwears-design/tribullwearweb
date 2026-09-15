@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
+import { animateAddToCart } from "../lib/cartAnimation";
+import { animateAddToWishlist } from "../lib/wishlistAnimation";
 
 type ProductCategory = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
 type SortOption = "featured" | "newest" | "low" | "high" | "selling";
@@ -70,6 +72,16 @@ export default function ProductsPage() {
   }, [wishlist]);
 
   useEffect(() => {
+    const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
+    window.addEventListener("tribull-wishlist-updated", syncWishlist);
+    window.addEventListener("storage", syncWishlist);
+    return () => {
+      window.removeEventListener("tribull-wishlist-updated", syncWishlist);
+      window.removeEventListener("storage", syncWishlist);
+    };
+  }, []);
+
+  useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
   }, [cart]);
 
@@ -92,17 +104,30 @@ export default function ProductsPage() {
     else setLocation("/");
   };
 
-  const toggleWishlist = (productId: string) => {
+  const toggleWishlist = (productId: string, source?: HTMLElement) => {
     setWishlist((current) => {
-      const nextWishlist = current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId];
+      const isAdding = !current.includes(productId);
+      const nextWishlist = isAdding ? [...current, productId] : current.filter((id) => id !== productId);
+      if (isAdding && source) animateAddToWishlist(source);
+      window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
       window.dispatchEvent(new Event("tribull-wishlist-updated"));
       return nextWishlist;
     });
   };
 
-  const addToCart = (productId: string) => {
+  const addToCart = (productId: string, source?: HTMLElement) => {
+    const product = products.find((item) => item.id === productId);
     setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + 1 }));
+    if (product) {
+      try {
+        const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
+        window.localStorage.setItem("tribull-cart-items", JSON.stringify({ ...cartItems, [productId]: product }));
+      } catch {
+        // Keep the existing quantity cart usable if metadata storage is unavailable.
+      }
+    }
     window.dispatchEvent(new Event("tribull-cart-updated"));
+    if (product && source) animateAddToCart(source, product.image);
     setAddedProduct(productId);
     window.setTimeout(() => setAddedProduct((current) => current === productId ? null : current), 1200);
   };
@@ -185,7 +210,7 @@ export default function ProductsPage() {
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}
-                    onClick={(event) => { event.stopPropagation(); toggleWishlist(product.id); }}
+                    onClick={(event) => { event.stopPropagation(); toggleWishlist(product.id, event.currentTarget); }}
                     aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
                     aria-pressed={isWishlisted}
                   >
@@ -197,7 +222,7 @@ export default function ProductsPage() {
                     <h2>{product.name}</h2>
                     <p>{formatPrice(product.price)}</p>
                   </div>
-                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id); }} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
+                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id, event.currentTarget); }} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
                     {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}
                   </button>
                 </div>

@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -9,13 +10,17 @@ import CategoryPage from "./pages/CategoryPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import Home from "./pages/Home";
 import AllProductsPage from "./pages/AllProductsPage";
+import AdminDashboard from "./pages/AdminDashboard";
+import CheckoutPage from "./pages/CheckoutPage";
 
 
 function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/admin26"} component={AdminDashboard} />
       <Route path={"/products"} component={AllProductsPage} />
+      <Route path={"/checkout"} component={CheckoutPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />
       <Route path={"/category/:slug"} component={CategoryPage} />
@@ -32,6 +37,8 @@ function Router() {
 // - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
 
 function App() {
+  const [location] = useLocation();
+
   return (
     <ErrorBoundary>
       <ThemeProvider
@@ -41,7 +48,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          <SiteFooter />
+          {location !== "/admin26" && <SiteFooter />}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

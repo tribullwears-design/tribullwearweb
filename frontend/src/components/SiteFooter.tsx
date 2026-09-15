@@ -1,6 +1,19 @@
+import { useEffect, useState } from "react";
+
 type SiteFooterProps = {
   className?: string;
 };
+
+type SocialLinks = { facebook: string; instagram: string; youtube: string; x: string; reddit: string };
+
+function readSocialLinks(): SocialLinks {
+  try {
+    const saved = window.localStorage.getItem("tribull-social-links");
+    return saved ? { facebook: "", instagram: "", youtube: "", x: "", reddit: "", ...JSON.parse(saved) as Partial<SocialLinks> } : { facebook: "", instagram: "", youtube: "", x: "", reddit: "" };
+  } catch {
+    return { facebook: "", instagram: "", youtube: "", x: "", reddit: "" };
+  }
+}
 
 function Wordmark({ inverse = false }: { inverse?: boolean }) {
   return (
@@ -11,6 +24,18 @@ function Wordmark({ inverse = false }: { inverse?: boolean }) {
 }
 
 export default function SiteFooter({ className = "" }: SiteFooterProps) {
+  const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => readSocialLinks());
+
+  useEffect(() => {
+    const syncSocialLinks = () => setSocialLinks(readSocialLinks());
+    window.addEventListener("tribull-social-links-updated", syncSocialLinks);
+    window.addEventListener("storage", syncSocialLinks);
+    return () => {
+      window.removeEventListener("tribull-social-links-updated", syncSocialLinks);
+      window.removeEventListener("storage", syncSocialLinks);
+    };
+  }, []);
+
   return (
     <footer className={`site-footer ${className}`.trim()} id="footer">
       <div className="footer__top">
@@ -67,10 +92,10 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
         </div>
         <div className="footer__social">
           <span>Follow Us:</span>
-          <a href="#top" className="social-link social-link--fb" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg></a>
-          <a href="#top" className="social-link social-link--ig" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
-          <a href="#top" className="social-link social-link--yt" aria-label="YouTube"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a>
-          <a href="#top" className="social-link social-link--x" aria-label="X"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+          <a href={socialLinks.facebook || undefined} target={socialLinks.facebook ? "_blank" : undefined} rel={socialLinks.facebook ? "noopener noreferrer" : undefined} className="social-link social-link--fb" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg></a>
+          <a href={socialLinks.instagram || undefined} target={socialLinks.instagram ? "_blank" : undefined} rel={socialLinks.instagram ? "noopener noreferrer" : undefined} className="social-link social-link--ig" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><rect x="2" y="2" width="20" height="20" rx="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
+          <a href={socialLinks.youtube || undefined} target={socialLinks.youtube ? "_blank" : undefined} rel={socialLinks.youtube ? "noopener noreferrer" : undefined} className="social-link social-link--yt" aria-label="YouTube"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a>
+          <a href={socialLinks.x || undefined} target={socialLinks.x ? "_blank" : undefined} rel={socialLinks.x ? "noopener noreferrer" : undefined} className="social-link social-link--x" aria-label="X"><svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
         </div>
       </div>
 

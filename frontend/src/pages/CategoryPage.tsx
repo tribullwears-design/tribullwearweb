@@ -2,10 +2,12 @@ import { ArrowLeft, ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-reac
 import { Link, useParams } from "wouter";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { animateAddToCart } from "../lib/cartAnimation";
+import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
-type CategoryProduct = {
+export type CategoryProduct = {
   name: string;
   price: string;
   image: string;
@@ -64,7 +66,7 @@ const rotationImages = [
   "/products/hanger-white.png",
 ];
 
-const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
+export const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
   cinema: {
     kollywood: [
       { name: "Kollywood Hero Tee", price: "₹1,699", image: rotationImages[2] },
@@ -308,7 +310,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: () => void; onAddToCart: () => void; isAdded: boolean }) {
+function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`;
 
@@ -324,7 +326,7 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onWishlist(); }}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onWishlist(event.currentTarget); }}
             aria-label={isWishlisted ? `Remove ${item.name} from wishlist` : `Add ${item.name} to wishlist`}
             aria-pressed={isWishlisted}
           >
@@ -339,7 +341,7 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           <button
             type="button"
             className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(); }}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(event.currentTarget); }}
             aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
           >
             {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
@@ -414,6 +416,22 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
 
+  useEffect(() => {
+    const syncWishlist = () => {
+      try {
+        setWishlist(JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]);
+      } catch {
+        setWishlist([]);
+      }
+    };
+    window.addEventListener("tribull-wishlist-updated", syncWishlist);
+    window.addEventListener("storage", syncWishlist);
+    return () => {
+      window.removeEventListener("tribull-wishlist-updated", syncWishlist);
+      window.removeEventListener("storage", syncWishlist);
+    };
+  }, []);
+
   const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
     "round-neck": catalog,
     oversized: [
@@ -450,8 +468,17 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
   const productKey = (item: CategoryProduct) => `${categorySlug}-${entrySlug}-${item.name}`;
 
-  const addToCart = (item: CategoryProduct) => {
+  const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
     const key = productKey(item);
+    try {
+      const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify({
+        ...cartItems,
+        [key]: { name: item.name, price: Number(item.price.replace(/[^0-9]/g, "")), image: item.image },
+      }));
+    } catch {
+      // Keep the existing quantity cart usable if metadata storage is unavailable.
+    }
     setCart((current) => {
       const nextCart = { ...current, [key]: (current[key] || 0) + 1 };
       window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
@@ -459,6 +486,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       return nextCart;
     });
     setAddedProduct(key);
+    if (source) animateAddToCart(source, item.image);
     window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
 
@@ -494,7 +522,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={() => setWishlist((current) => { const nextWishlist = current.includes(key) ? current.filter((id) => id !== key) : [...current, key]; window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
