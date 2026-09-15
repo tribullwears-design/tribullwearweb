@@ -4,6 +4,7 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState } from "react";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
+import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -58,6 +59,11 @@ const categoryNavItems = [
   { label: "Games", image: brandAssets.games, href: "/category/games" },
   { label: "MotoSports", image: brandAssets.motorsports, href: "/category/motorsports" },
 ];
+
+const categoryHierarchyFallback: CategoryHierarchy = {
+  main: categoryNavItems.map(({ href, label, image }) => ({ value: href.replace("/category/", ""), label, image })),
+  subcategories: {},
+};
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -119,6 +125,7 @@ function ProductCard({ item, delay = 0, showMeta = true }: { item: string[]; del
 }
 
 export default function Home() {
+  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const heroImgRef = useRef<HTMLImageElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const heroStampRef = useRef<HTMLDivElement>(null);
@@ -219,12 +226,15 @@ export default function Home() {
 
       <nav className="category-nav" aria-label="Shop categories">
         <div className="category-nav__track">
-          {categoryNavItems.map(({ label, image, href }) => (
-            <a className="category-nav__item" href={href} key={label}>
-              <span className="category-nav__image"><img src={image} alt="" /></span>
+          {hierarchy.main.map(({ value, label }) => {
+            const category = categoryNavItems.find((item) => item.href === `/category/${value}`);
+            return (
+            <a className="category-nav__item" href={`/category/${value}`} key={value}>
+              <span className="category-nav__image"><img src={hierarchy.main.find((item) => item.value === value)?.image || category?.image || "/products/front-white.png"} alt="" /></span>
               <span className="category-nav__label">{label}</span>
             </a>
-          ))}
+            );
+          })}
         </div>
       </nav>
 

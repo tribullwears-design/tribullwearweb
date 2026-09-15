@@ -4,6 +4,7 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
@@ -16,6 +17,7 @@ export type CategoryProduct = {
 type CategoryDefinition = {
   title: string;
   subtitle: string;
+  image?: string;
   subcategories: { slug: string; label: string; image: string }[];
 };
 
@@ -23,6 +25,7 @@ const categoryDefinitions: Record<string, CategoryDefinition> = {
   cinema: {
     title: "Cinema",
     subtitle: "Cinematic collection",
+    image: "/products/cinema.jpg",
     subcategories: [
       { slug: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
       { slug: "bollywood", label: "Bollywood", image: "/products/bollywood.jpg" },
@@ -35,6 +38,7 @@ const categoryDefinitions: Record<string, CategoryDefinition> = {
   sports: {
     title: "Sports",
     subtitle: "Performance wear",
+    image: "/products/sports.png",
     subcategories: [
       { slug: "cricket", label: "Cricket", image: "/products/cricket.jpg" },
       { slug: "football", label: "Football", image: "/products/football.jpg" },
@@ -44,6 +48,7 @@ const categoryDefinitions: Record<string, CategoryDefinition> = {
   motorsports: {
     title: "MotoSports",
     subtitle: "Track ready",
+    image: "/products/motosports.jpg",
     subcategories: [
       { slug: "car", label: "Car", image: "/products/car.jpg" },
       { slug: "bike", label: "Bike", image: "/products/bike.jpg" },
@@ -52,12 +57,37 @@ const categoryDefinitions: Record<string, CategoryDefinition> = {
   games: {
     title: "Games",
     subtitle: "Play mode",
+    image: "/products/games.jpg",
     subcategories: [
       { slug: "pc-games", label: "PC Games", image: "/products/pc games.jpg" },
       { slug: "mobile-games", label: "Mobile Games", image: "/products/mobilegames.jpg" },
     ],
   },
 };
+
+function categoryHierarchyFallback(): CategoryHierarchy {
+  return {
+    main: Object.entries(categoryDefinitions).map(([value, definition]) => ({ value, label: definition.title, image: definition.image })),
+    subcategories: Object.fromEntries(Object.entries(categoryDefinitions).map(([category, definition]) => [category, definition.subcategories.map(({ slug, label, image }) => ({ value: slug, label, image }))])),
+  };
+}
+
+function liveCategoryDefinition(categorySlug: string, hierarchy: CategoryHierarchy): CategoryDefinition | undefined {
+  const definition = categoryDefinitions[categorySlug] || { title: categorySlug, subtitle: "Curated collection", subcategories: [] };
+  const main = hierarchy.main.find((category) => category.value === categorySlug);
+  if (!main) return undefined;
+  const subcategories = hierarchy.subcategories[categorySlug] || [];
+  return {
+    ...definition,
+    title: main?.label || definition.title,
+    image: main?.image || definition.image,
+    subcategories: subcategories.map((subcategory) => ({
+      slug: subcategory.value,
+      label: subcategory.label,
+      image: subcategory.image || definition.subcategories.find((item) => item.slug === subcategory.value)?.image || "/products/front-white.png",
+    })),
+  };
+}
 
 const rotationImages = [
   "/products/back-black.png",
@@ -381,7 +411,8 @@ function GlobalNavigation() {
 }
 
 function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
-  const definition = categoryDefinitions[categorySlug];
+  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback());
+  const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
 
   return (
@@ -513,10 +544,6 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
               <option value="selling">Best Selling</option>
             </select>
           </label>
-          <button type="button" className="category-catalog-cart-button" aria-label={`${cartCount} items in cart`}>
-            <ShoppingCart size={18} />
-            {cartCount > 0 && <span>{cartCount}</span>}
-          </button>
         </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
@@ -532,11 +559,16 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
   const categorySlug = slug || "cinema";
+  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback());
+  const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [value, liveCategoryDefinition(value, hierarchy)])) as Record<string, CategoryDefinition | undefined>;
+
+  if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
   if (categorySlug === "cinema" && !lang) {
-    const definition = categoryDefinitions.cinema;
-    const catalog = categoryProducts.cinema.hollywood;
-    const entrySlug = "hollywood";
+    const definition = activeDefinitions.cinema!;
+    const defaultSubcat = definition.subcategories[0];
+    const entrySlug = defaultSubcat?.slug || "";
+    const catalog = entrySlug ? categoryProducts.cinema[entrySlug] || [] : [];
 
     return (
       <div className="subcategory-page">
@@ -565,7 +597,7 @@ export default function CategoryPage() {
   }
 
   if (categorySlug === "sports" && !lang) {
-    const definition = categoryDefinitions.sports;
+    const definition = activeDefinitions.sports!;
     const defaultSubcat = definition.subcategories[0];
     const catalog = categoryProducts.sports[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
@@ -597,7 +629,7 @@ export default function CategoryPage() {
   }
 
   if (categorySlug === "motorsports" && !lang) {
-    const definition = categoryDefinitions.motorsports;
+    const definition = activeDefinitions.motorsports!;
     const defaultSubcat = definition.subcategories[0];
     const catalog = categoryProducts.motorsports[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
@@ -629,7 +661,7 @@ export default function CategoryPage() {
   }
 
   if (categorySlug === "games" && !lang) {
-    const definition = categoryDefinitions.games;
+    const definition = activeDefinitions.games!;
     const defaultSubcat = definition.subcategories[0];
     const catalog = categoryProducts.games[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
@@ -662,9 +694,11 @@ export default function CategoryPage() {
 
   if (lang) {
     const selectedSlug = String(lang);
-    const category = categoryDefinitions[categorySlug] ?? categoryDefinitions.cinema;
+    const category = activeDefinitions[categorySlug] ?? activeDefinitions.cinema!;
     const entry = category.subcategories.find((item) => item.slug === selectedSlug) ?? category.subcategories[0];
-    const catalog = categoryProducts[categorySlug]?.[selectedSlug] ?? categoryProducts.cinema[entry.slug] ?? [];
+    if (!entry) return <div className="p-8">Category not found.</div>;
+    const entrySlug = entry.slug;
+    const catalog = categoryProducts[categorySlug]?.[entrySlug] ?? categoryProducts.cinema[entrySlug] ?? [];
 
     return (
       <div className="category-products-page">
@@ -682,12 +716,12 @@ export default function CategoryPage() {
           </div>
         </div>
 
-        <CategoryProductsView catalog={catalog} categorySlug={categorySlug} entrySlug={selectedSlug} />
+        <CategoryProductsView catalog={catalog} categorySlug={categorySlug} entrySlug={entrySlug} />
       </div>
     );
   }
 
-  const fallback = categoryDefinitions.cinema;
+  const fallback = activeDefinitions[categorySlug] || activeDefinitions.cinema!;
   return (
     <div className="subcategory-page">
       <div className="category-page__header">

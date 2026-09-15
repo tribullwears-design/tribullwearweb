@@ -1,6 +1,7 @@
 import { ChevronRight, Menu, X } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
+import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 type MenuCategory = {
   slug: string;
@@ -8,7 +9,7 @@ type MenuCategory = {
   subcategories: { slug: string; label: string }[];
 };
 
-const menuCategories: MenuCategory[] = [
+const fallbackMenuCategories: MenuCategory[] = [
   {
     slug: "cinema",
     label: "Cinema",
@@ -48,7 +49,13 @@ const menuCategories: MenuCategory[] = [
   },
 ];
 
+const menuHierarchy: CategoryHierarchy = {
+  main: fallbackMenuCategories.map(({ slug, label }) => ({ value: slug, label })),
+  subcategories: Object.fromEntries(fallbackMenuCategories.map(({ slug, subcategories }) => [slug, subcategories.map(({ slug: value, label }) => ({ value, label }))])),
+};
+
 export default function MobileCategoryMenu() {
+  const hierarchy = useCategoryHierarchy(menuHierarchy);
   const [open, setOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
 
@@ -92,29 +99,30 @@ export default function MobileCategoryMenu() {
           </button>
         </div>
         <nav aria-label="Mobile category navigation">
-          {menuCategories.map((category) => {
-            const isExpanded = expandedCategory === category.slug;
+          {hierarchy.main.map((category) => {
+            const subcategories = hierarchy.subcategories[category.value] || [];
+            const isExpanded = expandedCategory === category.value;
             return (
-              <div className="mobile-category-menu__group" key={category.slug}>
+              <div className="mobile-category-menu__group" key={category.value}>
                 <button
                   className="mobile-category-menu__trigger"
                   type="button"
                   aria-expanded={isExpanded}
-                  aria-controls={`mobile-${category.slug}-subcategories`}
-                  onClick={() => toggleCategory(category.slug)}
+                  aria-controls={`mobile-${category.value}-subcategories`}
+                  onClick={() => toggleCategory(category.value)}
                 >
                   <span>{category.label}</span>
                   <ChevronRight className={isExpanded ? "mobile-category-menu__arrow mobile-category-menu__arrow--open" : "mobile-category-menu__arrow"} size={19} strokeWidth={1.6} />
                 </button>
                 <div
-                  id={`mobile-${category.slug}-subcategories`}
+                  id={`mobile-${category.value}-subcategories`}
                   className={`mobile-category-menu__subcategories ${isExpanded ? "mobile-category-menu__subcategories--open" : ""}`}
                 >
-                  {category.subcategories.map((subcategory) => (
+                  {subcategories.map((subcategory) => (
                     <Link
                       className="mobile-category-menu__subcategory"
-                      href={`/category/${category.slug}/${subcategory.slug}`}
-                      key={subcategory.slug}
+                      href={`/category/${category.value}/${subcategory.value}`}
+                      key={subcategory.value}
                       onClick={closeMenu}
                     >
                       {subcategory.label}

@@ -224,6 +224,9 @@ export default defineConfig({
     port: 3000,
     strictPort: false, // Will find next available port if 3000 is busy
     host: true,
+    proxy: {
+      "/api": { target: process.env.CATEGORY_API_URL || "http://localhost:5001", changeOrigin: true },
+    },
     allowedHosts: [
       ".manuspre.computer",
       ".manus.computer",

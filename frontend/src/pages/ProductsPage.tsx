@@ -148,10 +148,6 @@ export default function ProductsPage() {
             <Heart size={19} strokeWidth={1.7} />
             {wishlist.length > 0 && <span>{wishlist.length}</span>}
           </button>
-          <button className="products-page__top-icon" aria-label={`${cartCount} items in cart`}>
-            <ShoppingCart size={19} strokeWidth={1.7} />
-            <span>{cartCount}</span>
-          </button>
         </div>
       </div>
 
