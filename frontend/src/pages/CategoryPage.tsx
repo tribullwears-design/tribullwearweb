@@ -21,70 +21,20 @@ type CategoryDefinition = {
   subcategories: { slug: string; label: string; image: string }[];
 };
 
-const categoryDefinitions: Record<string, CategoryDefinition> = {
-  cinema: {
-    title: "Cinema",
-    subtitle: "Cinematic collection",
-    image: "/products/cinema.jpg",
-    subcategories: [
-      { slug: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
-      { slug: "bollywood", label: "Bollywood", image: "/products/bollywood.jpg" },
-      { slug: "kollywood", label: "Kollywood", image: "/products/kollywood.jpg" },
-      { slug: "tollywood", label: "Tollywood", image: "/products/tollywood.jpg" },
-      { slug: "mollywood", label: "Mollywood", image: "/products/mollywood.jpg" },
-      { slug: "sandalwood", label: "Sandalwood", image: "/products/sandalwood.jpg" },
-    ],
-  },
-  sports: {
-    title: "Sports",
-    subtitle: "Performance wear",
-    image: "/products/sports.png",
-    subcategories: [
-      { slug: "cricket", label: "Cricket", image: "/products/cricket.jpg" },
-      { slug: "football", label: "Football", image: "/products/football.jpg" },
-      { slug: "gym", label: "Gym", image: "/products/gym.jpg" },
-    ],
-  },
-  motorsports: {
-    title: "MotoSports",
-    subtitle: "Track ready",
-    image: "/products/motosports.jpg",
-    subcategories: [
-      { slug: "car", label: "Car", image: "/products/car.jpg" },
-      { slug: "bike", label: "Bike", image: "/products/bike.jpg" },
-    ],
-  },
-  games: {
-    title: "Games",
-    subtitle: "Play mode",
-    image: "/products/games.jpg",
-    subcategories: [
-      { slug: "pc-games", label: "PC Games", image: "/products/pc games.jpg" },
-      { slug: "mobile-games", label: "Mobile Games", image: "/products/mobilegames.jpg" },
-    ],
-  },
-};
-
-function categoryHierarchyFallback(): CategoryHierarchy {
-  return {
-    main: Object.entries(categoryDefinitions).map(([value, definition]) => ({ value, label: definition.title, image: definition.image })),
-    subcategories: Object.fromEntries(Object.entries(categoryDefinitions).map(([category, definition]) => [category, definition.subcategories.map(({ slug, label, image }) => ({ value: slug, label, image }))])),
-  };
-}
+const categoryHierarchyFallback: CategoryHierarchy = { main: [], subcategories: {} };
 
 function liveCategoryDefinition(categorySlug: string, hierarchy: CategoryHierarchy): CategoryDefinition | undefined {
-  const definition = categoryDefinitions[categorySlug] || { title: categorySlug, subtitle: "Curated collection", subcategories: [] };
   const main = hierarchy.main.find((category) => category.value === categorySlug);
   if (!main) return undefined;
   const subcategories = hierarchy.subcategories[categorySlug] || [];
   return {
-    ...definition,
-    title: main?.label || definition.title,
-    image: main?.image || definition.image,
+    title: main.label,
+    subtitle: "Curated collection",
+    image: main.image,
     subcategories: subcategories.map((subcategory) => ({
       slug: subcategory.value,
       label: subcategory.label,
-      image: subcategory.image || definition.subcategories.find((item) => item.slug === subcategory.value)?.image || "/products/front-white.png",
+      image: subcategory.image || "/products/front-white.png",
     })),
   };
 }
@@ -411,7 +361,7 @@ function GlobalNavigation() {
 }
 
 function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback());
+  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
 
@@ -559,7 +509,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
   const categorySlug = slug || "cinema";
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback());
+  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [value, liveCategoryDefinition(value, hierarchy)])) as Record<string, CategoryDefinition | undefined>;
 
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;

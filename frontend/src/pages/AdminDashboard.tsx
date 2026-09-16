@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { products as storeProducts, type Product } from "./ProductsPage";
-import { categoryProducts } from "./CategoryPage";
-import { fetchCategoryHierarchy, readCategoryHierarchy, saveCategoryHierarchy, type CategoryChoice, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { useLocation } from "wouter";
+import { createCategory, createSubcategory, deleteCategory, deleteSubcategory as deleteSubcategoryApi, fetchCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryChoice, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import "./admin-dashboard.css";
 
 type Icon = typeof LayoutDashboard;
@@ -31,6 +31,33 @@ const navigation: NavSection[] = [
   { label: "Analytics", items: [{ label: "Analytics", icon: BarChart3, screen: "analytics" }, { label: "Sales Reports", icon: Activity, screen: "sales-reports" }, { label: "Product Reports", icon: FileText, screen: "product-reports" }] },
   { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
 ];
+const adminRoutes: Record<string, string> = {
+  dashboard: "/admin26/dashboard",
+  products: "/admin26/products",
+  "add-product": "/admin26/products/add",
+  categories: "/admin26/products/categories",
+  inventory: "/admin26/products/inventory",
+  orders: "/admin26/orders",
+  "orders-pending": "/admin26/orders/pending",
+  "orders-processing": "/admin26/orders/processing",
+  "orders-shipped": "/admin26/orders/shipped",
+  "orders-delivered": "/admin26/orders/delivered",
+  "orders-cancelled": "/admin26/orders/cancelled",
+  customers: "/admin26/customers",
+  "customer-details": "/admin26/customers/details",
+  discounts: "/admin26/marketing/discounts",
+  coupons: "/admin26/marketing/coupons",
+  promotions: "/admin26/marketing/promotions",
+  banners: "/admin26/content/banners",
+  collections: "/admin26/content/collections",
+  featured: "/admin26/content/featured-products",
+  "social-media": "/admin26/content/social-media",
+  analytics: "/admin26/analytics",
+  "sales-reports": "/admin26/analytics/sales-reports",
+  "product-reports": "/admin26/analytics/product-reports",
+  "general-settings": "/admin26/settings/general",
+  "admin-users": "/admin26/settings/admin-users",
+};
 
 const fallbackOrders: AdminOrder[] = [
   { id: "#TRB-1048", customer: "Aarav Mehta", date: "Today, 10:24 AM", items: 2, total: "₹1,798", payment: "Paid", status: "Processing" },
@@ -43,19 +70,7 @@ const permissionSections: { key: PermissionKey; label: string }[] = [
   { key: "customers", label: "Customers" }, { key: "marketing", label: "Marketing" }, { key: "content", label: "Content" },
   { key: "analytics", label: "Analytics" }, { key: "settings", label: "Settings" },
 ];
-const productCategoryOptions = [
-  { value: "cinema", label: "Cinema" },
-  { value: "sports", label: "Sports" },
-  { value: "games", label: "Games" },
-  { value: "motorsports", label: "MotoSports" },
-];
-const productSubcategoryOptions = (category: string) => Object.keys(categoryProducts[category] || {}).map((slug) => ({ value: slug, label: slug === "pc-games" ? "PC Games" : slug === "mobile-games" ? "Mobile Games" : slug.charAt(0).toUpperCase() + slug.slice(1) }));
-const categoryImages: Record<string, string> = { cinema: "/products/cinema.jpg", sports: "/products/sports.png", games: "/products/games.jpg", motorsports: "/products/motosports.jpg" };
-const subcategoryImages: Record<string, string> = { hollywood: "/products/hollywood.jpg", bollywood: "/products/bollywood.jpg", kollywood: "/products/kollywood.jpg", tollywood: "/products/tollywood.jpg", mollywood: "/products/mollywood.jpg", sandalwood: "/products/sandalwood.jpg", cricket: "/products/cricket.jpg", football: "/products/football.jpg", gym: "/products/gym.jpg", car: "/products/car.jpg", bike: "/products/bike.jpg", "pc-games": "/products/pc games.jpg", "mobile-games": "/products/mobilegames.jpg" };
-const defaultCategoryHierarchy: CategoryHierarchy = {
-  main: productCategoryOptions.map((category) => ({ ...category, image: categoryImages[category.value] })),
-  subcategories: Object.fromEntries(productCategoryOptions.map(({ value }) => [value, productSubcategoryOptions(value).map((subcategory) => ({ ...subcategory, image: subcategoryImages[subcategory.value] }))])),
-};
+const defaultCategoryHierarchy: CategoryHierarchy = { main: [], subcategories: {} };
 type ProductTypeCategory = { label: string; image?: string };
 const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Neck" }, { label: "Oversized" }, { label: "Acid Oversized" }, { label: "Hoodie" }];
 function rolePermissions(role: string): AdminPermissions {
@@ -104,13 +119,16 @@ function CategoryImage({ image, onChange, onRemove, inputRef, showControls = tru
 }
 
 function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
-  const [parentCategory, setParentCategory] = useState(hierarchy.main[0]?.value || "cinema");
+  const [parentCategory, setParentCategory] = useState(hierarchy.main[0]?.value || "");
   const [newMainCategory, setNewMainCategory] = useState("");
   const [newMainImage, setNewMainImage] = useState("");
   const newMainImageInputRef = useRef<HTMLInputElement>(null);
   const [newSubcategory, setNewSubcategory] = useState("");
   const [newSubcategoryImage, setNewSubcategoryImage] = useState("");
   const newSubcategoryImageInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!hierarchy.main.some((category) => category.value === parentCategory)) setParentCategory(hierarchy.main[0]?.value || "");
+  }, [hierarchy.main, parentCategory]);
   const [editingMain, setEditingMain] = useState<string | null>(null);
   const [editingMainName, setEditingMainName] = useState("");
   const [editingMainImage, setEditingMainImage] = useState("");
@@ -121,20 +139,29 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   const [editingProductType, setEditingProductType] = useState<string | null>(null);
   const [editingProductTypeImage, setEditingProductTypeImage] = useState("");
   const [newProductTypeImage, setNewProductTypeImage] = useState("");
-  const saveHierarchy = (next: CategoryHierarchy) => { setHierarchy(next); saveCategoryHierarchy(next); };
-  const addMainCategory = () => { const label = newMainCategory.trim(); if (!label || hierarchy.main.some((item) => item.label.toLowerCase() === label.toLowerCase())) return; const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); if (!value || hierarchy.main.some((item) => item.value === value)) return; saveHierarchy({ main: [...hierarchy.main, { value, label, image: newMainImage }], subcategories: { ...hierarchy.subcategories, [value]: [] } }); setNewMainCategory(""); setNewMainImage(""); newMainImageInputRef.current && (newMainImageInputRef.current.value = ""); setParentCategory(value); };
-  const deleteMainCategory = (value: string) => { if (hierarchy.main.length <= 1) return; const nextMain = hierarchy.main.filter((category) => category.value !== value); const nextSubcategories = { ...hierarchy.subcategories }; delete nextSubcategories[value]; saveHierarchy({ main: nextMain, subcategories: nextSubcategories }); if (parentCategory === value) setParentCategory(nextMain[0].value); };
-  const saveMainEdit = () => { if (!editingMain) return; const label = editingMainName.trim(); if (!label || hierarchy.main.some((item) => item.value !== editingMain && item.label.toLowerCase() === label.toLowerCase())) return; saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === editingMain ? { ...item, label, image: editingMainImage } : item) }); setEditingMain(null); };
-  const addSubcategory = () => { const label = newSubcategory.trim(); if (!label) return; const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); const current = hierarchy.subcategories[parentCategory] || []; if (!value || current.some((item) => item.value === value || item.label.toLowerCase() === label.toLowerCase())) return; saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: [...current, { value, label, image: newSubcategoryImage }] } }); setNewSubcategory(""); setNewSubcategoryImage(""); newSubcategoryImageInputRef.current && (newSubcategoryImageInputRef.current.value = ""); };
-  const deleteSubcategory = (parent: string, value: string) => {
+  const [categoryError, setCategoryError] = useState("");
+  const refreshHierarchy = async () => {
+    const next = await fetchCategoryHierarchy(defaultCategoryHierarchy);
+    setHierarchy(next);
+    window.dispatchEvent(new Event("tribull-category-hierarchy-updated"));
+    return next;
+  };
+  const saveHierarchy = async (next: CategoryHierarchy) => { try { if (!await saveCategoryHierarchy(next)) throw new Error("Category save failed"); return await refreshHierarchy(); } catch { setCategoryError("Could not save category changes. Please try again."); return undefined; } };
+  const addMainCategory = async () => { setCategoryError(""); const label = newMainCategory.trim(); if (!label) { setCategoryError("Category name is required."); return; } if (hierarchy.main.some((item) => item.label.toLowerCase() === label.toLowerCase())) return; const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); if (!value || hierarchy.main.some((item) => item.value === value)) return; try { await createCategory({ value, label, image: newMainImage }); await refreshHierarchy(); setNewMainCategory(""); setNewMainImage(""); if (newMainImageInputRef.current) newMainImageInputRef.current.value = ""; setParentCategory(value); } catch { setCategoryError("Could not add category. Please try again."); } };
+  const deleteMainCategory = async (value: string) => { setCategoryError(""); if (hierarchy.main.length <= 1) return; try { await deleteCategory(value); const next = await refreshHierarchy(); if (parentCategory === value) setParentCategory(next.main[0]?.value || ""); } catch { setCategoryError("Could not delete category. Please try again."); } };
+  const saveMainEdit = async () => { setCategoryError(""); if (!editingMain) return; const label = editingMainName.trim(); if (!label || hierarchy.main.some((item) => item.value !== editingMain && item.label.toLowerCase() === label.toLowerCase())) return; try { await updateCategory(editingMain, { label, image: editingMainImage }); await refreshHierarchy(); setEditingMain(null); } catch { setCategoryError("Could not update category. Please try again."); } };
+  const addSubcategory = async () => { setCategoryError(""); const label = newSubcategory.trim(); if (!parentCategory) { setCategoryError("Select a parent category."); return; } if (!label) { setCategoryError("Subcategory name is required."); return; } const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); const current = hierarchy.subcategories[parentCategory] || []; if (!value || current.some((item) => item.value === value || item.label.toLowerCase() === label.toLowerCase())) return; try { await createSubcategory(parentCategory, { value, label, image: newSubcategoryImage }); await refreshHierarchy(); setNewSubcategory(""); setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; } catch { setCategoryError("Could not add subcategory. Please try again."); } };
+  const deleteSubcategory = async (parent: string, value: string) => {
+    setCategoryError("");
     const subcategory = (hierarchy.subcategories[parent] || []).find((item) => item.value === value);
     if (!subcategory || !window.confirm(`Delete ${subcategory.label}? Existing products will not be deleted.`)) return;
-    saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parent]: (hierarchy.subcategories[parent] || []).filter((item) => item.value !== value) } });
+    try { await deleteSubcategoryApi(parent, value); await refreshHierarchy(); } catch { setCategoryError("Could not delete subcategory. Please try again."); }
   };
-  const saveSubcategoryEdit = () => { if (!editingSubcategory) return; const label = editingSubcategoryName.trim(); if (!label) return; const targetItems = hierarchy.subcategories[editingSubcategoryParent] || []; if (targetItems.some((item) => item.value !== editingSubcategory.value && item.label.toLowerCase() === label.toLowerCase())) return; const withoutCurrent = (hierarchy.subcategories[editingSubcategory.parent] || []).filter((item) => item.value !== editingSubcategory.value); const current = hierarchy.subcategories[editingSubcategory.parent]?.find((item) => item.value === editingSubcategory.value); const nextSubcategories = { ...hierarchy.subcategories, [editingSubcategory.parent]: withoutCurrent, [editingSubcategoryParent]: [...targetItems.filter((item) => item.value !== editingSubcategory.value), { ...(current || { value: editingSubcategory.value }), label, image: editingSubcategoryImage }] }; saveHierarchy({ ...hierarchy, subcategories: nextSubcategories }); setEditingSubcategory(null); setEditingSubcategoryName(""); };
+  const saveSubcategoryEdit = async () => { setCategoryError(""); if (!editingSubcategory) return; const label = editingSubcategoryName.trim(); if (!label) return; const targetItems = hierarchy.subcategories[editingSubcategoryParent] || []; if (targetItems.some((item) => item.value !== editingSubcategory.value && item.label.toLowerCase() === label.toLowerCase())) return; try { if (editingSubcategoryParent === editingSubcategory.parent) { await updateSubcategory(editingSubcategory.parent, editingSubcategory.value, { label, image: editingSubcategoryImage }); await refreshHierarchy(); } else { const withoutCurrent = (hierarchy.subcategories[editingSubcategory.parent] || []).filter((item) => item.value !== editingSubcategory.value); const current = hierarchy.subcategories[editingSubcategory.parent]?.find((item) => item.value === editingSubcategory.value); if (!await saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [editingSubcategory.parent]: withoutCurrent, [editingSubcategoryParent]: [...targetItems.filter((item) => item.value !== editingSubcategory.value), { ...(current || { value: editingSubcategory.value }), label, image: editingSubcategoryImage }] } })) return; } setEditingSubcategory(null); setEditingSubcategoryName(""); } catch { setCategoryError("Could not update subcategory. Please try again."); } };
   const saveProductTypeImage = (label: string, image: string) => setProductCategories((current) => current.map((item) => item.label === label ? { ...item, image } : item));
   const mainCategoryForm = <div className="admin-inline-form admin-main-category-form"><input value={newMainCategory} placeholder="New category name" onChange={(event) => setNewMainCategory(event.target.value)} /><CategoryImage image={newMainImage} inputRef={newMainImageInputRef} onChange={(event) => readImage(event, setNewMainImage)} onRemove={() => { setNewMainImage(""); if (newMainImageInputRef.current) newMainImageInputRef.current.value = ""; }} /><button className="admin-primary-button" type="button" onClick={addMainCategory}><Plus size={15} />Add category</button></div>;
   return <>
+    {categoryError && <p className="admin-image-error">{categoryError}</p>}
     {mainCategoryForm}
     <section className="admin-category-management"><SectionHeading title="Main Categories" /><div className="admin-category-list">{hierarchy.main.map((category) => <div className="admin-management-row" key={category.value}><CategoryImage image={editingMain === category.value ? editingMainImage : category.image} onChange={(event) => readImage(event, editingMain === category.value ? setEditingMainImage : (image) => saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image } : item) }))} onRemove={() => editingMain === category.value ? setEditingMainImage("") : saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image: "" } : item) })} />{editingMain === category.value ? <input className="admin-subcategory-edit-input" value={editingMainName} onChange={(event) => setEditingMainName(event.target.value)} /> : <strong>{category.label}</strong>}{editingMain === category.value ? <><button type="button" className="admin-small-button" onClick={saveMainEdit}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingMain(null)}>Cancel</button></> : <><button type="button" className="admin-small-button" onClick={() => { setEditingMain(category.value); setEditingMainName(category.label); setEditingMainImage(category.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => deleteMainCategory(category.value)}>Delete</button></>}</div>)}</div></section>
     <section className="admin-category-management"><SectionHeading title="Subcategories / Industries" /><div className="admin-inline-form admin-category-form"><select value={parentCategory} onChange={(event) => setParentCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input value={newSubcategory} placeholder="New subcategory name" onChange={(event) => setNewSubcategory(event.target.value)} /><CategoryImage image={newSubcategoryImage} inputRef={newSubcategoryImageInputRef} onChange={(event) => readImage(event, setNewSubcategoryImage)} onRemove={() => { setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; }} /><button className="admin-primary-button" type="button" onClick={addSubcategory}><Plus size={15} />Add subcategory</button></div><div className="admin-subcategory-list">{(hierarchy.subcategories[parentCategory] || []).map((subcategory) => { const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value; return <div className="admin-subcategory-row" key={subcategory.value}><strong>{hierarchy.main.find((category) => category.value === parentCategory)?.label}</strong><CategoryImage image={isEditing ? editingSubcategoryImage : subcategory.image} onChange={(event) => readImage(event, isEditing ? setEditingSubcategoryImage : (image) => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image } : item) } }))} onRemove={() => isEditing ? setEditingSubcategoryImage("") : saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image: "" } : item) } })} />{isEditing ? <><select className="admin-category-edit-select" value={editingSubcategoryParent} onChange={(event) => setEditingSubcategoryParent(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input className="admin-subcategory-edit-input" value={editingSubcategoryName} onChange={(event) => setEditingSubcategoryName(event.target.value)} /></> : <span>{subcategory.label}</span>}{isEditing ? <><button type="button" className="admin-small-button" onClick={saveSubcategoryEdit}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingSubcategory(null)}>Cancel</button></> : <><button type="button" className="admin-small-button" onClick={() => { setEditingSubcategory({ parent: parentCategory, value: subcategory.value }); setEditingSubcategoryParent(parentCategory); setEditingSubcategoryName(subcategory.label); setEditingSubcategoryImage(subcategory.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => deleteSubcategory(parentCategory, subcategory.value)}>Delete</button></>}</div>; })}</div></section>
@@ -142,21 +169,32 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   </>;
 }
 
-export default function AdminDashboard() {
+export default function AdminDashboard({ initialScreen = "dashboard" }: { initialScreen?: string }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [range, setRange] = useState("Today");
-  const [screen, setScreen] = useState("dashboard");
+  const [screen, setScreen] = useState(initialScreen);
+  const [, setLocation] = useLocation();
   const [selectedProduct, setSelectedProduct] = useState<AdminProduct | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [categories, setCategories] = useState<ProductTypeCategory[]>(defaultProductTypeCategories);
-  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>(() => readCategoryHierarchy(defaultCategoryHierarchy));
-  useEffect(() => { void fetchCategoryHierarchy(defaultCategoryHierarchy).then(setCategoryHierarchy); }, []);
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>(() => defaultCategoryHierarchy);
   const [featured, setFeatured] = useState<string[]>(() => readStorage("tribull-admin-featured", []));
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState({ name: "", description: "", price: "", compareAt: "", category: "cinema", subcategory: "hollywood", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
+  const [productForm, setProductForm] = useState({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
+  useEffect(() => {
+    void fetchCategoryHierarchy(defaultCategoryHierarchy).then((next) => {
+      setCategoryHierarchy(next);
+      setProductForm((current) => {
+        const category = next.main.some((item) => item.value === current.category) ? current.category : next.main[0]?.value || "";
+        const subcategories = next.subcategories[category] || [];
+        const subcategory = subcategories.some((item) => item.value === current.subcategory) ? current.subcategory : subcategories[0]?.value || "";
+        return { ...current, category, subcategory };
+      });
+    });
+  }, []);
   const [savedNotice, setSavedNotice] = useState("");
   const [imageError, setImageError] = useState("");
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => readStorage("tribull-admin-users", [{ id: "admin-monika", name: "Monika Manikandan", email: "", phone: "", role: "Super Admin", status: "Active", permissions: rolePermissions("Super Admin") }]));
@@ -171,8 +209,8 @@ export default function AdminDashboard() {
   const customers = [{ name: "Aarav Mehta", email: "aarav.m@example.com", phone: "Not available", orders: 8, spent: "₹7,192", status: "Returning" }, { name: "Nisha Kapoor", email: "nisha.k@example.com", phone: "Not available", orders: 3, spent: "₹2,697", status: "Returning" }, { name: "Rohan Shah", email: "rohan.s@example.com", phone: "Not available", orders: 1, spent: "₹899", status: "New" }];
   const activeNav = navigation.flatMap((section) => section.items).find((item) => item.screen === screen);
   const filteredOrders = screen.startsWith("orders-") ? orders.filter((order) => order.status.toLowerCase() === screen.replace("orders-", "")) : orders;
-  const navigate = (nextScreen: string) => { setScreen(nextScreen); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
-  const saveProduct = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSavedNotice("Product saved in this admin session."); setImageError(""); setProductForm({ name: "", description: "", price: "", compareAt: "", category: "cinema", subcategory: "hollywood", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }); window.setTimeout(() => setSavedNotice(""), 2500); };
+  const navigate = (nextScreen: string) => { setScreen(nextScreen); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
+  const saveProduct = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSavedNotice("Product saved in this admin session."); setImageError(""); setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" })); window.setTimeout(() => setSavedNotice(""), 2500); };
   const handleProductImageChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setImageError("Please choose a JPG, PNG, or WEBP image."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { setProductForm((current) => ({ ...current, image: reader.result as string })); setImageError(""); } }; reader.readAsDataURL(file); event.target.value = ""; };
   const addCategory = (image = "") => { const value = newCategory.trim(); if (value && !categories.some((category) => category.label.toLowerCase() === value.toLowerCase())) { setCategories((current) => [...current, { label: value, image }]); setNewCategory(""); } };
   const toggleFeatured = (id: string) => setFeatured((current) => { const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; window.localStorage.setItem("tribull-admin-featured", JSON.stringify(next)); return next; });

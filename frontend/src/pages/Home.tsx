@@ -46,24 +46,7 @@ const bestSelling = [
 
 const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
 
-const categories = [
-  { slug: "cinema", label: "Cinema", image: brandAssets.cinema, subcategories: ["oversized", "tshirt"] },
-  { slug: "sports", label: "Sports", image: brandAssets.sports, subcategories: ["hoodie", "half-sleeve"] },
-  { slug: "games", label: "Games", image: brandAssets.games, subcategories: ["full-sleeve", "oversized"] },
-  { slug: "motorsports", label: "MotoSports", image: brandAssets.motorsports, subcategories: ["hoodie", "oversized"] },
-];
-
-const categoryNavItems = [
-  { label: "Cinema", image: brandAssets.cinema, href: "/category/cinema" },
-  { label: "Sports", image: brandAssets.sports, href: "/category/sports" },
-  { label: "Games", image: brandAssets.games, href: "/category/games" },
-  { label: "MotoSports", image: brandAssets.motorsports, href: "/category/motorsports" },
-];
-
-const categoryHierarchyFallback: CategoryHierarchy = {
-  main: categoryNavItems.map(({ href, label, image }) => ({ value: href.replace("/category/", ""), label, image })),
-  subcategories: {},
-};
+const categoryHierarchyFallback: CategoryHierarchy = { main: [], subcategories: {} };
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -227,10 +210,9 @@ export default function Home() {
       <nav className="category-nav" aria-label="Shop categories">
         <div className="category-nav__track">
           {hierarchy.main.map(({ value, label }) => {
-            const category = categoryNavItems.find((item) => item.href === `/category/${value}`);
             return (
             <a className="category-nav__item" href={`/category/${value}`} key={value}>
-              <span className="category-nav__image"><img src={hierarchy.main.find((item) => item.value === value)?.image || category?.image || "/products/front-white.png"} alt="" /></span>
+              <span className="category-nav__image"><img src={hierarchy.main.find((item) => item.value === value)?.image || "/products/front-white.png"} alt="" /></span>
               <span className="category-nav__label">{label}</span>
             </a>
             );

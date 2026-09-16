@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -18,7 +19,33 @@ function Router() {
   return (
     <Switch>
       <Route path={"/"} component={Home} />
-      <Route path={"/admin26"} component={AdminDashboard} />
+      <Route path={"/admin26/category"}>{() => <LegacyCategoryRedirect />}</Route>
+      <Route path={"/admin26"}>{() => <AdminDashboard />}</Route>
+      <Route path={"/admin26/dashboard"}>{() => <AdminDashboard initialScreen="dashboard" />}</Route>
+      <Route path={"/admin26/products"}>{() => <AdminDashboard initialScreen="products" />}</Route>
+      <Route path={"/admin26/products/add"}>{() => <AdminDashboard initialScreen="add-product" />}</Route>
+      <Route path={"/admin26/products/categories"}>{() => <AdminDashboard initialScreen="categories" />}</Route>
+      <Route path={"/admin26/products/inventory"}>{() => <AdminDashboard initialScreen="inventory" />}</Route>
+      <Route path={"/admin26/orders"}>{() => <AdminDashboard initialScreen="orders" />}</Route>
+      <Route path={"/admin26/orders/pending"}>{() => <AdminDashboard initialScreen="orders-pending" />}</Route>
+      <Route path={"/admin26/orders/processing"}>{() => <AdminDashboard initialScreen="orders-processing" />}</Route>
+      <Route path={"/admin26/orders/shipped"}>{() => <AdminDashboard initialScreen="orders-shipped" />}</Route>
+      <Route path={"/admin26/orders/delivered"}>{() => <AdminDashboard initialScreen="orders-delivered" />}</Route>
+      <Route path={"/admin26/orders/cancelled"}>{() => <AdminDashboard initialScreen="orders-cancelled" />}</Route>
+      <Route path={"/admin26/customers"}>{() => <AdminDashboard initialScreen="customers" />}</Route>
+      <Route path={"/admin26/customers/details"}>{() => <AdminDashboard initialScreen="customer-details" />}</Route>
+      <Route path={"/admin26/marketing/discounts"}>{() => <AdminDashboard initialScreen="discounts" />}</Route>
+      <Route path={"/admin26/marketing/coupons"}>{() => <AdminDashboard initialScreen="coupons" />}</Route>
+      <Route path={"/admin26/marketing/promotions"}>{() => <AdminDashboard initialScreen="promotions" />}</Route>
+      <Route path={"/admin26/content/banners"}>{() => <AdminDashboard initialScreen="banners" />}</Route>
+      <Route path={"/admin26/content/collections"}>{() => <AdminDashboard initialScreen="collections" />}</Route>
+      <Route path={"/admin26/content/featured-products"}>{() => <AdminDashboard initialScreen="featured" />}</Route>
+      <Route path={"/admin26/content/social-media"}>{() => <AdminDashboard initialScreen="social-media" />}</Route>
+      <Route path={"/admin26/analytics"}>{() => <AdminDashboard initialScreen="analytics" />}</Route>
+      <Route path={"/admin26/analytics/sales-reports"}>{() => <AdminDashboard initialScreen="sales-reports" />}</Route>
+      <Route path={"/admin26/analytics/product-reports"}>{() => <AdminDashboard initialScreen="product-reports" />}</Route>
+      <Route path={"/admin26/settings/general"}>{() => <AdminDashboard initialScreen="general-settings" />}</Route>
+      <Route path={"/admin26/settings/admin-users"}>{() => <AdminDashboard initialScreen="admin-users" />}</Route>
       <Route path={"/products"} component={AllProductsPage} />
       <Route path={"/checkout"} component={CheckoutPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
@@ -29,6 +56,12 @@ function Router() {
       <Route component={NotFound} />
     </Switch>
   );
+}
+
+function LegacyCategoryRedirect() {
+  const [, setLocation] = useLocation();
+  useEffect(() => setLocation("/admin26/products/categories"), [setLocation]);
+  return null;
 }
 
 // NOTE: About Theme
@@ -48,7 +81,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
-          {location !== "/admin26" && <SiteFooter />}
+            {!location.startsWith("/admin26") && <SiteFooter />}
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

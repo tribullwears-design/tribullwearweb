@@ -16,39 +16,46 @@ function toApiDocuments(hierarchy: CategoryHierarchy) {
   return hierarchy.main.map((category) => ({ ...category, subcategories: hierarchy.subcategories[category.value] || [] }));
 }
 
-function cacheHierarchy(hierarchy: CategoryHierarchy) {
+async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!response.ok) {
+    const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+    throw new Error(details?.error || "Category request failed");
+  }
+  return response.json();
+}
+
+function cacheHierarchy(hierarchy: CategoryHierarchy, notify = true) {
   window.localStorage.setItem(CATEGORY_HIERARCHY_KEY, JSON.stringify(hierarchy));
-  window.dispatchEvent(new Event("tribull-category-hierarchy-updated"));
+  if (notify) window.dispatchEvent(new Event("tribull-category-hierarchy-updated"));
 }
 
 export function readCategoryHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
+  return fallback;
+}
+
+function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
   try {
     const saved = window.localStorage.getItem(CATEGORY_HIERARCHY_KEY);
-    if (!saved) return fallback;
-    const parsed = JSON.parse(saved) as Partial<CategoryHierarchy>;
-    const savedMain = Array.isArray(parsed.main) ? parsed.main : [];
-    const fallbackMain = new Map(fallback.main.map((category) => [category.value, category]));
-    const main = savedMain.map((category) => ({ ...fallbackMain.get(category.value), ...category }));
-    const subcategories = Object.fromEntries(Object.entries(fallback.subcategories).map(([parent, fallbackItems]) => {
-      const savedItems = parsed.subcategories?.[parent] || [];
-      const fallbackByValue = new Map(fallbackItems.map((item) => [item.value, item]));
-      return [parent, savedItems.map((item) => ({ ...fallbackByValue.get(item.value), ...item }))];
-    }));
-    Object.entries(parsed.subcategories || {}).forEach(([parent, items]) => {
-      if (!(parent in subcategories)) subcategories[parent] = items;
-    });
-    return { main, subcategories };
+    return saved ? JSON.parse(saved) as CategoryHierarchy : fallback;
   } catch {
     return fallback;
   }
 }
 
-export function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
-  cacheHierarchy(hierarchy);
-  void fetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) })
-    .then((response) => response.ok ? response.json() : Promise.reject(new Error("Category save failed")))
-    .then((documents) => cacheHierarchy(fromApiDocuments(documents)))
-    .catch(() => undefined);
+export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
+  try {
+    const response = await fetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) });
+    if (!response.ok) return false;
+    cacheHierarchy(fromApiDocuments(await response.json()));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {
@@ -56,18 +63,42 @@ export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {
     const response = await fetch("/api/categories", { cache: "no-store" });
     if (!response.ok) throw new Error("Category request failed");
     const hierarchy = fromApiDocuments(await response.json() as CategoryChoice[]);
-    cacheHierarchy(hierarchy);
+    cacheHierarchy(hierarchy, false);
     return hierarchy;
   } catch {
-    return readCategoryHierarchy(fallback);
+    return fallback;
   }
 }
 
+export function createCategory(category: CategoryChoice) {
+  return requestCategory("/api/categories", "POST", category);
+}
+
+export function updateCategory(value: string, changes: Partial<CategoryChoice>) {
+  return requestCategory(`/api/categories/${encodeURIComponent(value)}`, "PATCH", changes);
+}
+
+export function deleteCategory(value: string) {
+  return requestCategory(`/api/categories/${encodeURIComponent(value)}`, "DELETE");
+}
+
+export function createSubcategory(parent: string, subcategory: CategoryChoice) {
+  return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories`, "POST", subcategory);
+}
+
+export function updateSubcategory(parent: string, value: string, changes: Partial<CategoryChoice>) {
+  return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}`, "PATCH", changes);
+}
+
+export function deleteSubcategory(parent: string, value: string) {
+  return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}`, "DELETE");
+}
+
 export function useCategoryHierarchy(fallback: CategoryHierarchy) {
-  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => readCategoryHierarchy(fallback));
+  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => fallback);
 
   useEffect(() => {
-    const syncHierarchy = () => setHierarchy(readCategoryHierarchy(fallback));
+    const syncHierarchy = () => setHierarchy(readCachedHierarchy(fallback));
     void fetchCategoryHierarchy(fallback).then(setHierarchy);
     window.addEventListener("tribull-category-hierarchy-updated", syncHierarchy);
     window.addEventListener("storage", syncHierarchy);
@@ -79,3 +110,4 @@ export function useCategoryHierarchy(fallback: CategoryHierarchy) {
 
   return hierarchy;
 }
+

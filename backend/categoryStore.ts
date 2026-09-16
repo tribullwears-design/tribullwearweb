@@ -81,6 +81,8 @@ export async function replaceCategories(categories: CategoryDocument[]) {
 
 export async function createCategory(category: Omit<CategoryDocument, "position" | "subcategories"> & { subcategories?: CategoryDocument["subcategories"] }) {
   const collection = await getCollection();
+  if (!category.value?.trim() || !category.label?.trim()) throw new Error("Category name is required");
+  if (await collection.findOne({ value: category.value })) throw new Error("Duplicate category");
   const position = await collection.countDocuments();
   const document = { ...category, subcategories: category.subcategories || [], position };
   await collection.insertOne(document);
@@ -108,6 +110,7 @@ async function updateSubcategories(parent: string, updater: (items: CategoryDocu
 
 export function addSubcategory(parent: string, item: CategoryDocument["subcategories"][number]) {
   return updateSubcategories(parent, (items) => {
+    if (!item.value?.trim() || !item.label?.trim()) throw new Error("Subcategory name is required");
     if (items.some((current) => current.value === item.value || current.label.toLowerCase() === item.label.toLowerCase())) throw new Error("Duplicate subcategory");
     return [...items, item];
   });

@@ -9,50 +9,7 @@ type MenuCategory = {
   subcategories: { slug: string; label: string }[];
 };
 
-const fallbackMenuCategories: MenuCategory[] = [
-  {
-    slug: "cinema",
-    label: "Cinema",
-    subcategories: [
-      { slug: "hollywood", label: "Hollywood" },
-      { slug: "bollywood", label: "Bollywood" },
-      { slug: "kollywood", label: "Kollywood" },
-      { slug: "tollywood", label: "Tollywood" },
-      { slug: "mollywood", label: "Mollywood" },
-      { slug: "sandalwood", label: "Sandalwood" },
-    ],
-  },
-  {
-    slug: "sports",
-    label: "Sports",
-    subcategories: [
-      { slug: "cricket", label: "Cricket" },
-      { slug: "football", label: "Football" },
-      { slug: "gym", label: "Gym" },
-    ],
-  },
-  {
-    slug: "motorsports",
-    label: "Motorsports",
-    subcategories: [
-      { slug: "car", label: "Car" },
-      { slug: "bike", label: "Bike" },
-    ],
-  },
-  {
-    slug: "games",
-    label: "Games",
-    subcategories: [
-      { slug: "pc-games", label: "PC Games" },
-      { slug: "mobile-games", label: "Mobile Games" },
-    ],
-  },
-];
-
-const menuHierarchy: CategoryHierarchy = {
-  main: fallbackMenuCategories.map(({ slug, label }) => ({ value: slug, label })),
-  subcategories: Object.fromEntries(fallbackMenuCategories.map(({ slug, subcategories }) => [slug, subcategories.map(({ slug: value, label }) => ({ value, label }))])),
-};
+const menuHierarchy: CategoryHierarchy = { main: [], subcategories: {} };
 
 export default function MobileCategoryMenu() {
   const hierarchy = useCategoryHierarchy(menuHierarchy);
