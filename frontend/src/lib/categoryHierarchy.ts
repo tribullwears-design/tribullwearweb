@@ -3,6 +3,38 @@ import { useEffect, useState } from "react";
 export type CategoryChoice = { value: string; label: string; image?: string };
 export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<string, CategoryChoice[]> };
 
+export const defaultCategoryHierarchy: CategoryHierarchy = {
+  main: [
+    { value: "cinema", label: "Cinema", image: "/products/cinema.png" },
+    { value: "sports", label: "Sports", image: "/products/sports.png" },
+    { value: "games", label: "Games", image: "/products/games.png" },
+    { value: "motorsports", label: "MotoSports", image: "/products/motosports.jpg" },
+  ],
+  subcategories: {
+    cinema: [
+      { value: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
+      { value: "bollywood", label: "Bollywood", image: "/products/bollywood.jpg" },
+      { value: "kollywood", label: "Kollywood", image: "/products/kollywood.jpg" },
+      { value: "tollywood", label: "Tollywood", image: "/products/tollywood.jpg" },
+      { value: "mollywood", label: "Mollywood", image: "/products/mollywood.jpg" },
+      { value: "sandalwood", label: "Sandalwood", image: "/products/sandalwood.jpg" },
+    ],
+    sports: [
+      { value: "cricket", label: "Cricket", image: "/products/cricket.jpg" },
+      { value: "football", label: "Football", image: "/products/football.jpg" },
+      { value: "gym", label: "Gym", image: "/products/gym.jpg" },
+    ],
+    games: [
+      { value: "pc-games", label: "PC Games", image: "/products/pc games.jpg" },
+      { value: "mobile-games", label: "Mobile Games", image: "/products/mobilegames.jpg" },
+    ],
+    motorsports: [
+      { value: "car", label: "Car", image: "/products/car.jpg" },
+      { value: "bike", label: "Bike", image: "/products/bike.jpg" },
+    ],
+  },
+};
+
 export const CATEGORY_HIERARCHY_KEY = "tribull-admin-category-hierarchy";
 
 function fromApiDocuments(documents: CategoryChoice[]) {

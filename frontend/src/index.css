@@ -698,17 +698,17 @@ body.header-overlay-open { overflow:hidden; }
 .icon-button svg { width:15px; height:15px; stroke-width:1.8; }
 .icon-button:hover, .icon-button:focus-visible { transform:none; opacity:.65; }
 .mobile-menu:hover, .mobile-menu:focus-visible { transform:translateY(-50%); }
-.category-nav { width:100%; background:#FFFFFF; padding:14px 20px 16px; }
-.category-nav__track { display:flex; justify-content:center; gap:20px; max-width:1100px; margin:0 auto; }
-.category-nav__item { flex:0 0 78px; display:flex; flex-direction:column; align-items:center; gap:8px; color:var(--tribull-green); }
-.category-nav__image { display:block; width:68px; height:68px; overflow:hidden; border-radius:14px; background:#F3EACB; }
-.category-nav__image img { display:block; width:100%; height:100%; object-fit:cover; transition:transform .35s var(--ease-out); }
+.category-nav { width:100%; background:#FFFFFF; padding:20px 20px 18px; }
+.category-nav__track { display:flex; justify-content:center; gap:22px; max-width:1100px; margin:0 auto; }
+.category-nav__item { flex:0 0 96px; display:flex; flex-direction:column; align-items:center; gap:10px; color:var(--tribull-green); }
+.category-nav__image { display:block; width:92px; height:92px; overflow:hidden; border-radius:14px; background:transparent; aspect-ratio:1; }
+.category-nav__image img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; transition:transform .35s var(--ease-out); }
 .category-nav__item:hover .category-nav__image img { transform:none; }
 .category-nav__label { font:700 9px/1.1 Montserrat,sans-serif; letter-spacing:.04em; text-align:center; white-space:nowrap; }
 
-.tribull-page .category-nav__track { gap: 18px; }
-.tribull-page .category-nav__item { flex: 0 0 96px; gap: 10px; }
-.tribull-page .category-nav__image { width: 82px; height: 82px; border-radius: 14px; }
+.tribull-page .category-nav__track { gap: 20px; }
+.tribull-page .category-nav__item { flex: 0 0 116px; gap: 10px; }
+.tribull-page .category-nav__image { width: 100px; height: 100px; border-radius: 14px; }
 .tribull-page .category-nav__label { font-size: 10px; }
 
 
@@ -751,12 +751,12 @@ body.header-overlay-open { overflow:hidden; }
 }
 .cinema-category-nav {
   background: #ffffff;
-  padding-top: 14px;
-  padding-bottom: 14px;
+  padding-top: 18px;
+  padding-bottom: 18px;
 }
 .cinema-category-nav .category-nav__track {
   max-width: 100%;
-  gap: 14px;
+  gap: 18px;
   justify-content: center;
 }
 .cinema-category-nav .category-nav__item {
@@ -764,10 +764,11 @@ body.header-overlay-open { overflow:hidden; }
   gap: 10px;
 }
 .cinema-category-nav .category-nav__image {
-  width: 82px;
-  height: 82px;
-  border-radius: 50%;
-  background: #f5f5f5;
+  width: 100px;
+  height: 100px;
+  border-radius: 14px;
+  background: transparent;
+  aspect-ratio: 1;
 }
 .cinema-category-nav .category-nav__label {
   font-size: 10px;
@@ -777,16 +778,16 @@ body.header-overlay-open { overflow:hidden; }
   .category-nav { overflow-x:auto; scrollbar-width:none; }
   .category-nav::-webkit-scrollbar { display:none; }
   .category-nav__track { justify-content:flex-start; width:max-content; max-width:none; }
-  .tribull-page .category-nav__item { flex: 0 0 72px; gap: 8px; }
-  .tribull-page .category-nav__image { width: 60px; height: 60px; border-radius: 12px; }
+  .tribull-page .category-nav__item { flex: 0 0 82px; gap: 8px; }
+  .tribull-page .category-nav__image { width: 80px; height: 80px; border-radius: 12px; }
   .tribull-page .category-nav__label { font-size: 8px; }
   .cinema-site-header { height: 62px; }
   .cinema-category-nav .category-nav__track { gap: 14px; justify-content: flex-start; }
-  .cinema-category-nav .category-nav__item { flex-basis: 82px; }
+  .cinema-category-nav .category-nav__item { flex-basis: 90px; }
 }
 @media (max-width: 640px) {
   .cinema-category-nav {
-    padding: 12px 8px 10px;
+    padding: 14px 8px 12px;
   }
   .cinema-category-nav .category-nav__track {
     width: max-content;
@@ -796,12 +797,12 @@ body.header-overlay-open { overflow:hidden; }
     padding: 0 2px;
   }
   .cinema-category-nav .category-nav__item {
-    flex: 0 0 82px;
+    flex: 0 0 78px;
     gap: 6px;
   }
   .cinema-category-nav .category-nav__image {
-    width: 56px;
-    height: 56px;
+    width: 72px;
+    height: 72px;
   }
   .cinema-category-nav .category-nav__label {
     font-size: 8px;

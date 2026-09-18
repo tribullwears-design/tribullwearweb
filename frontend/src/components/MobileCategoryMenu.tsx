@@ -1,7 +1,7 @@
 import { ChevronRight, Menu, X } from "lucide-react";
 import { Link } from "wouter";
 import { useState } from "react";
-import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 type MenuCategory = {
   slug: string;
@@ -9,7 +9,7 @@ type MenuCategory = {
   subcategories: { slug: string; label: string }[];
 };
 
-const menuHierarchy: CategoryHierarchy = { main: [], subcategories: {} };
+const menuHierarchy: CategoryHierarchy = defaultCategoryHierarchy;
 
 export default function MobileCategoryMenu() {
   const hierarchy = useCategoryHierarchy(menuHierarchy);

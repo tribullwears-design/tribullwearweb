@@ -4,7 +4,7 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
-import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
@@ -21,7 +21,7 @@ type CategoryDefinition = {
   subcategories: { slug: string; label: string; image: string }[];
 };
 
-const categoryHierarchyFallback: CategoryHierarchy = { main: [], subcategories: {} };
+const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
 function liveCategoryDefinition(categorySlug: string, hierarchy: CategoryHierarchy): CategoryDefinition | undefined {
   const main = hierarchy.main.find((category) => category.value === categorySlug);

@@ -4,14 +4,14 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState } from "react";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
-import { useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 const brandAssets = {
   logo: "/products/logo.png",
   hero: "/products/homebanner.jpg",
-  cinema: "/products/cinema.jpg",
+  cinema: "/products/cinema.png",
   sports: "/products/sports.png",
-  games: "/products/games.jpg",
+  games: "/products/games.png",
   motorsports: "/products/motosports.jpg",
 };
 
@@ -46,7 +46,7 @@ const bestSelling = [
 
 const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
 
-const categoryHierarchyFallback: CategoryHierarchy = { main: [], subcategories: {} };
+const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
