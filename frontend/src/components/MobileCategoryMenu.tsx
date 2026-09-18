@@ -1,6 +1,6 @@
 import { ChevronRight, Menu, X } from "lucide-react";
 import { Link } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 type MenuCategory = {
@@ -15,6 +15,11 @@ export default function MobileCategoryMenu() {
   const hierarchy = useCategoryHierarchy(menuHierarchy);
   const [open, setOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+
+  useEffect(() => {
+    document.body.classList.toggle("mobile-category-menu-open", open);
+    return () => document.body.classList.remove("mobile-category-menu-open");
+  }, [open]);
 
   const toggleMenu = () => {
     setOpen((current) => !current);
@@ -55,7 +60,8 @@ export default function MobileCategoryMenu() {
             <X size={21} strokeWidth={1.5} />
           </button>
         </div>
-        <nav aria-label="Mobile category navigation">
+        <div className="mobile-category-menu__content">
+          <nav aria-label="Mobile category navigation">
           {hierarchy.main.map((category) => {
             const subcategories = hierarchy.subcategories[category.value] || [];
             const isExpanded = expandedCategory === category.value;
@@ -89,14 +95,15 @@ export default function MobileCategoryMenu() {
               </div>
             );
           })}
-        </nav>
-        <div className="mobile-category-menu__links">
-          <a href="/#corporate" onClick={closeMenu}>Corporate</a>
-          <a href="/#customize" onClick={closeMenu}>Customize</a>
-        </div>
-        <div className="mobile-category-menu__contact">
-          <span>Get in touch</span>
-          <a href="mailto:tribullwears@gmail.com">tribullwears@gmail.com</a>
+          </nav>
+          <div className="mobile-category-menu__links">
+            <a href="/#corporate" onClick={closeMenu}>Corporate</a>
+            <a href="/#customize" onClick={closeMenu}>Customize</a>
+          </div>
+          <div className="mobile-category-menu__contact">
+            <span>Get in touch</span>
+            <a href="mailto:tribullwears@gmail.com">tribullwears@gmail.com</a>
+          </div>
         </div>
       </div>
     </div>
