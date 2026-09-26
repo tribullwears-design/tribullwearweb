@@ -8,11 +8,38 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { products as storeProducts, type Product } from "./ProductsPage";
 import { useLocation } from "wouter";
-import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, fetchCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryChoice, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, fetchCategoryHierarchy, loadCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import "./admin-dashboard.css";
 
 type Icon = typeof LayoutDashboard;
-type AdminProduct = Product & { stock: number; status: "Active" | "Draft"; sku: string };
+type AdminProduct = Omit<Product, "category"> & {
+  category: string;
+  stock: number;
+  status: "Active" | "Draft";
+  sku: string;
+  mainCategoryId?: string;
+  subcategoryId?: string;
+  mainCategory?: string;
+  subcategory?: string;
+};
+type StoredProduct = {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  compareAt: number | null;
+  image: string;
+  stock: number;
+  sizes: string[];
+  colors: string[];
+  status: "Active" | "Draft";
+  mainCategoryId: string;
+  subcategoryId: string;
+  mainCategory: string;
+  subcategory: string;
+  createdAt: string;
+  updatedAt: string;
+};
 type OrderStatus = "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
 type AdminOrderItem = { id: string; name: string; price: number; image: string; quantity: number; variant?: string; lineTotal: number };
 type AdminOrder = { id: string; customer: { name: string; email: string; phone: string }; shippingAddress: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string }; items: AdminOrderItem[]; subtotal: number; shipping: number; discount: number; total: number; payment: { method: string; status: string }; status: OrderStatus; createdAt: string };
@@ -81,15 +108,15 @@ function SectionHeading({ title, action, onAction }: { title: string; action?: s
 function EmptyState({ title, message, action, onAction }: { title: string; message: string; action?: string; onAction?: () => void }) { return <div className="admin-empty-state"><div className="admin-empty-state__icon"><Box size={20} /></div><strong>{title}</strong><span>{message}</span>{action && <button type="button" className="admin-primary-button" onClick={onAction}>{action}</button>}</div>; }
 
 function ProductTable({ products, onSelect }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void }) {
-  return <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button></td></tr>)}</tbody></table></div>;
+  return <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button></td></tr>)}</tbody></table></div>;
 }
 function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) { return orders.length ? <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id} onClick={() => onSelect(order)}><td><strong className="admin-order-id">{order.id}</strong></td><td><strong>{order.customer.name}</strong><br /><span>{order.customer.email}</span></td><td>{new Date(order.createdAt).toLocaleString("en-IN")}</td><td>{order.items.reduce((count, item) => count + item.quantity, 0)}</td><td><strong>₹{order.total.toLocaleString("en-IN")}</strong></td><td>{order.payment.status}</td><td><StatusPill status={order.status} /></td><td><button className="admin-more-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(order); }}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div> : <EmptyState title="No orders found." message="Orders will appear here when customers place an order." />; }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
 
 type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; image: string; stock: string; sizes: string; colors: string; status: string };
-function AddProductForm({ productForm, setProductForm, hierarchy, onSave, onCancel, imageError, onImageChange, savedNotice }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; onSave: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string }) {
+function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
-  const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: hierarchy.subcategories[category]?.[0]?.value || "" }));
+  const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
   return <form className="admin-form" onSubmit={onSave}>
     <label><span>Product name</span><input required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label>
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
@@ -99,10 +126,11 @@ function AddProductForm({ productForm, setProductForm, hierarchy, onSave, onCanc
     <label><span>Stock</span><input value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
-    <label><span>Category</span><select value={productForm.category} onChange={(event) => updateCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-    <label><span>Subcategory</span><select value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
+    <label><span>Main Category</span><select required disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+    <label><span>Subcategory / Industry</span><select required disabled={hierarchyLoading || Boolean(hierarchyError) || !subcategories.length} value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}>{subcategories.length ? <><option value="">Select subcategory</option>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</> : <option value="">No subcategories available</option>}</select></label>
     <label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label>
-    <div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}
+    {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError}</p>}
+    <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={productSaving || hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0}>{productSaving ? "Saving..." : "Save Product"}</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className={savedNotice.includes("saved") ? "admin-form-success" : "admin-image-error"} role="status">{savedNotice}</p>}
   </form>;
 }
 
@@ -171,27 +199,59 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const [screen, setScreen] = useState(initialScreen);
   const [, setLocation] = useLocation();
   const [selectedProduct, setSelectedProduct] = useState<AdminProduct | null>(null);
+  const [editingProductCategory, setEditingProductCategory] = useState("");
+  const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
+  const [productUpdateError, setProductUpdateError] = useState("");
+  const [databaseProducts, setDatabaseProducts] = useState<StoredProduct[]>([]);
+  const [productsError, setProductsError] = useState("");
+  const [productsLoading, setProductsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [categories, setCategories] = useState<ProductTypeCategory[]>(defaultProductTypeCategories);
-  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>(() => defaultCategoryHierarchy);
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>({ main: [], subcategories: {} });
+  const [categoryHierarchyLoading, setCategoryHierarchyLoading] = useState(true);
+  const [categoryHierarchyError, setCategoryHierarchyError] = useState("");
   const [featured, setFeatured] = useState<string[]>(() => readStorage("tribull-admin-featured", []));
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
+  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
   useEffect(() => {
-    void fetchCategoryHierarchy(defaultCategoryHierarchy).then((next) => {
-      setCategoryHierarchy(next);
-      setProductForm((current) => {
-        const category = next.main.some((item) => item.value === current.category) ? current.category : next.main[0]?.value || "";
-        const subcategories = next.subcategories[category] || [];
-        const subcategory = subcategories.some((item) => item.value === current.subcategory) ? current.subcategory : subcategories[0]?.value || "";
-        return { ...current, category, subcategory };
-      });
-    });
+    let active = true;
+    void (async () => {
+      setCategoryHierarchyLoading(true);
+      setCategoryHierarchyError("");
+      try {
+        const next = await loadCategoryHierarchy();
+        if (!active) return;
+        setCategoryHierarchy(next);
+        setProductForm((current) => {
+          const category = next.main.some((item) => item.value === current.category) ? current.category : next.main[0]?.value || "";
+          return { ...current, category, subcategory: "" };
+        });
+      } catch {
+        if (active) setCategoryHierarchyError("Unable to load categories. Please try again.");
+      } finally {
+        if (active) setCategoryHierarchyLoading(false);
+      }
+    })();
+    return () => { active = false; };
   }, []);
+  const refreshProducts = async () => {
+    setProductsLoading(true);
+    setProductsError("");
+    try {
+      const response = await fetch("/api/products", { cache: "no-store" });
+      if (!response.ok) throw new Error("Product request failed");
+      setDatabaseProducts(await response.json() as StoredProduct[]);
+    } catch {
+      setProductsError("Unable to load saved products. Please try again.");
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+  useEffect(() => { void refreshProducts(); }, []);
   const refreshOrders = async () => {
     setOrdersLoading(true);
     setOrdersError("");
@@ -207,6 +267,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   };
   useEffect(() => { void refreshOrders(); }, []);
   const [savedNotice, setSavedNotice] = useState("");
+  const [productSaving, setProductSaving] = useState(false);
   const [imageError, setImageError] = useState("");
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => readStorage("tribull-admin-users", [{ id: "admin-monika", name: "Monika Manikandan", email: "", phone: "", role: "Super Admin", status: "Active", permissions: rolePermissions("Super Admin") }]));
   const [adminModal, setAdminModal] = useState<"add" | "view-permissions" | "edit-permissions" | null>(null);
@@ -215,7 +276,25 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const [permissionDraft, setPermissionDraft] = useState<AdminPermissions>(rolePermissions("Admin"));
   const [socialLinks, setSocialLinks] = useState(() => readStorage("tribull-social-links", { facebook: "", instagram: "", youtube: "", x: "", reddit: "" }));
   const [socialNotice, setSocialNotice] = useState("");
-  const adminProducts = useMemo<AdminProduct[]>(() => storeProducts.map((product, index) => ({ ...product, stock: [42, 18, 7, 0][index % 4], status: "Active", sku: `TRB-${String(index + 1).padStart(3, "0")}` })), []);
+  const adminProducts = useMemo<AdminProduct[]>(() => [
+    ...storeProducts.map((product, index) => ({ ...product, stock: [42, 18, 7, 0][index % 4], status: "Active" as const, sku: `TRB-${String(index + 1).padStart(3, "0")}` })),
+    ...databaseProducts.map((product) => ({
+      id: product.id,
+      name: product.name,
+      category: `${product.mainCategory} / ${product.subcategory}`,
+      price: product.price,
+      image: product.image,
+      created: Date.parse(product.createdAt) || Date.now(),
+      sold: 0,
+      stock: product.stock,
+      status: product.status,
+      sku: product.id.slice(0, 8).toUpperCase(),
+      mainCategoryId: product.mainCategoryId,
+      subcategoryId: product.subcategoryId,
+      mainCategory: product.mainCategory,
+      subcategory: product.subcategory,
+    })),
+  ], [databaseProducts]);
   const customers = [{ name: "Aarav Mehta", email: "aarav.m@example.com", phone: "Not available", orders: 8, spent: "₹7,192", status: "Returning" }, { name: "Nisha Kapoor", email: "nisha.k@example.com", phone: "Not available", orders: 3, spent: "₹2,697", status: "Returning" }, { name: "Rohan Shah", email: "rohan.s@example.com", phone: "Not available", orders: 1, spent: "₹899", status: "New" }];
   const activeNav = navigation.flatMap((section) => section.items).find((item) => item.screen === screen);
   const filteredOrders = screen.startsWith("orders-") ? orders.filter((order) => order.status.toLowerCase() === screen.replace("orders-", "")) : orders;
@@ -231,7 +310,76 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
     }
   };
   const navigate = (nextScreen: string) => { setScreen(nextScreen); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
-  const saveProduct = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSavedNotice("Product saved in this admin session."); setImageError(""); setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" })); window.setTimeout(() => setSavedNotice(""), 2500); };
+  const saveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProductSaving(true);
+    setSavedNotice("");
+    try {
+      const response = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: productForm.name,
+          description: productForm.description,
+          price: Number(productForm.price),
+          compareAt: productForm.compareAt ? Number(productForm.compareAt) : null,
+          image: productForm.image,
+          stock: productForm.stock ? Number(productForm.stock) : 0,
+          sizes: productForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
+          colors: productForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
+          status: productForm.status,
+          mainCategoryId: productForm.category,
+          subcategoryId: productForm.subcategory,
+        }),
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(details?.error || "Product could not be saved.");
+      }
+      await refreshProducts();
+      setSavedNotice("Product saved successfully.");
+      setImageError("");
+      setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }));
+      window.setTimeout(() => setSavedNotice(""), 2500);
+    } catch (error) {
+      setSavedNotice(error instanceof Error ? error.message : "Unable to save product. Please try again.");
+    } finally {
+      setProductSaving(false);
+    }
+  };
+  const openProduct = (product: AdminProduct) => {
+    setSelectedProduct(product);
+    setEditingProductCategory(product.mainCategoryId || "");
+    setEditingProductSubcategory(product.subcategoryId || "");
+    setProductUpdateError("");
+  };
+  const saveProductCategory = async () => {
+    if (!selectedProduct?.mainCategoryId) return;
+    setProductUpdateError("");
+    try {
+      const response = await fetch(`/api/products/${encodeURIComponent(selectedProduct.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mainCategoryId: editingProductCategory, subcategoryId: editingProductSubcategory }),
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(details?.error || "Product category could not be updated.");
+      }
+      const updated = await response.json() as StoredProduct;
+      setDatabaseProducts((current) => current.map((product) => product.id === updated.id ? updated : product));
+      setSelectedProduct({
+        ...selectedProduct,
+        category: `${updated.mainCategory} / ${updated.subcategory}`,
+        mainCategoryId: updated.mainCategoryId,
+        subcategoryId: updated.subcategoryId,
+        mainCategory: updated.mainCategory,
+        subcategory: updated.subcategory,
+      });
+    } catch (error) {
+      setProductUpdateError(error instanceof Error ? error.message : "Unable to update product category. Please try again.");
+    }
+  };
   const handleProductImageChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setImageError("Please choose a JPG, PNG, or WEBP image."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { setProductForm((current) => ({ ...current, image: reader.result as string })); setImageError(""); } }; reader.readAsDataURL(file); event.target.value = ""; };
   const addCategory = (image = "") => { const value = newCategory.trim(); if (value && !categories.some((category) => category.label.toLowerCase() === value.toLowerCase())) { setCategories((current) => [...current, { label: value, image }]); setNewCategory(""); } };
   const toggleFeatured = (id: string) => setFeatured((current) => { const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; window.localStorage.setItem("tribull-admin-featured", JSON.stringify(next)); return next; });
@@ -242,9 +390,9 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const saveSocialLinks = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); window.localStorage.setItem("tribull-social-links", JSON.stringify(socialLinks)); window.dispatchEvent(new Event("tribull-social-links-updated")); setSocialNotice("Social links updated successfully."); window.setTimeout(() => setSocialNotice(""), 2500); };
 
   const renderScreen = () => {
-    if (screen === "dashboard") return <><section className="admin-stats-grid">{[["Total Sales", "₹0.00", "No sales recorded", DollarSign], ["Total Orders", String(orders.length), "Current order count", ClipboardList], ["Total Products", String(adminProducts.length), "From store catalog", ShoppingBag], ["Total Customers", String(customers.length), "Registered customers", Users], ["Pending Orders", String(orders.filter((order) => order.status === "Pending").length), "Needs attention", PackageOpen], ["Low Stock Products", String(adminProducts.filter((product) => product.stock < 10).length), "Needs your attention", AlertTriangle]].map(([label, value, note, StatIcon]) => { const IconComponent = StatIcon as Icon; return <div className="admin-stat-card" key={label as string}><div className="admin-stat-icon admin-stat-icon--teal"><IconComponent size={19} /></div><div className="admin-stat-label">{label as string}</div><strong>{value as string}</strong><span>{note as string}</span></div>; })}</section><section className="admin-panel"><SectionHeading title="Recent Orders" action="View all orders" onAction={() => navigate("orders")} /><OrderTable orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section><div className="admin-two-column"><section className="admin-panel"><SectionHeading title="Best Selling Products" action="View products" onAction={() => navigate("products")} /><ProductTable products={adminProducts.slice(0, 5)} onSelect={setSelectedProduct} /></section><section className="admin-panel"><SectionHeading title="Low Stock Products" action="View inventory" onAction={() => navigate("inventory")} />{adminProducts.filter((product) => product.stock < 10).map((product) => <div className="admin-low-stock-row" key={product.id}><img className="admin-real-product-thumb" src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.sku}</span></div><div className="admin-stock-count"><strong>{product.stock}</strong><span>units left</span></div></div>)}</section></div></>;
-    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}><ProductTable products={adminProducts} onSelect={setSelectedProduct} /></AdminPanel>;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} /></AdminPanel>;
+    if (screen === "dashboard") return <><section className="admin-stats-grid">{[["Total Sales", "₹0.00", "No sales recorded", DollarSign], ["Total Orders", String(orders.length), "Current order count", ClipboardList], ["Total Products", String(adminProducts.length), "From store catalog", ShoppingBag], ["Total Customers", String(customers.length), "Registered customers", Users], ["Pending Orders", String(orders.filter((order) => order.status === "Pending").length), "Needs attention", PackageOpen], ["Low Stock Products", String(adminProducts.filter((product) => product.stock < 10).length), "Needs your attention", AlertTriangle]].map(([label, value, note, StatIcon]) => { const IconComponent = StatIcon as Icon; return <div className="admin-stat-card" key={label as string}><div className="admin-stat-icon admin-stat-icon--teal"><IconComponent size={19} /></div><div className="admin-stat-label">{label as string}</div><strong>{value as string}</strong><span>{note as string}</span></div>; })}</section><section className="admin-panel"><SectionHeading title="Recent Orders" action="View all orders" onAction={() => navigate("orders")} /><OrderTable orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section><div className="admin-two-column"><section className="admin-panel"><SectionHeading title="Best Selling Products" action="View products" onAction={() => navigate("products")} /><ProductTable products={adminProducts.slice(0, 5)} onSelect={openProduct} /></section><section className="admin-panel"><SectionHeading title="Low Stock Products" action="View inventory" onAction={() => navigate("inventory")} />{adminProducts.filter((product) => product.stock < 10).map((product) => <div className="admin-low-stock-row" key={product.id}><img className="admin-real-product-thumb" src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.sku}</span></div><div className="admin-stock-count"><strong>{product.stock}</strong><span>units left</span></div></div>)}</section></div></>;
+    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}>{productsError && <EmptyState title="Unable to load saved products" message={productsError} action="Retry" onAction={() => void refreshProducts()} />}{productsLoading && <p>Loading saved products...</p>}<ProductTable products={adminProducts} onSelect={openProduct} /></AdminPanel>;
+    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "add-product") return <AdminPanel title="Add Product"><form className="admin-form" onSubmit={saveProduct}>{["name", "description", "price", "compareAt", "stock", "sizes", "colors"].map((field) => <label key={field}><span>{field === "compareAt" ? "Compare-at price" : field.charAt(0).toUpperCase() + field.slice(1)}</span>{field === "description" ? <textarea value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} /> : <input required={field === "name" || field === "price"} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} />}</label>)}<label className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => { setProductForm((current) => ({ ...current, image: "" })); setImageError(""); }}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</label><label><span>Category</span><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{categories.map((category) => <option key={category.label} value={category.label}>{category.label}</option>)}</select></label><label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label><div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}</form></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
@@ -270,7 +418,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
     {mobileOpen && <button className="admin-drawer-overlay" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
     <div className="admin-main-wrap">
       <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>Admin</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders, products, customers..." /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">MK</span><span className="admin-profile-name">Monika Manikandan</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>Monika Manikandan</strong><span>Store administrator</span><button type="button"><UserRound size={15} /> Account settings</button><button type="button"><LifeBuoy size={15} /> Help center</button></div>}</div></div></header>
-      <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : "Active"} /></div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p><p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p><div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div><p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p><p>Payment: {selectedOrder.payment.method} ({selectedOrder.payment.status})</p><label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label><StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
+      <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.mainCategory && selectedProduct.subcategory ? `${selectedProduct.mainCategory} · ${selectedProduct.subcategory}` : selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : selectedProduct.status} />{selectedProduct.mainCategoryId && <div className="admin-form"><label><span>Main Category</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductCategory} onChange={(event) => { const value = event.target.value; setEditingProductCategory(value); setEditingProductSubcategory(categoryHierarchy.subcategories[value]?.[0]?.value || ""); }}>{categoryHierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label><label><span>Subcategory / Industry</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductSubcategory} onChange={(event) => setEditingProductSubcategory(event.target.value)}>{(categoryHierarchy.subcategories[editingProductCategory] || []).map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>{(productUpdateError || categoryHierarchyError) && <p className="admin-image-error" role="alert">{productUpdateError || categoryHierarchyError}</p>}<div className="admin-form-actions"><button type="button" className="admin-primary-button" disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} onClick={() => void saveProductCategory()}>Save Category</button></div></div>}</div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p><p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p><div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div><p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p><p>Payment: {selectedOrder.payment.method} ({selectedOrder.payment.status})</p><label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label><StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
     </div>
   </div>;
 }

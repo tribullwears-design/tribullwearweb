@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { addSubcategory, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
 import { createOrder, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
+import { createProduct, listProducts, updateProduct } from "./productStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +43,35 @@ async function startServer() {
   });
   app.delete("/api/categories/:parent/subcategories/:value", async (req, res) => {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/products", async (req, res) => {
+    try {
+      const mainCategory = typeof req.query.mainCategory === "string" ? req.query.mainCategory : undefined;
+      const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory : undefined;
+      res.json(await listProducts(mainCategory, subcategory));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product request failed";
+      const status = message.includes("not found") ? 404 : message.includes("required") ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+  app.post("/api/products", async (req, res) => {
+    try { res.status(201).json(await createProduct(req.body)); } catch (error) {
+      const message = error instanceof Error ? error.message : "Product request failed";
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+  app.patch("/api/products/:id", async (req, res) => {
+    try {
+      const product = await updateProduct(req.params.id, req.body);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product request failed";
+      const status = message.includes("not found") ? 404 : message.includes("required") ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
   });
   app.get("/api/orders", async (req, res) => {
     try { res.json(await listOrders(typeof req.query.status === "string" ? req.query.status : undefined)); } catch (error) { sendError(res, error); }

@@ -118,7 +118,10 @@ export default function HeaderActions() {
   const [otpError, setOtpError] = useState("");
   const [demoOtp, setDemoOtp] = useState<string | undefined>();
   const [resendSeconds, setResendSeconds] = useState(0);
+  const [loginClosing, setLoginClosing] = useState(false);
+  const loginCloseTimerRef = useRef<number | undefined>(undefined);
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const isLoginPanelOpen = overlay === "account" && (loginStep !== "profile" || !authUser.isAuthenticated);
 
   useEffect(() => {
     const syncStores = () => {
@@ -140,6 +143,23 @@ export default function HeaderActions() {
     document.body.classList.toggle("header-overlay-open", overlay !== null);
     return () => document.body.classList.remove("header-overlay-open");
   }, [overlay]);
+
+  useEffect(() => {
+    const body = document.body;
+    body.classList.toggle("header-login-overlay-open", isLoginPanelOpen);
+    if (isLoginPanelOpen) {
+      body.style.setProperty("--header-scrollbar-compensation", `${window.innerWidth - document.documentElement.clientWidth}px`);
+    } else {
+      body.style.removeProperty("--header-scrollbar-compensation");
+    }
+    return () => {
+      body.classList.remove("header-login-overlay-open");
+      body.style.removeProperty("--header-scrollbar-compensation");
+    };
+  }, [isLoginPanelOpen]);
+  useEffect(() => () => {
+    if (loginCloseTimerRef.current !== undefined) window.clearTimeout(loginCloseTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (resendSeconds <= 0) return;
@@ -170,7 +190,7 @@ export default function HeaderActions() {
   }, 0);
   const cartCount = cartEntries.reduce((total, [, quantity]) => total + quantity, 0);
 
-  const closeOverlay = () => {
+  const resetOverlay = () => {
     setOverlay(null);
     setLoginStep("phone");
     setAccountSection("main");
@@ -181,12 +201,31 @@ export default function HeaderActions() {
     setResendSeconds(0);
   };
 
+  const closeOverlay = () => {
+    if (overlay === "account" && (loginStep !== "profile" || !authUser.isAuthenticated)) {
+      if (loginClosing) return;
+      setLoginClosing(true);
+      loginCloseTimerRef.current = window.setTimeout(() => {
+        resetOverlay();
+        setLoginClosing(false);
+        loginCloseTimerRef.current = undefined;
+      }, 500);
+      return;
+    }
+    resetOverlay();
+  };
+
   const persistUser = (nextUser: AuthUser) => {
     setAuthUser(nextUser);
     window.localStorage.setItem("tribull-user", JSON.stringify(nextUser));
   };
 
   const openAccount = () => {
+    if (loginCloseTimerRef.current !== undefined) {
+      window.clearTimeout(loginCloseTimerRef.current);
+      loginCloseTimerRef.current = undefined;
+    }
+    setLoginClosing(false);
     if (authUser.isAuthenticated && authUser.username) {
       setLoginStep("profile");
       setAccountSection("main");
@@ -456,7 +495,7 @@ export default function HeaderActions() {
         <button className="icon-button header-cart-button" type="button" aria-label={`${cartCount} items in cart`} onClick={() => setOverlay("cart")}><ShoppingBag size={19} strokeWidth={1.5} />{cartCount > 0 && <span>{cartCount}</span>}</button>
       </div>
 
-      {overlay && <button className="header-overlay" type="button" aria-label="Close panel" onClick={closeOverlay} />}
+      {overlay && <button className={`header-overlay${isLoginPanelOpen ? " header-overlay--login" : ""}${loginClosing ? " is-closing" : ""}`} type="button" aria-label="Close panel" onClick={closeOverlay} />}
       {overlay === "search" && (
         <section className="header-panel header-search-panel" aria-label="Search products">
           <div className="header-panel__heading"><h2>Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
@@ -465,7 +504,7 @@ export default function HeaderActions() {
         </section>
       )}
       {overlay === "account" && (
-        <section className={`header-account-drawer ${loginStep !== "profile" || !authUser.isAuthenticated ? "header-login-drawer" : ""}`} role="dialog" aria-modal="true" aria-label="Account panel">
+        <section className={`header-account-drawer ${loginStep !== "profile" || !authUser.isAuthenticated ? "header-login-drawer" : ""}${loginClosing ? " is-closing" : ""}`} role="dialog" aria-modal="true" aria-label="Account panel">
           {loginStep === "profile" && authUser.isAuthenticated ? (
             <div className="header-account-drawer__content">
               <div className="header-account-drawer__header">

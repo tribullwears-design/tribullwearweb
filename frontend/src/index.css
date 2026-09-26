@@ -143,7 +143,7 @@ main > * + * { margin-top: 0; }
 .header-empty-state { margin:40px 0; color:rgba(27,54,45,.68); font:600 12px Montserrat,sans-serif; text-align:center; }
 .header-account-modal { position:fixed; z-index:201; top:50%; left:50%; width:min(390px, calc(100vw - 36px)); padding:34px; color:var(--tribull-green); background:#F3EACB; box-shadow:0 20px 70px rgba(8,18,15,.3); transform:translate(-50%, -50%); animation:accountModalIn .3s var(--ease-out) both; }
 .header-account-modal__close { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; background:transparent; color:var(--tribull-green); cursor:pointer; }
-.header-login-drawer { box-sizing:border-box; width:min(430px, 100vw); min-height:100vh; padding:30px; overflow-x:hidden; }
+.header-login-drawer { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; width:min(430px, 100vw); min-height:100vh; padding:30px; overflow-x:hidden; text-align:center; }
 .header-login-drawer > form,
 .header-login-drawer > .header-login-divider,
 .header-login-drawer > .google-sign-in,
@@ -151,8 +151,14 @@ main > * + * { margin-top: 0; }
 .header-login-drawer > h2,
 .header-login-drawer > .otp-instruction,
 .header-login-drawer > .resend-otp { max-width:100%; box-sizing:border-box; }
-.header-login-drawer h2 { margin:0 0 24px; font:700 24px/1 Montserrat,sans-serif; letter-spacing:.08em; }
-.header-login-drawer form { display:flex; flex-direction:column; gap:15px; }
+.header-login-drawer > form,
+.header-login-drawer > .header-login-divider,
+.header-login-drawer > .google-sign-in { width:min(100%, 340px); }
+.header-account-drawer.header-login-drawer { animation:loginPanelIn 500ms cubic-bezier(.22,1,.36,1) both; }
+.header-account-drawer.header-login-drawer.is-closing { animation:loginPanelOut 500ms cubic-bezier(.22,1,.36,1) both; pointer-events:none; }
+.header-login-drawer > .eyebrow { margin:0 0 10px; text-align:center; }
+.header-login-drawer h2 { width:100%; margin:0 0 28px; font:700 24px/1 Montserrat,sans-serif; letter-spacing:.08em; text-align:center; }
+.header-login-drawer form { display:flex; flex-direction:column; gap:18px; }
 .header-login-drawer label { display:flex; flex-direction:column; gap:7px; min-width:0; font:700 10px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
 .header-login-drawer input,
 .header-login-drawer select,
@@ -160,6 +166,12 @@ main > * + * { margin-top: 0; }
 .header-login-drawer .header-account-modal__submit,
 .header-login-drawer .google-sign-in { width:100%; }
 .header-login-drawer .phone-input { width:100%; max-width:100%; }
+.header-login-drawer .phone-input input { transition:border-color .22s ease, box-shadow .22s ease, background-color .22s ease; }
+.header-login-drawer .phone-input input:focus { border-color:var(--tribull-green); box-shadow:0 0 0 3px rgba(27,54,45,.08); }
+.header-login-drawer .header-account-modal__submit { transition:transform .22s var(--ease-out), box-shadow .22s ease, filter .22s ease; }
+.header-login-drawer .header-account-modal__submit:hover { transform:translateY(-1px); box-shadow:0 5px 12px rgba(8,18,15,.14); filter:brightness(1.06); }
+.header-login-drawer .google-sign-in { transition:transform .22s var(--ease-out), border-color .22s ease, background-color .22s ease, box-shadow .22s ease; }
+.header-login-drawer .google-sign-in:hover { transform:translateY(-1px); border-color:rgba(27,54,45,.45); background:rgba(255,255,255,.28); box-shadow:0 4px 10px rgba(8,18,15,.08); }
 .header-login-drawer .header-account-modal__close { right:12px; }
 .header-account-modal .eyebrow { margin:0 0 8px; }
 .header-account-modal h2 { margin:0 0 24px; font:700 24px/1 Montserrat,sans-serif; letter-spacing:.08em; }
@@ -697,8 +709,15 @@ body:has(.checkout-page) { background: #ffffff; }
   }
 }
 body.header-overlay-open { overflow:hidden; }
+body.header-login-overlay-open { padding-right:var(--header-scrollbar-compensation, 0px); }
 body.mobile-category-menu-open { overflow:hidden; overflow-x:hidden; }
 @keyframes headerPanelIn { from { opacity:0; transform:translateX(24px); } to { opacity:1; transform:translateX(0); } }
+@keyframes loginPanelIn { from { transform:translateX(100%); } to { transform:translateX(0); } }
+@keyframes loginPanelOut { from { transform:translateX(0); } to { transform:translateX(100%); } }
+@keyframes loginOverlayIn { from { opacity:0; } to { opacity:1; } }
+@keyframes loginOverlayOut { from { opacity:1; } to { opacity:0; } }
+.header-overlay--login { background:rgba(10,22,18,.55); animation:loginOverlayIn 500ms cubic-bezier(.22,1,.36,1) both; }
+.header-overlay--login.is-closing { animation:loginOverlayOut 500ms cubic-bezier(.22,1,.36,1) both; pointer-events:none; }
 @keyframes accountModalIn { from { opacity:0; transform:translate(-50%, -48%) scale(.98); } to { opacity:1; transform:translate(-50%, -50%) scale(1); } }
 .icon-button { display:grid; place-items:center; width:26px; height:26px; border:0; background:transparent; padding:0; transition:opacity .18s ease; }
 .icon-button svg { width:15px; height:15px; stroke-width:1.8; }

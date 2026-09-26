@@ -9,6 +9,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
 export type CategoryProduct = {
+  id?: string;
   name: string;
   price: string;
   image: string;
@@ -23,16 +24,20 @@ type CategoryDefinition = {
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
-function liveCategoryDefinition(categorySlug: string, hierarchy: CategoryHierarchy): CategoryDefinition | undefined {
-  const main = hierarchy.main.find((category) => category.value === categorySlug);
+function normalizeCategorySlug(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function liveCategoryDefinition(targetSlug: string, hierarchy: CategoryHierarchy): CategoryDefinition | undefined {
+  const main = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === targetSlug || normalizeCategorySlug(category.label) === targetSlug);
   if (!main) return undefined;
-  const subcategories = hierarchy.subcategories[categorySlug] || [];
+  const subcategories = hierarchy.subcategories[main.value] || [];
   return {
     title: main.label,
     subtitle: "Curated collection",
     image: main.image,
     subcategories: subcategories.map((subcategory) => ({
-      slug: subcategory.value,
+      slug: normalizeCategorySlug(subcategory.value),
       label: subcategory.label,
       image: subcategory.image || "/products/front-white.png",
     })),
@@ -389,6 +394,7 @@ const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
 function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: CategoryProduct[]; categorySlug: string; entrySlug: string }) {
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
   const [sort, setSort] = useState<CatalogSort>("featured");
+  const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>([]);
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -396,6 +402,28 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
+    void fetch(`/api/products?${params.toString()}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load category products.");
+        return await response.json() as { id: string; name: string; price: number; image: string }[];
+      })
+      .then((products) => {
+        if (active) setStoredCatalog(products.map((product) => ({
+          id: product.id,
+          name: product.name,
+          price: `₹${product.price.toLocaleString("en-IN")}`,
+          image: product.image,
+        })));
+      })
+      .catch((error: unknown) => {
+        console.error("Category product request failed.", error);
+      });
+    return () => { active = false; };
+  }, [categorySlug, entrySlug]);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -414,7 +442,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   }, []);
 
   const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
-    "round-neck": catalog,
+    "round-neck": [...catalog, ...storedCatalog],
     oversized: [
       { name: "Daily Uniform Oversized Tee", price: "₹799", image: rotationImages[0] },
       { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[2] },
@@ -443,11 +471,11 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     if (sort === "newest") items.reverse();
     if (sort === "selling") items.sort((a, b) => b.name.length - a.name.length);
     return items;
-  }, [catalog, selectedTab, sort]);
+  }, [catalog, storedCatalog, selectedTab, sort]);
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
-  const productKey = (item: CategoryProduct) => `${categorySlug}-${entrySlug}-${item.name}`;
+  const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
   const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
     const key = productKey(item);
@@ -508,9 +536,9 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
-  const categorySlug = slug || "cinema";
+  const categorySlug = normalizeCategorySlug(slug || "cinema");
   const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
-  const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [value, liveCategoryDefinition(value, hierarchy)])) as Record<string, CategoryDefinition | undefined>;
+  const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [normalizeCategorySlug(value), liveCategoryDefinition(normalizeCategorySlug(value), hierarchy)])) as Record<string, CategoryDefinition | undefined>;
 
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
@@ -643,9 +671,9 @@ export default function CategoryPage() {
   }
 
   if (lang) {
-    const selectedSlug = String(lang);
+    const selectedSlug = normalizeCategorySlug(String(lang));
     const category = activeDefinitions[categorySlug] ?? activeDefinitions.cinema!;
-    const entry = category.subcategories.find((item) => item.slug === selectedSlug) ?? category.subcategories[0];
+    const entry = category.subcategories.find((item) => item.slug === selectedSlug || normalizeCategorySlug(item.label) === selectedSlug) ?? category.subcategories[0];
     if (!entry) return <div className="p-8">Category not found.</div>;
     const entrySlug = entry.slug;
     const catalog = categoryProducts[categorySlug]?.[entrySlug] ?? categoryProducts.cinema[entrySlug] ?? [];

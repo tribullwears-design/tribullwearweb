@@ -37,10 +37,35 @@ export const defaultCategoryHierarchy: CategoryHierarchy = {
 
 export const CATEGORY_HIERARCHY_KEY = "tribull-admin-category-hierarchy";
 
-function fromApiDocuments(documents: CategoryChoice[]) {
+type ApiCategory = CategoryChoice & { subcategories?: CategoryChoice[] };
+type ApiCategoryResponse = ApiCategory[] | { categories?: ApiCategory[]; data?: ApiCategory[] | { categories?: ApiCategory[] }; mainCategories?: ApiCategory[]; subcategories?: (CategoryChoice & { parent?: string; parentId?: string; parentCategoryId?: string; mainCategoryId?: string })[] };
+
+function fromApiDocuments(responseBody: ApiCategoryResponse): CategoryHierarchy {
+  let documents: ApiCategory[];
+  if (Array.isArray(responseBody)) {
+    documents = responseBody;
+  } else if (Array.isArray(responseBody.categories)) {
+    documents = responseBody.categories;
+  } else if (Array.isArray(responseBody.data)) {
+    documents = responseBody.data;
+  } else if (responseBody.data && !Array.isArray(responseBody.data) && Array.isArray(responseBody.data.categories)) {
+    documents = responseBody.data.categories;
+  } else if (Array.isArray(responseBody.mainCategories)) {
+    const separateSubcategories = responseBody.subcategories || [];
+    documents = responseBody.mainCategories.map((category) => ({
+      ...category,
+      subcategories: category.subcategories || separateSubcategories.filter((subcategory) => {
+        const parent = subcategory.parentCategoryId || subcategory.mainCategoryId || subcategory.parentId || subcategory.parent;
+        return parent === category.value || parent === category.label;
+      }),
+    }));
+  } else {
+    throw new Error("Category API response has an unsupported shape");
+  }
+
   return {
     main: documents.map(({ value, label, image }) => ({ value, label, image })),
-    subcategories: Object.fromEntries(documents.map((category) => [category.value, ((category as CategoryChoice & { subcategories?: CategoryChoice[] }).subcategories || [])])),
+    subcategories: Object.fromEntries(documents.map((category) => [category.value, category.subcategories || []])),
   } satisfies CategoryHierarchy;
 }
 
@@ -92,14 +117,20 @@ export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
 
 export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {
   try {
-    const response = await fetch("/api/categories", { cache: "no-store" });
-    if (!response.ok) throw new Error("Category request failed");
-    const hierarchy = fromApiDocuments(await response.json() as CategoryChoice[]);
+    const hierarchy = await loadCategoryHierarchy();
     cacheHierarchy(hierarchy, false);
     return hierarchy;
   } catch {
     return fallback;
   }
+}
+
+export async function loadCategoryHierarchy() {
+  const response = await fetch("/api/categories", { cache: "no-store" });
+  if (!response.ok) throw new Error("Category request failed");
+  const hierarchy = fromApiDocuments(await response.json() as ApiCategoryResponse);
+  cacheHierarchy(hierarchy, false);
+  return hierarchy;
 }
 
 export function createCategory(category: CategoryChoice) {
@@ -142,4 +173,3 @@ export function useCategoryHierarchy(fallback: CategoryHierarchy) {
 
   return hierarchy;
 }
-
