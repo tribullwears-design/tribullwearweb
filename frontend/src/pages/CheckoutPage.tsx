@@ -123,7 +123,7 @@ export default function CheckoutPage() {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handlePlaceOrder = () => {
+  const handlePlaceOrder = async () => {
     if (!validateForm()) return;
     if (cartDetails.entries.length === 0) return;
 
@@ -134,6 +134,26 @@ export default function CheckoutPage() {
       shipping: cartDetails.shipping,
       total: cartDetails.total,
     };
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: generatedOrderNumber,
+        customer: { name: form.fullName, email: form.email, phone: form.phone },
+        shippingAddress: { address: form.address, apartment: form.apartment, city: form.city, state: form.state, pinCode: form.pinCode, country: form.country },
+        items: summary.entries,
+        subtotal: summary.subtotal,
+        shipping: summary.shipping,
+        discount: 0,
+        total: summary.total,
+        payment: { method: paymentMethod, status: paymentMethod === "cod" ? "Pending" : "Paid" },
+      }),
+    });
+    if (!response.ok) {
+      setErrors((current) => ({ ...current, paymentMethod: "Unable to place order. Please try again." }));
+      return;
+    }
 
     setPlacedOrderSummary(summary);
     setOrderNumber(generatedOrderNumber);

@@ -3,6 +3,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { addSubcategory, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
+import { createOrder, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -41,6 +42,21 @@ async function startServer() {
   });
   app.delete("/api/categories/:parent/subcategories/:value", async (req, res) => {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/orders", async (req, res) => {
+    try { res.json(await listOrders(typeof req.query.status === "string" ? req.query.status : undefined)); } catch (error) { sendError(res, error); }
+  });
+  app.post("/api/orders", async (req, res) => {
+    try { res.status(201).json(await createOrder(req.body)); } catch (error) { sendError(res, error); }
+  });
+  app.patch("/api/orders/:id", async (req, res) => {
+    try {
+      const status = req.body?.status;
+      if (!orderStatuses.includes(status as OrderStatus)) return res.status(400).json({ error: "Invalid order status" });
+      const order = await updateOrderStatus(req.params.id, status);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      res.json(order);
+    } catch (error) { sendError(res, error); }
   });
 
   // Serve static files from dist/public in production
