@@ -74,6 +74,7 @@ function toApiDocuments(hierarchy: CategoryHierarchy) {
 }
 
 async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) {
+  invalidatePendingCategoryRequest();
   const response = await fetch(path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -105,6 +106,7 @@ function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
 }
 
 export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
+  invalidatePendingCategoryRequest();
   try {
     const response = await fetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) });
     if (!response.ok) return false;
@@ -125,7 +127,13 @@ export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {
   }
 }
 
-export async function loadCategoryHierarchy() {
+let categoryHierarchyRequest: Promise<CategoryHierarchy> | undefined;
+
+function invalidatePendingCategoryRequest() {
+  categoryHierarchyRequest = undefined;
+}
+
+async function requestCategoryHierarchy() {
   const url = "/api/categories";
   let response: Response;
   try {
@@ -156,6 +164,17 @@ export async function loadCategoryHierarchy() {
   const hierarchy = fromApiDocuments(await response.json() as ApiCategoryResponse);
   cacheHierarchy(hierarchy, false);
   return hierarchy;
+}
+
+export function loadCategoryHierarchy() {
+  if (categoryHierarchyRequest) return categoryHierarchyRequest;
+
+  const request = requestCategoryHierarchy();
+  const sharedRequest = request.finally(() => {
+    if (categoryHierarchyRequest === sharedRequest) categoryHierarchyRequest = undefined;
+  });
+  categoryHierarchyRequest = sharedRequest;
+  return sharedRequest;
 }
 
 export function createCategory(category: CategoryChoice) {

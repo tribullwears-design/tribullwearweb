@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { products as storeProducts, type Product } from "./ProductsPage";
 import { useLocation } from "wouter";
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import "./admin-dashboard.css";
 
 type Icon = typeof LayoutDashboard;
@@ -51,11 +52,11 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }, { label: "Promotions", icon: Gift, screen: "promotions" }] },
-  { label: "Content", items: [{ label: "Banners", icon: Image, screen: "banners" }, { label: "Collections", icon: Boxes, screen: "collections" }, { label: "Featured Products", icon: ShoppingBag, screen: "featured" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
+  { label: "Content", items: [{ label: "Collections", icon: Boxes, screen: "collections" }, { label: "Featured Products", icon: ShoppingBag, screen: "featured" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
   { label: "Analytics", items: [{ label: "Analytics", icon: BarChart3, screen: "analytics" }, { label: "Sales Reports", icon: Activity, screen: "sales-reports" }, { label: "Product Reports", icon: FileText, screen: "product-reports" }] },
   { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
 ];
@@ -76,7 +77,7 @@ const adminRoutes: Record<string, string> = {
   discounts: "/admin26/marketing/discounts",
   coupons: "/admin26/marketing/coupons",
   promotions: "/admin26/marketing/promotions",
-  banners: "/admin26/content/banners",
+  banners: "/admin26/products/banners",
   collections: "/admin26/content/collections",
   featured: "/admin26/content/featured-products",
   "social-media": "/admin26/content/social-media",
@@ -137,7 +138,22 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
 function readImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void) { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) { event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") onChange(reader.result); }; reader.readAsDataURL(file); event.target.value = ""; }
 
 function CategoryImage({ image, onChange, onRemove, inputRef, showControls = true }: { image?: string; onChange: (event: React.ChangeEvent<HTMLInputElement>) => void; onRemove: () => void; inputRef?: React.RefObject<HTMLInputElement | null>; showControls?: boolean }) {
-  return <div className={`admin-category-image-field ${showControls ? "admin-category-image-field--controls" : ""}`}>{image ? <img className="admin-category-thumb" src={image} alt="" /> : <span className="admin-category-thumb admin-category-thumb--empty">No image</span>}{showControls && <><label className="admin-small-button">{image ? "Change" : "Upload"}<input ref={inputRef} className="admin-product-image-input" type="file" accept="image/*" onChange={onChange} /></label>{image && <button type="button" className="admin-small-button" onClick={onRemove}>Remove</button>}</>}</div>;
+  const retryWithAvailablePublicImage = (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = event.currentTarget;
+    const source = img.getAttribute("src") || "";
+    const match = source.match(/^(\/products\/.*)\.(png|jpe?g|webp|gif)$/i);
+    if (!match) return;
+
+    const extensions = ["png", "jpg", "jpeg", "webp", "gif"];
+    const attempted = new Set((img.dataset.attemptedSources || "").split(",").filter(Boolean));
+    attempted.add(source);
+    img.dataset.attemptedSources = Array.from(attempted).join(",");
+    const fallback = extensions
+      .map((extension) => `${match[1]}.${extension}`)
+      .find((candidate) => !attempted.has(candidate) && candidate !== source);
+    if (fallback) img.src = fallback;
+  };
+  return <div className={`admin-category-image-field ${showControls ? "admin-category-image-field--controls" : ""}`}>{image ? <img className="admin-category-thumb" src={image} alt="" onError={retryWithAvailablePublicImage} /> : <span className="admin-category-thumb admin-category-thumb--empty">No image</span>}{showControls && <><label className="admin-small-button">{image ? "Change" : "Upload"}<input ref={inputRef} className="admin-product-image-input" type="file" accept="image/*" onChange={onChange} /></label>{image && <button type="button" className="admin-small-button" onClick={onRemove}>Remove</button>}</>}</div>;
 }
 
 function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
@@ -146,6 +162,7 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   const [newMainImage, setNewMainImage] = useState("");
   const newMainImageInputRef = useRef<HTMLInputElement>(null);
   const [newSubcategory, setNewSubcategory] = useState("");
+  const addingSubcategoryRef = useRef(false);
   const [newSubcategoryImage, setNewSubcategoryImage] = useState("");
   const newSubcategoryImageInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -172,7 +189,38 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   const addMainCategory = async () => { setCategoryError(""); const label = newMainCategory.trim(); if (!label) { setCategoryError("Category name is required."); return; } if (hierarchy.main.some((item) => item.label.toLowerCase() === label.toLowerCase())) return; const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); if (!value || hierarchy.main.some((item) => item.value === value)) return; try { await createCategory({ value, label, image: newMainImage }); await refreshHierarchy(); setNewMainCategory(""); setNewMainImage(""); if (newMainImageInputRef.current) newMainImageInputRef.current.value = ""; setParentCategory(value); } catch { setCategoryError("Could not add category. Please try again."); } };
   const deleteMainCategory = async (value: string) => { setCategoryError(""); try { await deleteCategory(value); const next = await refreshHierarchy(); if (parentCategory === value) setParentCategory(next.main[0]?.value || ""); } catch { setCategoryError("Could not delete category. Please try again."); } };
   const saveMainEdit = async () => { setCategoryError(""); if (!editingMain) return; const label = editingMainName.trim(); if (!label || hierarchy.main.some((item) => item.value !== editingMain && item.label.toLowerCase() === label.toLowerCase())) return; try { await updateCategory(editingMain, { label, image: editingMainImage }); await refreshHierarchy(); setEditingMain(null); } catch { setCategoryError("Could not update category. Please try again."); } };
-  const addSubcategory = async () => { setCategoryError(""); const label = newSubcategory.trim(); if (!parentCategory) { setCategoryError("Select a parent category."); return; } if (!label) { setCategoryError("Subcategory name is required."); return; } const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); const current = hierarchy.subcategories[parentCategory] || []; if (!value || current.some((item) => item.value === value || item.label.toLowerCase() === label.toLowerCase())) return; try { await createSubcategory(parentCategory, { value, label, image: newSubcategoryImage }); await refreshHierarchy(); setNewSubcategory(""); setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; } catch { setCategoryError("Could not add subcategory. Please try again."); } };
+  const addSubcategory = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    if (addingSubcategoryRef.current) return;
+    setCategoryError("");
+    const label = newSubcategory.trim();
+    if (!parentCategory) { setCategoryError("Select a parent category."); return; }
+    if (!label) { setCategoryError("Subcategory name is required."); return; }
+    const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    const current = hierarchy.subcategories[parentCategory] || [];
+    if (!value) { setCategoryError("Subcategory name is required."); return; }
+    if (current.some((item) => item.value.toLowerCase() === value || item.label.toLowerCase() === label.toLowerCase())) {
+      setCategoryError("Subcategory already exists for this category.");
+      return;
+    }
+
+    addingSubcategoryRef.current = true;
+    const button = event.currentTarget;
+    button.disabled = true;
+    try {
+      await createSubcategory(parentCategory, { value, label, image: newSubcategoryImage });
+      await refreshHierarchy();
+      setNewSubcategory("");
+      setNewSubcategoryImage("");
+      if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = "";
+    } catch (error) {
+      setCategoryError(error instanceof Error && /duplicate/i.test(error.message)
+        ? "Subcategory already exists for this category."
+        : "Could not add subcategory. Please try again.");
+    } finally {
+      addingSubcategoryRef.current = false;
+      button.disabled = false;
+    }
+  };
   const deleteSubcategory = async (parent: string, value: string) => {
     setCategoryError("");
     const subcategory = (hierarchy.subcategories[parent] || []).find((item) => item.value === value);
@@ -189,6 +237,146 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
     <section className="admin-category-management"><SectionHeading title="Subcategories / Industries" /><div className="admin-inline-form admin-category-form"><select value={parentCategory} onChange={(event) => setParentCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input value={newSubcategory} placeholder="New subcategory name" onChange={(event) => setNewSubcategory(event.target.value)} /><CategoryImage image={newSubcategoryImage} inputRef={newSubcategoryImageInputRef} onChange={(event) => readImage(event, setNewSubcategoryImage)} onRemove={() => { setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; }} /><button className="admin-primary-button" type="button" onClick={addSubcategory}><Plus size={15} />Add subcategory</button></div><div className="admin-subcategory-list">{hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : (hierarchy.subcategories[parentCategory] || []).length === 0 ? <span className="admin-empty-state">No subcategories found.</span> : (hierarchy.subcategories[parentCategory] || []).map((subcategory) => { const parent = hierarchy.main.find((category) => category.value === parentCategory); const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value; return <div className={`admin-subcategory-row ${isEditing ? "admin-subcategory-row--editing" : ""}`} key={`${parentCategory}-${subcategory.value}`}>{isEditing ? <><CategoryImage image={editingSubcategoryImage} onChange={(event) => readImage(event, setEditingSubcategoryImage)} onRemove={() => setEditingSubcategoryImage("")} showControls={false} /><select className="admin-category-edit-select" value={editingSubcategoryParent} onChange={(event) => setEditingSubcategoryParent(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input className="admin-subcategory-edit-input" value={editingSubcategoryName} onChange={(event) => setEditingSubcategoryName(event.target.value)} /><label className="admin-small-button admin-subcategory-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingSubcategoryImage)} /></label><button type="button" className="admin-small-button" onClick={saveSubcategoryEdit}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingSubcategory(null)}>Cancel</button></> : <><strong>{parent?.label}</strong><CategoryImage image={subcategory.image} onChange={(event) => readImage(event, (image) => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image } : item) } }))} onRemove={() => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image: "" } : item) } })} /><span>{subcategory.label}</span><button type="button" className="admin-small-button" onClick={() => { setEditingSubcategory({ parent: parentCategory, value: subcategory.value }); setEditingSubcategoryParent(parentCategory); setEditingSubcategoryName(subcategory.label); setEditingSubcategoryImage(subcategory.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => deleteSubcategory(parentCategory, subcategory.value)}>Delete</button></>}</div>})}</div></section>
     <section className="admin-category-management"><SectionHeading title="Product Type Categories" /><div className="admin-inline-form"><input value={newCategory} placeholder="New product type" onChange={(event) => setNewCategory(event.target.value)} /><CategoryImage image={newProductTypeImage} onChange={(event) => readImage(event, setNewProductTypeImage)} onRemove={() => setNewProductTypeImage("")} /><button className="admin-primary-button" type="button" onClick={() => { addCategory(newProductTypeImage); setNewProductTypeImage(""); }}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{productCategories.map((category) => { const isEditing = editingProductType === category.label; return <div className={`admin-management-row admin-product-type-row ${isEditing ? "admin-product-type-row--editing" : ""}`} key={category.label}>{isEditing ? <><CategoryImage image={editingProductTypeImage} onChange={(event) => readImage(event, setEditingProductTypeImage)} onRemove={() => setEditingProductTypeImage("")} showControls={false} /><input className="admin-subcategory-edit-input" value={category.label} readOnly /><label className="admin-small-button admin-product-type-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingProductTypeImage)} /></label><button type="button" className="admin-small-button" onClick={() => { saveProductTypeImage(category.label, editingProductTypeImage); setEditingProductType(null); }}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingProductType(null)}>Cancel</button></> : <><CategoryImage image={category.image} onChange={(event) => readImage(event, (image) => saveProductTypeImage(category.label, image))} onRemove={() => saveProductTypeImage(category.label, "")} /><strong>{category.label}</strong><div className="admin-product-type-actions"><button type="button" className="admin-small-button" onClick={() => { setEditingProductType(category.label); setEditingProductTypeImage(category.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => setProductCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div></>}</div>; })}</div></section>
   </>;
+}
+
+function BannerManagement({ categories, categoriesLoading }: { categories: CategoryHierarchy["main"]; categoriesLoading: boolean }) {
+  const [banners, setBanners] = useState<CategoryBanner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [readingImage, setReadingImage] = useState(false);
+  const savingRef = useRef(false);
+  const [error, setError] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [image, setImage] = useState("");
+  const [editing, setEditing] = useState<CategoryBanner | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setBanners(await loadBanners());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to load banners.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void refresh(); }, []);
+  useEffect(() => {
+    if (!categories.some((category) => category.value === categoryId)) {
+      setCategoryId(categories[0]?.value || "");
+    }
+  }, [categories, categoryId]);
+
+  const resetForm = () => {
+    setEditing(null);
+    setImage("");
+    setCategoryId(categories[0]?.value || "");
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const changeImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WEBP banner image.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      setError("Banner image must be smaller than 6 MB.");
+      event.target.value = "";
+      return;
+    }
+    setReadingImage(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        setImage(reader.result);
+        setError("");
+      }
+      setReadingImage(false);
+    };
+    reader.onerror = () => {
+      setReadingImage(false);
+      setError("Unable to read the selected banner image.");
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (savingRef.current || readingImage) return;
+    if (!categoryId) {
+      setError(categoriesLoading ? "Categories are still loading." : "Select a main category.");
+      return;
+    }
+    if (!image) {
+      setError("Select a banner image.");
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      if (editing) await updateBanner(editing.id, categoryId, image);
+      else await saveBanner(categoryId, image);
+      await refresh();
+      resetForm();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to save banner.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const edit = (banner: CategoryBanner) => {
+    setEditing(banner);
+    setCategoryId(banner.categoryId);
+    setImage(banner.image);
+    setError("");
+    if (imageInputRef.current) imageInputRef.current.value = "";
+  };
+
+  const remove = async (banner: CategoryBanner) => {
+    if (!window.confirm(`Delete the ${banner.categoryName} banner?`)) return;
+    setError("");
+    try {
+      await deleteBanner(banner.id);
+      await refresh();
+      if (editing?.id === banner.id) resetForm();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to delete banner.");
+    }
+  };
+
+  return <section className="admin-panel admin-banner-management">
+    <SectionHeading title="Category Banners" />
+    <form className="admin-banner-form" onSubmit={submit}>
+      <label><span>Main Category</span><select required disabled={categoriesLoading || categories.length === 0 || saving} value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Select Category</option>{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+      <div className="admin-banner-image-control">
+        <span>Banner Image</span>
+        <div className="admin-banner-image-preview">{image ? <img src={image} alt="Banner preview" /> : <span>No banner selected</span>}</div>
+        <label className="admin-primary-button">{readingImage ? "Reading Image..." : image ? "Change Image" : "Upload Image"}<input ref={imageInputRef} className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={saving || readingImage} onChange={changeImage} /></label>
+      </div>
+      <div className="admin-banner-form-actions">
+        <button className="admin-primary-button" type="submit" disabled={saving || readingImage || categoriesLoading || !categories.length}>{saving ? "Saving..." : "Save Banner"}</button>
+        {editing && <button className="admin-secondary-button" type="button" disabled={saving || readingImage} onClick={resetForm}>Cancel</button>}
+      </div>
+    </form>
+    {error && <p className="admin-image-error" role="alert">{error}</p>}
+    <div className="admin-banner-list">
+      {loading ? <p>Loading banners...</p> : banners.length ? banners.map((banner) => <div className="admin-banner-row" key={banner.id}>
+        <div className="admin-banner-row__preview">{banner.image ? <img src={banner.image} alt={`${banner.categoryName} banner`} /> : <span>No image</span>}</div>
+        <strong>{banner.categoryName}</strong>
+        <button className="admin-small-button" type="button" onClick={() => edit(banner)}>Edit</button>
+        <button className="admin-small-button" type="button" onClick={() => void remove(banner)}>Delete</button>
+      </div>) : <p>No banners found.</p>}
+    </div>
+  </section>;
 }
 
 export default function AdminDashboard({ initialScreen = "dashboard" }: { initialScreen?: string }) {
@@ -392,6 +580,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const renderScreen = () => {
     if (screen === "dashboard") return <><section className="admin-stats-grid">{[["Total Sales", "₹0.00", "No sales recorded", DollarSign], ["Total Orders", String(orders.length), "Current order count", ClipboardList], ["Total Products", String(adminProducts.length), "From store catalog", ShoppingBag], ["Total Customers", String(customers.length), "Registered customers", Users], ["Pending Orders", String(orders.filter((order) => order.status === "Pending").length), "Needs attention", PackageOpen], ["Low Stock Products", String(adminProducts.filter((product) => product.stock < 10).length), "Needs your attention", AlertTriangle]].map(([label, value, note, StatIcon]) => { const IconComponent = StatIcon as Icon; return <div className="admin-stat-card" key={label as string}><div className="admin-stat-icon admin-stat-icon--teal"><IconComponent size={19} /></div><div className="admin-stat-label">{label as string}</div><strong>{value as string}</strong><span>{note as string}</span></div>; })}</section><section className="admin-panel"><SectionHeading title="Recent Orders" action="View all orders" onAction={() => navigate("orders")} /><OrderTable orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section><div className="admin-two-column"><section className="admin-panel"><SectionHeading title="Best Selling Products" action="View products" onAction={() => navigate("products")} /><ProductTable products={adminProducts.slice(0, 5)} onSelect={openProduct} /></section><section className="admin-panel"><SectionHeading title="Low Stock Products" action="View inventory" onAction={() => navigate("inventory")} />{adminProducts.filter((product) => product.stock < 10).map((product) => <div className="admin-low-stock-row" key={product.id}><img className="admin-real-product-thumb" src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.sku}</span></div><div className="admin-stock-count"><strong>{product.stock}</strong><span>units left</span></div></div>)}</section></div></>;
     if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}>{productsError && <EmptyState title="Unable to load saved products" message={productsError} action="Retry" onAction={() => void refreshProducts()} />}{productsLoading && <p>Loading saved products...</p>}<ProductTable products={adminProducts} onSelect={openProduct} /></AdminPanel>;
+    if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "add-product") return <AdminPanel title="Add Product"><form className="admin-form" onSubmit={saveProduct}>{["name", "description", "price", "compareAt", "stock", "sizes", "colors"].map((field) => <label key={field}><span>{field === "compareAt" ? "Compare-at price" : field.charAt(0).toUpperCase() + field.slice(1)}</span>{field === "description" ? <textarea value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} /> : <input required={field === "name" || field === "price"} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} />}</label>)}<label className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => { setProductForm((current) => ({ ...current, image: "" })); setImageError(""); }}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</label><label><span>Category</span><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{categories.map((category) => <option key={category.label} value={category.label}>{category.label}</option>)}</select></label><label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label><div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}</form></AdminPanel>;
@@ -399,7 +588,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
     if (screen === "inventory") return <AdminPanel title="Inventory"><ProductTable products={adminProducts} /></AdminPanel>;
     if (screen.startsWith("orders")) return <AdminPanel title={activeNav?.label || "Orders"}>{ordersLoading ? <EmptyState title="Loading orders..." message="Fetching the latest orders." /> : ordersError ? <EmptyState title="Unable to load orders. Please try again." message={ordersError} action="Retry" onAction={() => void refreshOrders()} /> : <OrderTable orders={filteredOrders} onSelect={setSelectedOrder} />}</AdminPanel>;
     if (screen === "customers" || screen === "customer-details") return <AdminPanel title={screen === "customers" ? "Customers" : "Customer Details"}>{selectedCustomer ? <div className="admin-detail-card"><button type="button" className="admin-text-button" onClick={() => setSelectedCustomer(null)}>← All customers</button><div className="admin-detail-avatar">{selectedCustomer.split(" ").map((part) => part[0]).join("")}</div><h3>{selectedCustomer}</h3><p>{customers.find((customer) => customer.name === selectedCustomer)?.email}</p></div> : <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Orders</th><th>Total Spent</th><th>Status</th></tr></thead><tbody>{customers.map((customer) => <tr key={customer.email} onClick={() => setSelectedCustomer(customer.name)}><td><strong>{customer.name}</strong></td><td>{customer.phone}</td><td>{customer.email}</td><td>{customer.orders}</td><td><strong>{customer.spent}</strong></td><td><StatusPill status={customer.status} /></td></tr>)}</tbody></table></div>}</AdminPanel>;
-    if (["discounts", "coupons", "promotions", "banners", "collections"].includes(screen)) return <AdminPanel title={activeNav?.label || "Management"}><EmptyState title={`No ${activeNav?.label?.toLowerCase() || "items"} created`} message={`Create your first ${activeNav?.label?.toLowerCase() || "item"} when the store is ready for backend integration.`} action="Create item" /></AdminPanel>;
+    if (["discounts", "coupons", "promotions", "collections"].includes(screen)) return <AdminPanel title={activeNav?.label || "Management"}><EmptyState title={`No ${activeNav?.label?.toLowerCase() || "items"} created`} message={`Create your first ${activeNav?.label?.toLowerCase() || "item"} when the store is ready for backend integration.`} action="Create item" /></AdminPanel>;
     if (screen === "social-media") return <AdminPanel title="Social Media"><form className="admin-form admin-social-form" onSubmit={saveSocialLinks}>{([["facebook", "Facebook URL"], ["instagram", "Instagram URL"], ["youtube", "YouTube URL"], ["x", "X / Twitter URL"], ["reddit", "Reddit URL"]] as const).map(([key, label]) => <label key={key}><span>{label}</span><input type="url" placeholder="https://" value={socialLinks[key]} onChange={(event) => setSocialLinks((current) => ({ ...current, [key]: event.target.value }))} /></label>)}<div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Social Links</button></div>{socialNotice && <p className="admin-form-success">{socialNotice}</p>}</form></AdminPanel>;
     if (screen === "featured") return <AdminPanel title="Featured Products"><div className="admin-featured-grid">{adminProducts.map((product) => <button type="button" className={`admin-featured-card ${featured.includes(product.id) ? "is-featured" : ""}`} key={product.id} onClick={() => toggleFeatured(product.id)}><img src={product.image} alt="" /><strong>{product.name}</strong><span>{featured.includes(product.id) ? "Featured" : "Add to featured"}</span></button>)}</div></AdminPanel>;
     if (["analytics", "sales-reports", "product-reports"].includes(screen)) return <AdminPanel title={activeNav?.label || "Analytics"}><EmptyState title="Analytics data is not available" message="Reports will appear here when order and customer data is connected." /></AdminPanel>;

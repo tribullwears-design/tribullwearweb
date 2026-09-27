@@ -10,6 +10,13 @@ export type CategoryDocument = {
   position: number;
 };
 
+export class CategoryConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CategoryConflictError";
+  }
+}
+
 const defaultCategories: CategoryDocument[] = [
   { value: "cinema", label: "Cinema", image: "/products/cinema.jpg", position: 0, subcategories: [
     { value: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
@@ -53,9 +60,11 @@ async function getCollection(): Promise<Collection<CategoryDocument>> {
   clientPromise ||= new MongoClient(uri).connect();
   const client = await clientPromise;
   const db: Db = client.db(process.env.MONGODB_DB || "tribull");
-  const collection = db.collection<CategoryDocument>("main-category");
+  return db.collection<CategoryDocument>("main-category");
+}
+
+async function ensureCategoryValueIndex(collection: Collection<CategoryDocument>) {
   await collection.createIndex({ value: 1 }, { unique: true });
-  return collection;
 }
 
 export async function listCategories() {
@@ -66,9 +75,10 @@ export async function listCategories() {
 
 export async function replaceCategories(categories: CategoryDocument[]) {
   const collection = await getCollection();
+  await ensureCategoryValueIndex(collection);
   const values = new Set<string>();
   for (const category of categories) {
-    if (!category.value || values.has(category.value)) throw new Error("Duplicate category value");
+    if (!category.value || values.has(category.value)) throw new CategoryConflictError("Duplicate category value");
     values.add(category.value);
   }
   await collection.deleteMany({ value: { $nin: categories.map((category) => category.value) } });
@@ -81,8 +91,9 @@ export async function replaceCategories(categories: CategoryDocument[]) {
 
 export async function createCategory(category: Omit<CategoryDocument, "position" | "subcategories"> & { subcategories?: CategoryDocument["subcategories"] }) {
   const collection = await getCollection();
+  await ensureCategoryValueIndex(collection);
   if (!category.value?.trim() || !category.label?.trim()) throw new Error("Category name is required");
-  if (await collection.findOne({ value: category.value })) throw new Error("Duplicate category");
+  if (await collection.findOne({ value: category.value })) throw new CategoryConflictError("Duplicate category");
   const position = await collection.countDocuments();
   const document = { ...category, subcategories: category.subcategories || [], position };
   await collection.insertOne(document);
@@ -108,12 +119,34 @@ async function updateSubcategories(parent: string, updater: (items: CategoryDocu
   return collection.findOneAndUpdate({ value: parent }, { $set: { subcategories } }, { returnDocument: "after", projection: { _id: 0 } });
 }
 
-export function addSubcategory(parent: string, item: CategoryDocument["subcategories"][number]) {
-  return updateSubcategories(parent, (items) => {
-    if (!item.value?.trim() || !item.label?.trim()) throw new Error("Subcategory name is required");
-    if (items.some((current) => current.value === item.value || current.label.toLowerCase() === item.label.toLowerCase())) throw new Error("Duplicate subcategory");
-    return [...items, item];
-  });
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function addSubcategory(parent: string, item: CategoryDocument["subcategories"][number]) {
+  const value = item.value?.trim();
+  const label = item.label?.trim();
+  if (!value || !label) throw new Error("Subcategory name is required");
+
+  const collection = await getCollection();
+  const subcategory = { ...item, value, label };
+  const result = await collection.findOneAndUpdate(
+    {
+      value: parent,
+      $nor: [
+        { "subcategories.value": new RegExp(`^${escapeRegExp(value)}$`, "i") },
+        { "subcategories.label": new RegExp(`^${escapeRegExp(label)}$`, "i") },
+      ],
+    },
+    { $push: { subcategories: subcategory } },
+    { returnDocument: "after", projection: { _id: 0 } },
+  );
+  if (result) return result;
+
+  if (await collection.findOne({ value: parent }, { projection: { _id: 1 } })) {
+    throw new CategoryConflictError("Duplicate subcategory");
+  }
+  return undefined;
 }
 
 export function editSubcategory(parent: string, value: string, item: CategoryDocument["subcategories"][number]) {

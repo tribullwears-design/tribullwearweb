@@ -3,7 +3,8 @@ import { createServer } from "http";
 import { existsSync } from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { addSubcategory, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
+import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
+import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
 import { createProduct, listProducts, updateProduct } from "./productStore.js";
 
@@ -20,7 +21,12 @@ async function startServer() {
 
   const sendError = (res: express.Response, error: unknown) => {
     const message = error instanceof Error ? error.message : "Category request failed";
-    const status = message.includes("Duplicate") ? 409 : message.includes("not found") ? 404 : 500;
+    const status = error instanceof CategoryConflictError || message.includes("Duplicate") ? 409 : message.includes("not found") ? 404 : 500;
+    res.status(status).json({ error: message });
+  };
+  const sendBannerError = (res: express.Response, error: unknown) => {
+    const message = error instanceof Error ? error.message : "Banner request failed";
+    const status = message.includes("required") || message.includes("supported image") || message.includes("smaller") ? 400 : message.includes("not found") ? 404 : 500;
     res.status(status).json({ error: message });
   };
 
@@ -47,6 +53,24 @@ async function startServer() {
   });
   app.delete("/api/categories/:parent/subcategories/:value", async (req, res) => {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/banners", async (_req, res) => {
+    try { res.json(await listBanners()); } catch (error) { sendBannerError(res, error); }
+  });
+  app.get("/api/banners/:categoryId", async (req, res) => {
+    try { res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
+  });
+  app.post("/api/banners", async (req, res) => {
+    try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
+  });
+  app.put("/api/banners/:id", async (req, res) => {
+    try { res.json(await updateBanner(req.params.id, req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
+  });
+  app.delete("/api/banners/:id", async (req, res) => {
+    try {
+      if (!await deleteBanner(req.params.id)) return res.status(404).json({ error: "Banner not found" });
+      res.json({ deleted: true });
+    } catch (error) { sendBannerError(res, error); }
   });
   app.get("/api/products", async (req, res) => {
     try {

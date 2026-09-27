@@ -756,8 +756,8 @@
   // Periodic reporting
   setInterval(reportLogs, CONFIG.reportInterval);
 
-  // Report on page unload
-  window.addEventListener("beforeunload", function () {
+  // Report when the page is hidden or navigated away from.
+  window.addEventListener("pagehide", function () {
     var consoleLogs = store.consoleLogs;
     var networkRequests = store.networkRequests;
     var uiEvents = store.uiEvents;

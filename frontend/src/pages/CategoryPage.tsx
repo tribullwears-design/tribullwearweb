@@ -1,10 +1,11 @@
-import { ArrowLeft, ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
+import { ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
@@ -23,6 +24,12 @@ type CategoryDefinition = {
 };
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
+const existingHeroBanners: Record<string, string> = {
+  cinema: "/products/hero.png",
+  sports: "/products/sportsbanner.png",
+  games: "/products/game banner.png",
+  motorsports: "/products/motosportsbanner.png",
+};
 
 function normalizeCategorySlug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -190,21 +197,6 @@ export const categoryProducts: Record<string, Record<string, CategoryProduct[]>>
   },
 };
 
-function SubcategoryList({ categorySlug, items }: { categorySlug: string; items: { slug: string; label: string; image: string }[] }) {
-  return (
-    <div className="subcategory-card-grid" aria-label={`${categorySlug} subcategories`}>
-      {items.map((item) => (
-        <Link key={item.slug} href={`/category/${categorySlug}/${item.slug}`} className="subcategory-card">
-          <div className="subcategory-card__media">
-            <img src={item.image} alt={item.label} loading="lazy" />
-          </div>
-          <div className="subcategory-card__label">{item.label}</div>
-        </Link>
-      ))}
-    </div>
-  );
-}
-
 function Reveal({
   children,
   variant = "up",
@@ -270,7 +262,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
     <section className="hero category-hero-section" aria-label={`${title} collection`}>
       <div className="hero__images">
         <div className="hero__image">
-          <img ref={heroImgRef} src={image} alt={`${title} collection hero`} />
+          {image && <img ref={heroImgRef} src={image} alt={`${title} collection hero`} />}
         </div>
       </div>
       <div className="hero__wash" />
@@ -395,6 +387,8 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const databaseOnly = !categoryProducts[categorySlug]?.[entrySlug];
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -405,6 +399,8 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 
   useEffect(() => {
     let active = true;
+    setStoredCatalog([]);
+    setProductsLoading(true);
     const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
     void fetch(`/api/products?${params.toString()}`, { cache: "no-store" })
       .then(async (response) => {
@@ -412,15 +408,19 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
         return await response.json() as { id: string; name: string; price: number; image: string }[];
       })
       .then((products) => {
-        if (active) setStoredCatalog(products.map((product) => ({
-          id: product.id,
-          name: product.name,
-          price: `₹${product.price.toLocaleString("en-IN")}`,
-          image: product.image,
-        })));
+        if (active) {
+          setStoredCatalog(products.map((product) => ({
+            id: product.id,
+            name: product.name,
+            price: `₹${product.price.toLocaleString("en-IN")}`,
+            image: product.image,
+          })));
+          setProductsLoading(false);
+        }
       })
       .catch((error: unknown) => {
         console.error("Category product request failed.", error);
+        if (active) setProductsLoading(false);
       });
     return () => { active = false; };
   }, [categorySlug, entrySlug]);
@@ -443,19 +443,19 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 
   const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
     "round-neck": [...catalog, ...storedCatalog],
-    oversized: [
+    oversized: databaseOnly ? [] : [
       { name: "Daily Uniform Oversized Tee", price: "₹799", image: rotationImages[0] },
       { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[2] },
       { name: "Heavyweight Essential Tee", price: "₹899", image: rotationImages[1] },
       { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[3] },
     ],
-    "acid-oversized": [
+    "acid-oversized": databaseOnly ? [] : [
       { name: "Acid Shadow Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
       { name: "Acid Signal Oversized Tee", price: "₹1,049", image: "/products/batman.jpg" },
       { name: "Acid Drift Washed Tee", price: "₹1,099", image: "/products/bollywood.jpg" },
       { name: "Acid Core Graphic Tee", price: "₹1,149", image: "/products/hollywood.jpg" },
     ],
-    hoodie: [
+    hoodie: databaseOnly ? [] : [
       { name: "Classic Tribull Hoodie", price: "₹1,299", image: rotationImages[3] },
       { name: "Forest Logo Hoodie", price: "₹1,399", image: rotationImages[0] },
       { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[1] },
@@ -525,7 +525,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
         </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
-        {visibleCatalog.map((item, index) => {
+        {productsLoading && databaseOnly ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {
           const key = productKey(item);
           return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
@@ -534,11 +534,84 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   );
 }
 
+function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string; entrySlugs: string[] }) {
+  const [products, setProducts] = useState<CategoryProduct[]>([]);
+  const [loading, setLoading] = useState(entrySlugs.length > 0);
+  const entrySlugsKey = entrySlugs.join("\u0000");
+
+  useEffect(() => {
+    const requestedSubcategories = entrySlugsKey ? entrySlugsKey.split("\u0000") : [];
+    let active = true;
+    if (requestedSubcategories.length === 0) {
+      setProducts([]);
+      setLoading(false);
+      return () => { active = false; };
+    }
+
+    setProducts([]);
+    setLoading(true);
+    void Promise.all(requestedSubcategories.map(async (entrySlug) => {
+      const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
+      const response = await fetch(`/api/products?${params.toString()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("Unable to load category products.");
+      return await response.json() as { id: string; name: string; price: number; image: string }[];
+    }))
+      .then((result) => {
+        if (active) {
+          setProducts(result.flat().map((product) => ({
+            id: product.id,
+            name: product.name,
+            price: `₹${product.price.toLocaleString("en-IN")}`,
+            image: product.image,
+          })));
+          setLoading(false);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Category product request failed.", error);
+        if (active) setLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [categorySlug, entrySlugsKey]);
+
+  if (loading) return <p className="header-empty-state">Loading products...</p>;
+  if (products.length === 0) return <p className="header-empty-state">No products found</p>;
+
+  return (
+    <div className="category-best-selling-grid">
+      {products.map((item, index) => (
+        <Link key={item.id || `${categorySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+          <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
-  const categorySlug = normalizeCategorySlug(slug || "cinema");
   const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const routeSlug = normalizeCategorySlug(slug || "cinema");
+  const categorySlug = normalizeCategorySlug(hierarchy.main.find((category) =>
+    normalizeCategorySlug(category.value) === routeSlug || normalizeCategorySlug(category.label) === routeSlug,
+  )?.value || routeSlug);
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [normalizeCategorySlug(value), liveCategoryDefinition(normalizeCategorySlug(value), hierarchy)])) as Record<string, CategoryDefinition | undefined>;
+  const categoryImage = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === categorySlug)?.image || "";
+  const heroFallback = existingHeroBanners[categorySlug] || categoryImage;
+  const [heroBanner, setHeroBanner] = useState(heroFallback);
+  useEffect(() => {
+    let active = true;
+    setHeroBanner(heroFallback);
+    void loadCategoryBanner(categorySlug)
+      .then((banner) => {
+        if (active) setHeroBanner(banner?.image || categoryImage);
+      })
+      .catch((error: unknown) => {
+        console.error("Category banner request failed.", error);
+      });
+    return () => { active = false; };
+  }, [categorySlug, categoryImage, heroFallback]);
 
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
@@ -556,7 +629,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image="/products/hero.png"
+          image={heroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -588,7 +661,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image="/products/sportsbanner.png"
+          image={heroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -620,7 +693,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image="/products/motosportsbanner.png"
+          image={heroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -652,7 +725,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image="/products/game banner.png"
+          image={heroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -672,11 +745,12 @@ export default function CategoryPage() {
 
   if (lang) {
     const selectedSlug = normalizeCategorySlug(String(lang));
-    const category = activeDefinitions[categorySlug] ?? activeDefinitions.cinema!;
-    const entry = category.subcategories.find((item) => item.slug === selectedSlug || normalizeCategorySlug(item.label) === selectedSlug) ?? category.subcategories[0];
+    const category = activeDefinitions[categorySlug];
+    if (!category) return <div className="p-8">Category not found.</div>;
+    const entry = category.subcategories.find((item) => item.slug === selectedSlug || normalizeCategorySlug(item.label) === selectedSlug);
     if (!entry) return <div className="p-8">Category not found.</div>;
     const entrySlug = entry.slug;
-    const catalog = categoryProducts[categorySlug]?.[entrySlug] ?? categoryProducts.cinema[entrySlug] ?? [];
+    const catalog = categoryProducts[categorySlug]?.[entrySlug] ?? [];
 
     return (
       <div className="category-products-page">
@@ -699,20 +773,24 @@ export default function CategoryPage() {
     );
   }
 
-  const fallback = activeDefinitions[categorySlug] || activeDefinitions.cinema!;
+  const fallback = activeDefinitions[categorySlug];
+  if (!fallback) return <div className="p-8">Category not found.</div>;
   return (
     <div className="subcategory-page">
-      <div className="category-page__header">
-        <Link href="/" className="back-link">
-          <ArrowLeft size={18} /> Back
-        </Link>
-        <div className="category-page__title-wrap">
-          <p className="category-page__eyebrow">{fallback.subtitle}</p>
-          <h1>{fallback.title}</h1>
-        </div>
+      <GlobalNavigation />
+      <DynamicCategoryNav categorySlug={categorySlug} />
+
+      <CategoryHero
+        title={fallback.title}
+        subtitle={fallback.subtitle}
+        image={heroBanner}
+      />
+
+      <div className="section-heading category-best-selling-heading">
+        <h2 style={{ font: "700 clamp(18px, 2vw, 30px)/1.15 Montserrat,sans-serif", letterSpacing: ".08em", textTransform: "uppercase", color: "var(--tribull-green)" }}>Best Selling</h2>
       </div>
 
-      <SubcategoryList categorySlug={categorySlug} items={fallback.subcategories} />
+      <DynamicBestSelling categorySlug={categorySlug} entrySlugs={fallback.subcategories.map((subcategory) => subcategory.slug)} />
     </div>
   );
 }
