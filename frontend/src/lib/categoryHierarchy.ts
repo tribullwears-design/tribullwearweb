@@ -126,8 +126,33 @@ export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {
 }
 
 export async function loadCategoryHierarchy() {
-  const response = await fetch("/api/categories", { cache: "no-store" });
-  if (!response.ok) throw new Error("Category request failed");
+  const url = "/api/categories";
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    console.error("CATEGORY API ERROR", {
+      status: "unavailable",
+      url,
+      response: error instanceof Error ? error.message : String(error),
+    });
+    throw error;
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    console.error("CATEGORY API ERROR", {
+      status: response.status,
+      url: response.url || url,
+      response: body,
+    });
+    let details: { error?: string } | undefined;
+    try {
+      details = JSON.parse(body) as { error?: string };
+    } catch {
+      details = undefined;
+    }
+    throw new Error(details?.error || "Category request failed");
+  }
   const hierarchy = fromApiDocuments(await response.json() as ApiCategoryResponse);
   cacheHierarchy(hierarchy, false);
   return hierarchy;

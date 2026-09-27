@@ -1,5 +1,6 @@
 import express from "express";
 import { createServer } from "http";
+import { existsSync } from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import { addSubcategory, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
@@ -10,6 +11,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
+  const localEnvPath = path.resolve(process.cwd(), "backend", ".env.local");
+  if (existsSync(localEnvPath)) process.loadEnvFile(localEnvPath);
+
   const app = express();
   const server = createServer(app);
   app.use(express.json({ limit: "10mb" }));
