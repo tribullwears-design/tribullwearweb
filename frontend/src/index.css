@@ -1316,9 +1316,9 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .category-catalog-card__wishlist { position: absolute; top: 10px; right: 10px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid rgba(255,255,255,.5); border-radius: 50%; background: rgba(20,24,21,.38); color: #fff; cursor: pointer; transition: transform .22s var(--ease-back), background .22s ease, color .22s ease; }
 .category-catalog-card__wishlist:hover { transform: scale(1.1); background: rgba(255,255,255,.86); color: var(--tribull-green); }
 .category-catalog-card__wishlist.is-active { color: #efb0a5; animation: wishlistPop .35s var(--ease-back); }
-.category-catalog-card__cart { display: grid; place-items: center; width: 29px; height: 29px; padding: 0; border: 0; border-radius: 50%; background: var(--tribull-green); color: var(--tribull-cream); cursor: pointer; transition: transform .22s var(--ease-back), background .22s ease; }
-.category-catalog-card__cart:hover { transform: translateY(-2px); background: #285243; }
-.category-catalog-card__cart.is-added { background: #47755e; }
+.category-catalog-card__cart { display: grid; place-items: center; flex:0 0 34px; width:34px; height:34px; padding: 0; border: 1px solid rgba(27,54,45,.14); border-radius: 50%; background:#fff; color:var(--tribull-green); box-shadow:0 4px 12px rgba(27,54,45,.12); cursor: pointer; transition:transform .22s var(--ease-back), background .22s ease, color .22s ease, box-shadow .22s ease; }
+.category-catalog-card__cart:hover { transform:translateY(-2px) scale(1.05); background:var(--tribull-green); color:var(--tribull-cream); box-shadow:0 7px 16px rgba(27,54,45,.2); }
+.category-catalog-card__cart.is-added { background:#47755e; border-color:#47755e; color:#fff; }
 
 .category-cinema-product {
   animation: cardSlideUp .5s var(--ease-out) both;
@@ -1378,7 +1378,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   .category-catalog-toolbar { flex-wrap: wrap; gap: 12px; margin-top: 18px; }
   .category-catalog-toolbar label { margin-left: auto; }
   .category-catalog-toolbar select { min-width: 135px; }
-  .category-catalog-card__cart { width: 28px; height: 28px; }
+  .category-catalog-card__cart { flex-basis:32px; width:32px; height:32px; }
 }
 
 .essentials { margin: 24px 40px; padding: 24px 20px 28px; background: var(--tribull-green); color: var(--tribull-cream); border-radius: 8px; overflow: hidden; width: auto; }
