@@ -360,16 +360,19 @@ function GlobalNavigation() {
   );
 }
 
-function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
+function DynamicCategoryNav({ categorySlug, activeSubcategory }: { categorySlug: string; activeSubcategory?: string }) {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
+  const visibleSubcategories = categorySlug === "cinema" && activeSubcategory
+    ? definition.subcategories.filter(({ slug }) => slug !== activeSubcategory)
+    : definition.subcategories;
 
   return (
     <nav className="category-nav cinema-category-nav" aria-label={`${definition.title} categories`}>
       <div className="category-nav__track">
-        {definition.subcategories.map(({ label, slug, image }) => (
+        {visibleSubcategories.map(({ label, slug, image }) => (
           <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>
             <span className="category-nav__image"><img src={image} alt="" /></span>
             <span className="category-nav__label">{label}</span>
@@ -381,14 +384,12 @@ function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
 }
 
 const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
-  { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
   { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
 
 function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: CategoryProduct[]; categorySlug: string; entrySlug: string }) {
-  const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
+  const [selectedTab, setSelectedTab] = useState<CatalogTab>("oversized");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
@@ -421,6 +422,10 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[2] },
       { name: "Heavyweight Essential Tee", price: "₹899", image: rotationImages[1] },
       { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[3] },
+      { name: "Everyday Core Oversized Tee", price: "₹829", image: rotationImages[2] },
+      { name: "Urban Form Oversized Tee", price: "₹879", image: rotationImages[0] },
+      { name: "Classic Fit Oversized Tee", price: "₹929", image: rotationImages[3] },
+      { name: "Signature Print Oversized Tee", price: "₹979", image: rotationImages[1] },
     ],
     "acid-oversized": [
       { name: "Acid Shadow Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
@@ -433,6 +438,10 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Forest Logo Hoodie", price: "₹1,399", image: rotationImages[0] },
       { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[1] },
       { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[2] },
+      { name: "Everyday Core Hoodie", price: "₹1,349", image: rotationImages[0] },
+      { name: "Urban Form Hoodie", price: "₹1,449", image: rotationImages[2] },
+      { name: "Classic Pullover Hoodie", price: "₹1,549", image: rotationImages[3] },
+      { name: "Signature Print Hoodie", price: "₹1,649", image: rotationImages[1] },
     ],
   };
 
@@ -497,7 +506,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
           </label>
         </div>
       </div>
-      <div className="category-page__grid category-page__grid--products">
+      <div className="category-page__grid category-page__grid--products category-page__grid--catalog">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
           return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
@@ -655,7 +664,7 @@ export default function CategoryPage() {
     return (
       <div className="category-products-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug={categorySlug} />
+        <DynamicCategoryNav categorySlug={categorySlug} activeSubcategory={selectedSlug} />
 
         <div className="category-hero" aria-label={`${entry.label} featured collection`}>
           <div className="category-hero__visual">

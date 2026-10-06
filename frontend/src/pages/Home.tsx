@@ -314,11 +314,23 @@ export default function Home() {
               <div><p className="eyebrow">The foundation</p><h2>OUR ESSENTIALS</h2></div>
             </div>
           </Reveal>
-          <Reveal variant="scale" stagger className="essentials-grid">
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialMensShirt} alt="Round Neck" /><span>Round Neck</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialTshirts} alt="Oversized" /><span>Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialOversized} alt="Acid Wash Oversized" /><span>Acid Wash Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialHoodies} alt="Hoodie" /><span>Hoodie</span></a>
+          <Reveal variant="scale" stagger className="essentials-grid essentials-grid--compact">
+            {[
+              { image: productImages.essentialTshirts, label: "Oversized", alt: "Oversized" },
+              { image: productImages.essentialHoodies, label: "Hoodie", alt: "Hoodie" },
+            ].map((item) => (
+              <a key={item.label} href="#footer" className="essential-card parallax-tilt">
+                <div className="essential-card__visual">
+                  <div
+                    className="essential-card__backdrop"
+                    aria-hidden="true"
+                    style={{ backgroundImage: `url("${item.image}")` }}
+                  />
+                  <img src={item.image} alt={item.alt} />
+                </div>
+                <span>{item.label}</span>
+              </a>
+            ))}
           </Reveal>
         </div>
 
