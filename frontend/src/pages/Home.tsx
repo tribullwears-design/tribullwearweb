@@ -2,9 +2,10 @@
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -44,7 +45,7 @@ const bestSelling = [
   [productImages.backBlack, "Classic Spider Heritage", "₹1,929"],
 ];
 
-const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
+const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${encodeURIComponent(message)}`;
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
@@ -93,22 +94,25 @@ function Reveal({
   );
 }
 
-function ProductCard({ item, delay = 0, showMeta = true }: { item: string[]; delay?: number; showMeta?: boolean }) {
+function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[]; delay?: number; showMeta?: boolean; href: string }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   return (
-    <article
-      ref={ref}
-      className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "reveal-visible" : null)}
-      style={{ transitionDelay: `${delay}s` }}
-    >
-      <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
-      {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>}
-    </article>
+    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`}>
+      <article
+        ref={ref}
+        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "reveal-visible" : null)}
+        style={{ transitionDelay: `${delay}s` }}
+      >
+        <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
+        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>}
+      </article>
+    </Link>
   );
 }
 
 export default function Home() {
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const heroImgRef = useRef<HTMLImageElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const heroStampRef = useRef<HTMLDivElement>(null);
@@ -207,16 +211,14 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      <nav className="category-nav" aria-label="Shop categories">
+      <nav className="category-nav" aria-label="Cinema categories">
         <div className="category-nav__track">
-          {hierarchy.main.map(({ value, label }) => {
-            return (
-            <a className="category-nav__item" href={`/category/${value}`} key={value}>
-              <span className="category-nav__image"><img src={hierarchy.main.find((item) => item.value === value)?.image || "/products/front-white.png"} alt="" /></span>
+          {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
+            <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
+              <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
               <span className="category-nav__label">{label}</span>
             </a>
-            );
-          })}
+          ))}
         </div>
       </nav>
 
@@ -250,7 +252,14 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid">
-              {newArrivals.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
+              {newArrivals.map((item, idx) => (
+                <ProductCard
+                  item={item}
+                  key={`${item[1]}-${idx}`}
+                  delay={0.08 * idx}
+                  href={`/product/hollywood-${idx}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(item[0])}`}
+                />
+              ))}
             </div>
             <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>
@@ -264,7 +273,15 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only">
-              {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} showMeta={false} />)}
+              {bestSelling.map((item, idx) => (
+                <ProductCard
+                  item={item}
+                  key={`${item[1]}-${idx}`}
+                  delay={0.08 * idx}
+                  showMeta={false}
+                  href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(item[0])}`}
+                />
+              ))}
             </div>
             <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>

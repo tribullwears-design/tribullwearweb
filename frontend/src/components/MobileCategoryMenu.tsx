@@ -1,7 +1,7 @@
 import { ChevronRight, Menu, X } from "lucide-react";
 import { Link } from "wouter";
-import { useEffect, useState } from "react";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { useState } from "react";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 type MenuCategory = {
   slug: string;
@@ -12,14 +12,10 @@ type MenuCategory = {
 const menuHierarchy: CategoryHierarchy = defaultCategoryHierarchy;
 
 export default function MobileCategoryMenu() {
-  const hierarchy = useCategoryHierarchy(menuHierarchy);
+  const fetchedHierarchy = useCategoryHierarchy(menuHierarchy);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const [open, setOpen] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    document.body.classList.toggle("mobile-category-menu-open", open);
-    return () => document.body.classList.remove("mobile-category-menu-open");
-  }, [open]);
 
   const toggleMenu = () => {
     setOpen((current) => !current);

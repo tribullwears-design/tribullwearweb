@@ -6,9 +6,10 @@ export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<
 export const defaultCategoryHierarchy: CategoryHierarchy = {
   main: [
     { value: "cinema", label: "Cinema", image: "/products/cinema.png" },
-    { value: "sports", label: "Sports", image: "/products/sports.png" },
-    { value: "games", label: "Games", image: "/products/games.png" },
-    { value: "motorsports", label: "MotoSports", image: "/products/motosports.jpg" },
+    // Temporarily hidden from the storefront; category data remains available for later.
+    // { value: "sports", label: "Sports", image: "/products/sports.png" },
+    // { value: "games", label: "Games", image: "/products/games.png" },
+    // { value: "motorsports", label: "MotoSports", image: "/products/motosports.jpg" },
   ],
   subcategories: {
     cinema: [
@@ -34,6 +35,14 @@ export const defaultCategoryHierarchy: CategoryHierarchy = {
     ],
   },
 };
+
+export function getStorefrontCategoryHierarchy(hierarchy: CategoryHierarchy): CategoryHierarchy {
+  const main = hierarchy.main.filter((category) => category.value === "cinema");
+  return {
+    main,
+    subcategories: Object.fromEntries(main.map(({ value }) => [value, hierarchy.subcategories[value] || []])),
+  };
+}
 
 export const CATEGORY_HIERARCHY_KEY = "tribull-admin-category-hierarchy";
 
@@ -142,4 +151,3 @@ export function useCategoryHierarchy(fallback: CategoryHierarchy) {
 
   return hierarchy;
 }
-

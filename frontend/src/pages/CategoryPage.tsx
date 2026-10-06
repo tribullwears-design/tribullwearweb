@@ -4,7 +4,7 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 
@@ -361,7 +361,8 @@ function GlobalNavigation() {
 }
 
 function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
 
@@ -509,7 +510,8 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
   const categorySlug = slug || "cinema";
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [value, liveCategoryDefinition(value, hierarchy)])) as Record<string, CategoryDefinition | undefined>;
 
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
