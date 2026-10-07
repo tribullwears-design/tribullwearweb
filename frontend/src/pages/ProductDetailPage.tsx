@@ -1,11 +1,13 @@
 import { Check, Headphones, Package, ShieldCheck, ShoppingCart, Star, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import ProductPrice from "../components/ProductPrice";
+import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 
-interface ProductData {
+interface ProductData extends OriginalPriceFields {
   name: string;
   price: string;
   image: string;
@@ -136,6 +138,7 @@ export default function ProductDetailPage() {
   const linkedProduct = query.get("name") && query.get("image") ? {
     name: query.get("name") || "Selected product",
     price: query.get("price") || "₹0",
+    originalPrice: query.get("originalPrice") ? Number(query.get("originalPrice")) : undefined,
     image: query.get("image") || "",
     category: category || "Tribull",
   } : undefined;
@@ -165,6 +168,7 @@ export default function ProductDetailPage() {
         [productId]: {
           name: product.name,
           price: Number(product.price.replace(/[^0-9]/g, "")),
+          originalPrice: resolveOriginalPrice(product),
           image: selectedImage || product.image,
           variant: `Size: ${selectedSize}`,
         },
@@ -241,10 +245,7 @@ export default function ProductDetailPage() {
                 <span className="text-sm text-gray-600">41 reviews</span>
               </div>
 
-              <div className="flex items-center gap-4 mb-8">
-                <span className="text-2xl font-bold text-red-600">{product.price}</span>
-                <span className="text-lg text-gray-400 line-through">₹2,499</span>
-              </div>
+              <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} className="product-price--detail" />
             </div>
 
             <div>
@@ -355,12 +356,12 @@ export default function ProductDetailPage() {
           {recommendations.map((recommendation, recommendationIndex) => (
             <Link
               key={`${recommendation.name}-${recommendationIndex}`}
-              href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&image=${encodeURIComponent(recommendation.image)}`}
+              href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendation.image)}`}
               className="product-detail-recommendation-card"
             >
               <img src={recommendation.image} alt={recommendation.name} loading="lazy" />
               <h3>{recommendation.name}</h3>
-              <p>{recommendation.price}</p>
+              <ProductPrice sellingPrice={recommendation.price} originalPrice={resolveOriginalPrice(recommendation)} productName={recommendation.name} />
             </Link>
           ))}
         </div>

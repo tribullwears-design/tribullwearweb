@@ -1,12 +1,16 @@
 import { ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { products, type Product } from "./ProductsPage";
+import ProductPrice from "../components/ProductPrice";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import { resolveOriginalPrice } from "../lib/productPrice";
 
 type CartEntry = {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   image: string;
   quantity: number;
   variant?: string;
@@ -14,7 +18,7 @@ type CartEntry = {
 };
 
 type CartState = Record<string, number>;
-type CartItemMeta = Partial<Product> & { variant?: string; name?: string; image?: string; price?: number };
+type CartItemMeta = Partial<Product> & { variant?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
 
 type CheckoutForm = {
   fullName: string;
@@ -64,6 +68,26 @@ export default function CheckoutPage() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [placedOrderSummary, setPlacedOrderSummary] = useState<OrderSummary | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((nextProducts) => {
+        if (active) setCatalogProducts(nextProducts);
+      }).catch((error: unknown) => {
+        console.error("Failed to load checkout product prices.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
 
   const cartDetails = useMemo(() => {
     const cart = readStorage<CartState>("tribull-cart", {});
@@ -74,11 +98,12 @@ export default function CheckoutPage() {
     for (const [id, quantity] of Object.entries(cart)) {
       if (quantity <= 0) continue;
 
-      const product = products.find((item) => item.id === id);
+      const product = catalogProducts.find((item) => item.id === id)
+        ?? catalogProducts.find((item) => item.name.trim().toLowerCase() === cartItems[id]?.name?.trim().toLowerCase());
       const item = cartItems[id] || product;
       if (!item) continue;
 
-      const price = Number(item.price ?? product?.price ?? 0);
+      const price = Number(product?.price ?? item.price ?? 0);
       const image = item.image ?? product?.image ?? "/products/logo.png";
       const lineTotal = price * quantity;
 
@@ -86,6 +111,7 @@ export default function CheckoutPage() {
         id,
         name: item.name ?? product?.name ?? "Tribull Product",
         price,
+        originalPrice: product?.originalPrice ?? resolveOriginalPrice(item),
         image,
         quantity,
         variant: item.variant,
@@ -98,7 +124,7 @@ export default function CheckoutPage() {
     const total = subtotal + shipping;
 
     return { entries, subtotal, shipping, total };
-  }, [orderPlaced]);
+  }, [catalogProducts, orderPlaced]);
 
   const handleFieldChange = (field: keyof CheckoutForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -208,7 +234,7 @@ export default function CheckoutPage() {
                   <img src={item.image} alt={item.name} />
                   <div>
                     <strong>{item.name}</strong>
-                    <span>{item.quantity} × {formatPrice(item.price)}</span>
+                    <span>{item.quantity} ×</span><ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
                   </div>
                 </div>
               ))}
@@ -341,7 +367,7 @@ export default function CheckoutPage() {
                 <div className="checkout-summary__details">
                   <strong>{item.name}</strong>
                   <span>{item.variant ? `${item.variant}` : "Premium tee"}</span>
-                  <span>{formatPrice(item.price)}</span>
+                  <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
                   <span>Quantity: {item.quantity}</span>
                   <strong className="checkout-summary__line-total">{formatPrice(item.lineTotal)}</strong>
                 </div>

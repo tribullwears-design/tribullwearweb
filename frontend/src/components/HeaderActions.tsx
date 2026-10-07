@@ -4,9 +4,13 @@ import { useLocation } from "wouter";
 import { products, type Product } from "../pages/ProductsPage";
 import { categoryProducts } from "../pages/CategoryPage";
 import { animateAddToCart } from "../lib/cartAnimation";
+import ProductPrice from "./ProductPrice";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import { resolveOriginalPrice } from "../lib/productPrice";
+import { allProducts } from "../lib/allProducts";
 
 type Cart = Record<string, number>;
-type CartItem = { name: string; price: number; image: string; variant?: string };
+type CartItem = { name: string; price: number; originalPrice?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number; image: string; variant?: string };
 type CartItems = Record<string, CartItem>;
 
 type Overlay = "search" | "account" | "wishlist" | "cart" | null;
@@ -100,6 +104,7 @@ export default function HeaderActions() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
   const [authUser, setAuthUser] = useState<AuthUser>(() => readStorage("tribull-user", { username: "", isAuthenticated: false }));
   const [usernameDraft, setUsernameDraft] = useState("");
   const [usernameError, setUsernameError] = useState("");
@@ -137,6 +142,43 @@ export default function HeaderActions() {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((nextProducts) => {
+        if (active) setCatalogProducts(nextProducts);
+      }).catch((error: unknown) => {
+        console.error("Failed to load products for header actions.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentItems = readStorage<CartItems>("tribull-cart-items", {});
+    let changed = false;
+    const nextItems = { ...currentItems };
+    for (const [id, item] of Object.entries(currentItems)) {
+      const currentProduct = catalogProducts.find((product) => product.id === id)
+        ?? catalogProducts.find((product) => product.name.trim().toLowerCase() === item.name.trim().toLowerCase());
+      if (currentProduct && (item.price !== currentProduct.price || item.originalPrice !== currentProduct.originalPrice)) {
+        nextItems[id] = { ...item, price: currentProduct.price, originalPrice: currentProduct.originalPrice };
+        changed = true;
+      }
+    }
+    if (changed) {
+      setCartItems(nextItems);
+      saveCartItems(nextItems);
+    }
+  }, [catalogProducts]);
+
+  useEffect(() => {
     document.body.classList.toggle("header-overlay-open", overlay !== null);
     return () => document.body.classList.remove("header-overlay-open");
   }, [overlay]);
@@ -149,22 +191,30 @@ export default function HeaderActions() {
 
   const searchResults = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return products.slice(0, 6);
-    return products.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery));
-  }, [query]);
+    if (!normalizedQuery) return catalogProducts.slice(0, 6);
+    return catalogProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery));
+  }, [query, catalogProducts]);
 
   const categoryWishlistProducts = Object.entries(categoryProducts).flatMap(([category, entries]) =>
     Object.entries(entries).flatMap(([entry, items]) => items.map((item) => ({
       id: `${category}-${entry}-${item.name}`,
       name: item.name,
       price: Number(item.price.replace(/[^0-9]/g, "")),
+      originalPrice: resolveOriginalPrice(item),
       image: item.image,
     }))),
   );
-  const wishlistProducts = [...products, ...categoryWishlistProducts].filter((product) => wishlist.includes(product.id));
+  const allPageWishlistProducts = allProducts.map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: Number(product.price.replace(/[^0-9]/g, "")),
+    originalPrice: resolveOriginalPrice(product),
+    image: product.image,
+  }));
+  const wishlistProducts = [...catalogProducts, ...categoryWishlistProducts, ...allPageWishlistProducts].filter((product) => wishlist.includes(product.id));
   const cartEntries = Object.entries(cart).filter(([, quantity]) => quantity > 0);
   const cartTotal = cartEntries.reduce((total, [id, quantity]) => {
-    const product = products.find((item) => item.id === id);
+    const product = catalogProducts.find((item) => item.id === id);
     const item = cartItems[id] || product;
     return total + (item?.price || 0) * quantity;
   }, 0);
@@ -461,7 +511,7 @@ export default function HeaderActions() {
         <section className="header-panel header-search-panel" aria-label="Search products">
           <div className="header-panel__heading"><h2>Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
           <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" /></label>
-          <div className="header-search-results">{searchResults.length ? searchResults.map((product) => <div className="header-search-result" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.category} · {formatPrice(product.price)}</span></div><button type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button></div>) : <p className="header-empty-state">No products found.</p>}</div>
+          <div className="header-search-results">{searchResults.length ? searchResults.map((product) => <div className="header-search-result" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.category}</span><ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} /></div><button type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button></div>) : <p className="header-empty-state">No products found.</p>}</div>
         </section>
       )}
       {overlay === "account" && (
@@ -593,7 +643,7 @@ export default function HeaderActions() {
                           <img src={product.image} alt={product.name} />
                           <div>
                             <strong>{product.name}</strong>
-                            <span>{formatPrice(product.price)}</span>
+                            <ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} />
                           </div>
                           <div className="header-account-card__actions">
                             <button type="button" onClick={() => toggleWishlist(product.id)}>Remove</button>
@@ -699,13 +749,13 @@ export default function HeaderActions() {
       {overlay === "wishlist" && (
         <section className="header-panel header-side-panel" aria-label="Wishlist">
           <div className="header-panel__heading"><h2>Wishlist</h2><button type="button" aria-label="Close wishlist" onClick={closeOverlay}><X size={20} /></button></div>
-          {wishlistProducts.length ? wishlistProducts.map((product) => <div className="header-list-item" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{formatPrice(product.price)}</span></div><button type="button" aria-label={`Remove ${product.name} from wishlist`} onClick={() => toggleWishlist(product.id)}><Trash2 size={15} /></button></div>) : <p className="header-empty-state">Your Wishlist is Empty</p>}
+          {wishlistProducts.length ? wishlistProducts.map((product) => <div className="header-list-item" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} /></div><button type="button" aria-label={`Remove ${product.name} from wishlist`} onClick={() => toggleWishlist(product.id)}><Trash2 size={15} /></button></div>) : <p className="header-empty-state">Your Wishlist is Empty</p>}
         </section>
       )}
       {overlay === "cart" && (
         <section className="header-panel header-side-panel" aria-label="Shopping cart">
           <div className="header-panel__heading"><h2>Cart</h2><button type="button" aria-label="Close cart" onClick={closeOverlay}><X size={20} /></button></div>
-          {cartEntries.length ? <><div className="header-cart-list">{cartEntries.map(([id, quantity]) => { const product = products.find((item) => item.id === id); const item = cartItems[id] || product; if (!item) return null; return <div className="header-list-item header-cart-item" key={id}><img src={item.image} alt={item.name} /><div><strong>{item.name}</strong>{item.variant && <span className="header-cart-variant">{item.variant}</span>}<span>{formatPrice(item.price)} · <strong>{formatPrice(item.price * quantity)}</strong></span><div className="header-quantity"><button type="button" onClick={() => updateCart(id, quantity - 1)} aria-label={`Decrease quantity of ${item.name}`}><Minus size={13} /></button><span>{quantity}</span><button type="button" onClick={() => updateCart(id, quantity + 1)} aria-label={`Increase quantity of ${item.name}`}><Plus size={13} /></button></div></div><button type="button" aria-label={`Remove ${item.name} from cart`} onClick={() => updateCart(id, 0)}><Trash2 size={15} /></button></div>; })}</div><div className="header-cart-total"><span>Total</span><strong>{formatPrice(cartTotal)}</strong></div><button className="header-checkout" type="button" onClick={() => { closeOverlay(); setLocation("/checkout"); }}>Checkout</button></> : <p className="header-empty-state">Your Cart is Empty</p>}
+          {cartEntries.length ? <><div className="header-cart-list">{cartEntries.map(([id, quantity]) => { const product = catalogProducts.find((item) => item.id === id); const item = cartItems[id] || product; if (!item) return null; return <div className="header-list-item header-cart-item" key={id}><img src={item.image} alt={item.name} /><div><strong>{item.name}</strong>{item.variant && <span className="header-cart-variant">{item.variant}</span>}<ProductPrice sellingPrice={item.price} originalPrice={resolveOriginalPrice(item)} productName={item.name} /><span><strong>{formatPrice(item.price * quantity)}</strong></span><div className="header-quantity"><button type="button" onClick={() => updateCart(id, quantity - 1)} aria-label={`Decrease quantity of ${item.name}`}><Minus size={13} /></button><span>{quantity}</span><button type="button" onClick={() => updateCart(id, quantity + 1)} aria-label={`Increase quantity of ${item.name}`}><Plus size={13} /></button></div></div><button type="button" aria-label={`Remove ${item.name} from cart`} onClick={() => updateCart(id, 0)}><Trash2 size={15} /></button></div>; })}</div><div className="header-cart-total"><span>Total</span><strong>{formatPrice(cartTotal)}</strong></div><button className="header-checkout" type="button" onClick={() => { closeOverlay(); setLocation("/checkout"); }}>Checkout</button></> : <p className="header-empty-state">Your Cart is Empty</p>}
         </section>
       )}
     </>

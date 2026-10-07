@@ -5,8 +5,10 @@ import {
   Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Store, Tag, Truck,
   UserRound, Users, X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { products as storeProducts, type Product } from "./ProductsPage";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { defaultProducts, type Product } from "../../../shared/products";
+import ProductPrice from "../components/ProductPrice";
+import { createProduct, fetchProducts, updateProduct, type ProductWrite } from "../lib/products";
 import { useLocation } from "wouter";
 import { createCategory, createSubcategory, deleteCategory, deleteSubcategory as deleteSubcategoryApi, fetchCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryChoice, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import "./admin-dashboard.css";
@@ -87,28 +89,28 @@ function SectionHeading({ title, action, onAction }: { title: string; action?: s
 function EmptyState({ title, message, action, onAction }: { title: string; message: string; action?: string; onAction?: () => void }) { return <div className="admin-empty-state"><div className="admin-empty-state__icon"><Box size={20} /></div><strong>{title}</strong><span>{message}</span>{action && <button type="button" className="admin-primary-button" onClick={onAction}>{action}</button>}</div>; }
 
 function ProductTable({ products, onSelect }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void }) {
-  return <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button></td></tr>)}</tbody></table></div>;
+  return <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.category}</td><td><ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} /></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button></td></tr>)}</tbody></table></div>;
 }
 function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) { return orders.length ? <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id} onClick={() => onSelect(order)}><td><strong className="admin-order-id">{order.id}</strong></td><td>{order.customer}</td><td>{order.date}</td><td>{order.items}</td><td><strong>{order.total}</strong></td><td>{order.payment}</td><td><StatusPill status={order.status} /></td><td><button className="admin-more-button" type="button"><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div> : <EmptyState title="No orders yet" message="Orders will appear here when customers place an order." />; }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
 
 type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; image: string; stock: string; sizes: string; colors: string; status: string };
-function AddProductForm({ productForm, setProductForm, hierarchy, onSave, onCancel, imageError, onImageChange, savedNotice }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; onSave: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string }) {
+function AddProductForm({ productForm, setProductForm, hierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productError }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; onSave: (event: React.FormEvent<HTMLFormElement>) => void; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productError: string }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: hierarchy.subcategories[category]?.[0]?.value || "" }));
   return <form className="admin-form" onSubmit={onSave}>
     <label><span>Product name</span><input required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label>
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
-    <label><span>Price</span><input required value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
-    <label><span>Compare-at price</span><input value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
+    <label><span>Selling Price</span><input required type="number" min="0" step="0.01" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
+    <label><span>Original Price / MRP</span><input type="number" min="0" step="0.01" value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
     <div className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
-    <label><span>Category</span><select value={productForm.category} onChange={(event) => updateCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+    <label><span>Category</span><select required value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category</option>{productForm.category && !hierarchy.main.some((category) => category.value === productForm.category) && <option value={productForm.category}>{productForm.category}</option>}{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
     <label><span>Subcategory</span><select value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
     <label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label>
-    <div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}
+    <div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{productError && <p className="admin-image-error" role="alert">{productError}</p>}{savedNotice && <p className="admin-form-success">{savedNotice}</p>}
   </form>;
 }
 
@@ -177,6 +179,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const [screen, setScreen] = useState(initialScreen);
   const [, setLocation] = useLocation();
   const [selectedProduct, setSelectedProduct] = useState<AdminProduct | null>(null);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [categories, setCategories] = useState<ProductTypeCategory[]>(defaultProductTypeCategories);
@@ -196,6 +199,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
     });
   }, []);
   const [savedNotice, setSavedNotice] = useState("");
+  const [productError, setProductError] = useState("");
   const [imageError, setImageError] = useState("");
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>(() => readStorage("tribull-admin-users", [{ id: "admin-monika", name: "Monika Manikandan", email: "", phone: "", role: "Super Admin", status: "Active", permissions: rolePermissions("Super Admin") }]));
   const [adminModal, setAdminModal] = useState<"add" | "view-permissions" | "edit-permissions" | null>(null);
@@ -204,13 +208,101 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
   const [permissionDraft, setPermissionDraft] = useState<AdminPermissions>(rolePermissions("Admin"));
   const [socialLinks, setSocialLinks] = useState(() => readStorage("tribull-social-links", { facebook: "", instagram: "", youtube: "", x: "", reddit: "" }));
   const [socialNotice, setSocialNotice] = useState("");
-  const adminProducts = useMemo<AdminProduct[]>(() => storeProducts.map((product, index) => ({ ...product, stock: [42, 18, 7, 0][index % 4], status: "Active", sku: `TRB-${String(index + 1).padStart(3, "0")}` })), []);
+  const [adminProducts, setAdminProducts] = useState<AdminProduct[]>(() => defaultProducts.map((product, index) => ({ ...product, stock: [42, 18, 7, 0][index % 4], status: "Active", sku: `TRB-${String(index + 1).padStart(3, "0")}` })));
+  useEffect(() => {
+    let active = true;
+    const syncProducts = () => {
+      void fetchProducts().then((products) => {
+        if (active) setAdminProducts((currentProducts) => products.map((product, index) => {
+          const current = currentProducts.find((item) => item.id === product.id);
+          return {
+            ...product,
+            stock: current?.stock ?? [42, 18, 7, 0][index % 4],
+            status: current?.status ?? "Active",
+            sku: current?.sku ?? `TRB-${String(index + 1).padStart(3, "0")}`,
+          };
+        }));
+      }).catch((error: unknown) => {
+        console.error("Failed to load admin products from the product API.", error);
+      });
+    };
+    syncProducts();
+    window.addEventListener("tribull-products-updated", syncProducts);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", syncProducts);
+    };
+  }, []);
   const orders = readStorage<AdminOrder[]>("tribull-orders", fallbackOrders);
   const customers = [{ name: "Aarav Mehta", email: "aarav.m@example.com", phone: "Not available", orders: 8, spent: "₹7,192", status: "Returning" }, { name: "Nisha Kapoor", email: "nisha.k@example.com", phone: "Not available", orders: 3, spent: "₹2,697", status: "Returning" }, { name: "Rohan Shah", email: "rohan.s@example.com", phone: "Not available", orders: 1, spent: "₹899", status: "New" }];
   const activeNav = navigation.flatMap((section) => section.items).find((item) => item.screen === screen);
   const filteredOrders = screen.startsWith("orders-") ? orders.filter((order) => order.status.toLowerCase() === screen.replace("orders-", "")) : orders;
   const navigate = (nextScreen: string) => { setScreen(nextScreen); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
-  const saveProduct = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); setSavedNotice("Product saved in this admin session."); setImageError(""); setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" })); window.setTimeout(() => setSavedNotice(""), 2500); };
+  const editProduct = (product: AdminProduct) => {
+    setEditingProductId(product.id);
+    setProductForm({
+      name: product.name,
+      description: "",
+      price: String(product.price),
+      compareAt: product.originalPrice == null ? "" : String(product.originalPrice),
+      category: product.category,
+      subcategory: "",
+      image: product.image,
+      stock: String(product.stock),
+      sizes: "S, M, L, XL",
+      colors: "Black",
+      status: product.status,
+    });
+    setProductError("");
+    setSelectedProduct(null);
+    setScreen("add-product");
+    setLocation(adminRoutes["add-product"]);
+  };
+  const saveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setProductError("");
+    setSavedNotice("");
+    setImageError("");
+    const sellingPrice = Number(productForm.price);
+    const originalPrice = productForm.compareAt.trim() ? Number(productForm.compareAt) : null;
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0 || (originalPrice !== null && (!Number.isFinite(originalPrice) || originalPrice < 0))) {
+      setProductError("Enter valid non-negative prices.");
+      return;
+    }
+    if (!productForm.category || !productForm.image) {
+      setProductError("Choose a category and upload a product image.");
+      return;
+    }
+    const input: ProductWrite = {
+      name: productForm.name.trim(),
+      category: productForm.category,
+      image: productForm.image,
+      sellingPrice,
+      originalPrice,
+    };
+    try {
+      const saved = editingProductId
+        ? await updateProduct(editingProductId, input)
+        : await createProduct(input);
+      setAdminProducts((current) => {
+        const existing = current.find((product) => product.id === saved.id);
+        const nextProduct: AdminProduct = {
+          ...saved,
+          stock: Number(productForm.stock) || existing?.stock || 0,
+          status: productForm.status === "Draft" ? "Draft" : "Active",
+          sku: existing?.sku || `TRB-${String(current.length + 1).padStart(3, "0")}`,
+        };
+        return existing ? current.map((product) => product.id === saved.id ? nextProduct : product) : [...current, nextProduct];
+      });
+      setSavedNotice(editingProductId ? "Product updated successfully." : "Product added successfully.");
+      setEditingProductId(null);
+      setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }));
+      window.setTimeout(() => setSavedNotice(""), 2500);
+    } catch (error) {
+      console.error("Failed to save product.", error);
+      setProductError(error instanceof Error ? error.message : "Could not save the product. Please try again.");
+    }
+  };
   const handleProductImageChange = (event: React.ChangeEvent<HTMLInputElement>) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setImageError("Please choose a JPG, PNG, or WEBP image."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { setProductForm((current) => ({ ...current, image: reader.result as string })); setImageError(""); } }; reader.readAsDataURL(file); event.target.value = ""; };
   const addCategory = (image = "") => { const value = newCategory.trim(); if (value && !categories.some((category) => category.label.toLowerCase() === value.toLowerCase())) { setCategories((current) => [...current, { label: value, image }]); setNewCategory(""); } };
   const toggleFeatured = (id: string) => setFeatured((current) => { const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id]; window.localStorage.setItem("tribull-admin-featured", JSON.stringify(next)); return next; });
@@ -222,8 +314,8 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
 
   const renderScreen = () => {
     if (screen === "dashboard") return <><section className="admin-stats-grid">{[["Total Sales", "₹0.00", "No sales recorded", DollarSign], ["Total Orders", String(orders.length), "Current order count", ClipboardList], ["Total Products", String(adminProducts.length), "From store catalog", ShoppingBag], ["Total Customers", String(customers.length), "Registered customers", Users], ["Pending Orders", String(orders.filter((order) => order.status === "Pending").length), "Needs attention", PackageOpen], ["Low Stock Products", String(adminProducts.filter((product) => product.stock < 10).length), "Needs your attention", AlertTriangle]].map(([label, value, note, StatIcon]) => { const IconComponent = StatIcon as Icon; return <div className="admin-stat-card" key={label as string}><div className="admin-stat-icon admin-stat-icon--teal"><IconComponent size={19} /></div><div className="admin-stat-label">{label as string}</div><strong>{value as string}</strong><span>{note as string}</span></div>; })}</section><section className="admin-panel"><SectionHeading title="Recent Orders" action="View all orders" onAction={() => navigate("orders")} /><OrderTable orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section><div className="admin-two-column"><section className="admin-panel"><SectionHeading title="Best Selling Products" action="View products" onAction={() => navigate("products")} /><ProductTable products={adminProducts.slice(0, 5)} onSelect={setSelectedProduct} /></section><section className="admin-panel"><SectionHeading title="Low Stock Products" action="View inventory" onAction={() => navigate("inventory")} />{adminProducts.filter((product) => product.stock < 10).map((product) => <div className="admin-low-stock-row" key={product.id}><img className="admin-real-product-thumb" src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.sku}</span></div><div className="admin-stock-count"><strong>{product.stock}</strong><span>units left</span></div></div>)}</section></div></>;
-    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}><ProductTable products={adminProducts} onSelect={setSelectedProduct} /></AdminPanel>;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} /></AdminPanel>;
+    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => { setEditingProductId(null); setProductError(""); navigate("add-product"); }}><ProductTable products={adminProducts} onSelect={setSelectedProduct} /></AdminPanel>;
+    if (screen === "add-product") return <AdminPanel title={editingProductId ? "Edit Product" : "Add Product"}><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} onSave={saveProduct} onCancel={() => { setEditingProductId(null); navigate("products"); }} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productError={productError} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "add-product") return <AdminPanel title="Add Product"><form className="admin-form" onSubmit={saveProduct}>{["name", "description", "price", "compareAt", "stock", "sizes", "colors"].map((field) => <label key={field}><span>{field === "compareAt" ? "Compare-at price" : field.charAt(0).toUpperCase() + field.slice(1)}</span>{field === "description" ? <textarea value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} /> : <input required={field === "name" || field === "price"} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} />}</label>)}<label className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => { setProductForm((current) => ({ ...current, image: "" })); setImageError(""); }}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</label><label><span>Category</span><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{categories.map((category) => <option key={category.label} value={category.label}>{category.label}</option>)}</select></label><label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label><div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}</form></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
@@ -249,7 +341,7 @@ export default function AdminDashboard({ initialScreen = "dashboard" }: { initia
     {mobileOpen && <button className="admin-drawer-overlay" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
     <div className="admin-main-wrap">
       <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>Admin</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders, products, customers..." /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">MK</span><span className="admin-profile-name">Monika Manikandan</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>Monika Manikandan</strong><span>Store administrator</span><button type="button"><UserRound size={15} /> Account settings</button><button type="button"><LifeBuoy size={15} /> Help center</button></div>}</div></div></header>
-      <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : "Active"} /></div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p>{selectedOrder.customer}</p><p>{selectedOrder.items} items · {selectedOrder.total}</p><StatusPill status={selectedOrder.status} /></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
+      <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.category}</p><ProductPrice sellingPrice={selectedProduct.price} originalPrice={selectedProduct.originalPrice} productName={selectedProduct.name} /><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : "Active"} /><button className="admin-primary-button" type="button" onClick={() => editProduct(selectedProduct)}>Edit Product</button></div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p>{selectedOrder.customer}</p><p>{selectedOrder.items} items · {selectedOrder.total}</p><StatusPill status={selectedOrder.status} /></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
     </div>
   </div>;
 }

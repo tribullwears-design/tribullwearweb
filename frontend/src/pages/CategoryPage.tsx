@@ -7,8 +7,10 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
+import ProductPrice from "../components/ProductPrice";
+import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 
-export type CategoryProduct = {
+export type CategoryProduct = OriginalPriceFields & {
   name: string;
   price: string;
   image: string;
@@ -292,7 +294,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
 
 function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
-  const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`;
+  const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`;
 
   return (
     <Link href={productLink} className="block h-full">
@@ -316,7 +318,7 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
         <div className="category-page__meta">
           <div>
             <h2>{item.name}</h2>
-            <p>{item.price}</p>
+            <ProductPrice sellingPrice={item.price} originalPrice={resolveOriginalPrice(item)} productName={item.name} />
           </div>
           <button
             type="button"
@@ -465,7 +467,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
       window.localStorage.setItem("tribull-cart-items", JSON.stringify({
         ...cartItems,
-        [key]: { name: item.name, price: Number(item.price.replace(/[^0-9]/g, "")), image: item.image },
+        [key]: { name: item.name, price: Number(item.price.replace(/[^0-9]/g, "")), originalPrice: resolveOriginalPrice(item), image: item.image },
       }));
     } catch {
       // Keep the existing quantity cart usable if metadata storage is unavailable.
@@ -548,7 +550,7 @@ export default function CategoryPage() {
 
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
             </Link>
           ))}
@@ -580,7 +582,7 @@ export default function CategoryPage() {
 
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
             </Link>
           ))}
@@ -612,7 +614,7 @@ export default function CategoryPage() {
 
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
             </Link>
           ))}
@@ -644,7 +646,7 @@ export default function CategoryPage() {
 
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
               <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
             </Link>
           ))}

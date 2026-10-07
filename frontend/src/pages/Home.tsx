@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
+import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 
 const brandAssets = {
@@ -104,7 +105,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[
         style={{ transitionDelay: `${delay}s` }}
       >
         <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
-        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>}
+        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} productName={item[1]} /></div>}
       </article>
     </Link>
   );
@@ -278,7 +279,6 @@ export default function Home() {
                   item={item}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
-                  showMeta={false}
                   href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(item[0])}`}
                 />
               ))}

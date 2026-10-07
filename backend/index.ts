@@ -3,6 +3,7 @@ import { createServer } from "http";
 import path from "path";
 import { fileURLToPath } from "url";
 import { addSubcategory, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
+import { createProduct, listProducts, toProductApiRecord, updateProduct } from "./productStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,10 +14,20 @@ async function startServer() {
   app.use(express.json({ limit: "10mb" }));
 
   const sendError = (res: express.Response, error: unknown) => {
-    const message = error instanceof Error ? error.message : "Category request failed";
-    const status = message.includes("Duplicate") ? 409 : message.includes("not found") ? 404 : 500;
+    const message = error instanceof Error ? error.message : "Request failed";
+    const status = message.includes("Duplicate") ? 409 : message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") ? 400 : 500;
     res.status(status).json({ error: message });
   };
+
+  app.get("/api/products", async (_req, res) => {
+    try { res.json((await listProducts()).map(toProductApiRecord)); } catch (error) { sendError(res, error); }
+  });
+  app.post("/api/products", async (req, res) => {
+    try { res.status(201).json(toProductApiRecord(await createProduct(req.body))); } catch (error) { sendError(res, error); }
+  });
+  app.patch("/api/products/:id", async (req, res) => {
+    try { const product = await updateProduct(req.params.id, req.body); if (!product) return res.status(404).json({ error: "Product not found" }); res.json(toProductApiRecord(product)); } catch (error) { sendError(res, error); }
+  });
 
   app.get("/api/categories", async (_req, res) => {
     try { res.json(await listCategories()); } catch (error) { sendError(res, error); }
