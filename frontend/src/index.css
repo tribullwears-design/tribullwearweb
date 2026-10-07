@@ -803,24 +803,22 @@ body.header-overlay-open { overflow:hidden; }
     padding: 14px 8px 12px;
   }
   .cinema-category-nav .category-nav__track {
-    width: 100%;
-    min-width: 0;
-    justify-content: space-between;
-    gap: 2px;
+    width: max-content;
+    min-width: max-content;
+    justify-content: flex-start;
+    gap: 8px;
     padding: 0;
   }
   .cinema-category-nav .category-nav__item {
-    flex: 1 1 0;
-    min-width: 0;
-    gap: 4px;
+    flex: 0 0 70px;
+    gap: 6px;
   }
   .cinema-category-nav .category-nav__image {
-    width: min(14vw, 50px);
-    height: min(14vw, 50px);
+    width: 64px;
+    height: 64px;
   }
   .cinema-category-nav .category-nav__label {
-    font-size: 7px;
-    letter-spacing: 0;
+    font-size: 8px;
   }
 }
 .header-cart-button { position: relative; }
