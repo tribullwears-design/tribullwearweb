@@ -3,7 +3,16 @@ import { randomUUID } from "node:crypto";
 import { defaultProducts, type Product } from "../shared/products.js";
 import { getDatabase } from "./mongo.js";
 
-type StoredProduct = Omit<Product, "price"> & { sellingPrice?: number; price?: number };
+type StoredProduct = Omit<Product, "price" | "originalPrice"> & {
+  sellingPrice?: number;
+  price?: number;
+  originalPrice?: number | string | null;
+  mrp?: number | string | null;
+  MRP?: number | string | null;
+  compareAtPrice?: number | string | null;
+  compareAt?: number | string | null;
+  oldPrice?: number | string | null;
+};
 export type ProductInput = Omit<Product, "price" | "id" | "created" | "sold"> & { id?: string; sellingPrice: number; created?: number; sold?: number; originalPrice?: number | null };
 export type ProductApiRecord = Omit<Product, "price"> & { sellingPrice: number };
 
@@ -13,13 +22,40 @@ async function getCollection(): Promise<Collection<StoredProduct>> {
   return collection;
 }
 
-function normalizeProduct(product: StoredProduct): Product {
+function parseOriginalPrice(value: StoredProduct["originalPrice"]): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) && value >= 0 ? value : undefined;
+  if (typeof value !== "string") return undefined;
+  const digits = value.replace(/[^\d.]/g, "");
+  if (!digits) return undefined;
+  const parsed = Number(digits);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+export function normalizeProduct(product: StoredProduct): Product {
   const price = product.sellingPrice ?? product.price;
   if (typeof price !== "number" || !Number.isFinite(price) || price < 0) {
     throw new Error(`Product ${product.id} has an invalid selling price`);
   }
-  const { sellingPrice: _sellingPrice, price: _legacyPrice, ...fields } = product;
-  return { ...fields, price };
+  const originalPrice = [
+    product.originalPrice,
+    product.mrp,
+    product.MRP,
+    product.compareAtPrice,
+    product.compareAt,
+    product.oldPrice,
+  ].map(parseOriginalPrice).find((value) => value !== undefined);
+  const {
+    sellingPrice: _sellingPrice,
+    price: _legacyPrice,
+    originalPrice: _originalPrice,
+    mrp: _mrp,
+    MRP: _MRP,
+    compareAtPrice: _compareAtPrice,
+    compareAt: _compareAt,
+    oldPrice: _oldPrice,
+    ...fields
+  } = product;
+  return { ...fields, price, ...(originalPrice === undefined ? {} : { originalPrice }) };
 }
 
 export function toProductApiRecord(product: Product): ProductApiRecord {
@@ -73,8 +109,15 @@ export async function updateProduct(id: string, changes: Partial<Omit<ProductInp
   const setFields: Partial<StoredProduct> = { ...fields };
   setFields.sellingPrice = sellingPrice ?? normalized.price;
   if (originalPrice !== undefined && originalPrice !== null) setFields.originalPrice = originalPrice;
-  const unsetFields: { price: ""; originalPrice?: "" } = { price: "" };
-  if (originalPrice === null) unsetFields.originalPrice = "";
+  const unsetFields: Record<string, ""> = { price: "" };
+  if (originalPrice === null) {
+    unsetFields.originalPrice = "";
+    unsetFields.mrp = "";
+    unsetFields.MRP = "";
+    unsetFields.compareAtPrice = "";
+    unsetFields.compareAt = "";
+    unsetFields.oldPrice = "";
+  }
   const result = await collection.findOneAndUpdate(
     { id },
     { $set: setFields, $unset: unsetFields },
