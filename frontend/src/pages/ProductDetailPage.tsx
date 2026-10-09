@@ -1,10 +1,10 @@
-import { Check, Headphones, Package, ShieldCheck, ShoppingCart, Star, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { Link, useParams } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 
 interface ProductData extends OriginalPriceFields {
@@ -95,12 +95,21 @@ const allCategoryProducts: Record<string, ProductData[]> = {
   ],
 };
 
+const sizeOptions = ["XS", "S", "M", "L", "XL", "XXL"];
+const colorOptions = [
+  { name: "Ivory", value: "#f3efe7" },
+  { name: "Graphite", value: "#1d1d1d" },
+  { name: "Stone", value: "#d6c9b7" },
+  { name: "Charcoal", value: "#575b5f" },
+];
+
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [quantity, setQuantity] = useState(1);
-  const [selectedSize, setSelectedSize] = useState("M");
+  const [selectedSize, setSelectedSize] = useState("");
+  const [selectedColor, setSelectedColor] = useState(colorOptions[0].name);
   const [selectedImage, setSelectedImage] = useState("");
-  const [activeInfoTab, setActiveInfoTab] = useState<"description" | "additional">("description");
+  const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [headerCartCount, setHeaderCartCount] = useState(0);
   const [cart, setCart] = useState<Record<string, number>>(() => {
     try {
@@ -110,17 +119,24 @@ export default function ProductDetailPage() {
     }
   });
   const [isAdded, setIsAdded] = useState(false);
+  const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
+  const [sizeError, setSizeError] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [pincodeFeedback, setPincodeFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({
+    kind: "idle",
+    message: "",
+  });
 
   useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
-    setHeaderCartCount(Object.values(cart).reduce((total, quantity) => total + quantity, 0));
+    setHeaderCartCount(Object.values(cart).reduce((total, quantityValue) => total + quantityValue, 0));
   }, [cart]);
 
   useEffect(() => {
     const syncHeaderCart = () => {
       try {
         const savedCart = JSON.parse(window.localStorage.getItem("tribull-cart") || "{}") as Record<string, number>;
-        setHeaderCartCount(Object.values(savedCart).reduce((total, quantity) => total + quantity, 0));
+        setHeaderCartCount(Object.values(savedCart).reduce((total, quantityValue) => total + quantityValue, 0));
       } catch {
         setHeaderCartCount(0);
       }
@@ -145,21 +161,62 @@ export default function ProductDetailPage() {
   const product = linkedProduct ?? categoryProducts[index];
 
   useEffect(() => {
-    if (product?.image) setSelectedImage(product.image);
+    if (product?.image) {
+      setSelectedImage(product.image);
+      setSelectedColor((current) => current || colorOptions[0].name);
+    }
   }, [product?.image]);
 
   if (!product) return <div className="p-8">Product not found.</div>;
 
-  const galleryImages = Array.from(new Set([
+  const galleryImages = useMemo(() => Array.from(new Set([
     product.image,
     ...categoryProducts.map((item) => item.image),
     "/products/front-white.png",
     "/products/flat-white.png",
     "/products/hanger-white.png",
-  ])).slice(0, 4);
+  ])).slice(0, 5), [categoryProducts, product.image]);
 
-  const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
+  const selectedImageIndex = Math.max(0, galleryImages.indexOf(selectedImage || product.image));
+  const priceValue = Number(product.price.replace(/[^0-9]/g, ""));
+  const originalPriceValue = resolveOriginalPrice(product);
+  const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
+  const recommendationPool = [
+    ...categoryProducts.filter((_, productIndex) => productIndex !== index),
+    ...Object.entries(allCategoryProducts)
+      .filter(([productCategory]) => productCategory !== category)
+      .flatMap(([, items]) => items),
+  ].slice(0, 4);
+
+  const productDescription = `${product.name} is a premium ${product.category.toLowerCase()} staple designed for elevated daily wear. Built with a soft cotton blend, durable print finish, and an easy, relaxed silhouette for all-day comfort.`;
+
+  const benefitItems = [
+    { title: "Fabric Quality", detail: "Premium cotton feel with breathable comfort" },
+    { title: "Fit & Comfort", detail: "Relaxed silhouette built for everyday movement" },
+    { title: "Print & Finish", detail: "Detailed artwork with a clean, lasting finish" },
+  ];
+
+  const accordionMap = {
+    details: {
+      title: "Product Details",
+      content: "Crafted for everyday streetwear rotation, this tee balances soft-touch comfort with understated structure. The fabric is breathable, durable, and printed to stay fresh through repeat wear.",
+    },
+    fit: {
+      title: "Fit & Care",
+      content: "Standard fit with a roomier silhouette. Machine wash cold with like colors, inside out. Avoid direct ironing on the print and do not use bleach.",
+    },
+    shipping: {
+      title: "Shipping & Returns",
+      content: "Dispatch within 24–48 hours. Easy exchanges within eligible return windows for unworn items. Delivery estimates vary by PIN code and courier availability.",
+    },
+  } as const;
+
   const addCurrentProductToCart = (source?: HTMLElement) => {
+    if (!selectedSize) {
+      setSizeError("Please select a size before adding to cart.");
+      return;
+    }
+
     const productId = `${category}-${index}`;
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -167,236 +224,329 @@ export default function ProductDetailPage() {
         ...cartItems,
         [productId]: {
           name: product.name,
-          price: Number(product.price.replace(/[^0-9]/g, "")),
-          originalPrice: resolveOriginalPrice(product),
+          price: priceValue,
+          originalPrice: originalPriceNumber,
           image: selectedImage || product.image,
-          variant: `Size: ${selectedSize}`,
+          variant: `Size: ${selectedSize} / ${selectedColor}`,
         },
       }));
     } catch {
-      // Keep the existing quantity cart usable if metadata storage is unavailable.
+      // Keep the cart usable if metadata storage is unavailable.
     }
+
     setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + quantity }));
     window.dispatchEvent(new Event("tribull-cart-updated"));
+    setSizeError("");
     if (source) animateAddToCart(source, selectedImage || product.image);
     setIsAdded(true);
     window.setTimeout(() => setIsAdded(false), 1200);
   };
 
-  const recommendations = [
-    ...categoryProducts.filter((_, productIndex) => productIndex !== index),
-    ...Object.entries(allCategoryProducts)
-      .filter(([productCategory]) => productCategory !== category)
-      .flatMap(([, items]) => items),
-  ].slice(0, 4);
-  const productDescription = `${product.name} is a premium ${product.category.toLowerCase()} style made for everyday comfort and statement dressing. It features a soft, breathable cotton feel, a durable printed graphic, and an easy fit designed for repeat wear.`;
+  const handlePincodeSubmit = () => {
+    const numericPin = pincode.replace(/\D/g, "");
+
+    if (!/^\d{6}$/.test(numericPin)) {
+      setPincodeFeedback({
+        kind: "error",
+        message: "Please enter a valid 6-digit PIN code.",
+      });
+      return;
+    }
+
+    setPincodeFeedback({
+      kind: "success",
+      message: `Estimated delivery for ${numericPin}: 2–5 business days in this service area.`,
+    });
+  };
+
+  const navigateGallery = (direction: "next" | "prev") => {
+    const currentIndex = selectedImageIndex;
+    const nextIndex = direction === "next" ? (currentIndex + 1) % galleryImages.length : (currentIndex - 1 + galleryImages.length) % galleryImages.length;
+    setSelectedImage(galleryImages[nextIndex]);
+  };
 
   return (
     <div className="product-detail-page">
-      <div className="ticker" aria-label="Announcement"><div className="ticker__track">{Array.from({ length: 7 }).map((_, i) => <span key={i}>100% Cotton.<b>Shop Now</b><i>✦</i></span>)}</div></div>
-      <header className="site-header">
+      <div className="product-detail-page__announcement" aria-label="Announcement">
+        <div className="product-detail-page__announcement-track">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <span key={index}>
+              100% cotton <b>shop now</b> <i>✦</i>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <header className="site-header" aria-label="Main nav">
         <MobileCategoryMenu />
-        <a className="wordmark" href="/" aria-label="Tribull home"><img src="/products/logo.png" alt="TRIBULL" /></a>
+        <a className="wordmark" href="/" aria-label="Tribull home">
+          <img src="/products/logo.png" alt="TRIBULL" />
+        </a>
         <HeaderActions />
       </header>
-      <div className="product-detail-main max-w-7xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-          <div className="flex flex-row items-start gap-4">
-            <div className="flex-1 min-w-0 aspect-square rounded-12 overflow-hidden bg-gray-100 border border-gray-200">
-              <img
-                src={selectedImage || product.image}
-                alt={product.name}
-                className="w-full h-full object-contain"
-              />
+
+      <main className="product-detail-page__main">
+        <div className="product-detail-page__shell">
+          <aside className="product-detail-editorial" aria-label="Brand story">
+            <span className="product-detail-editorial__eyebrow">Tribull Studio</span>
+            <div className="product-detail-editorial__line" aria-hidden="true" />
+            <p>Built for movement, culture, and everyday statement dressing.</p>
+          </aside>
+
+          <section className="product-detail-gallery" aria-label="Product gallery">
+            <div className="product-detail-gallery__status">
+              <span className="product-detail-gallery__label">New Arrival</span>
+              <span className="product-detail-gallery__count">{String(selectedImageIndex + 1).padStart(2, "0")} / {String(galleryImages.length).padStart(2, "0")}</span>
             </div>
 
-            <div className="order-first flex flex-col gap-3 max-h-[520px] overflow-y-auto pr-1">
-              {galleryImages.map((image, i) => (
+            <div className="product-detail-gallery__viewport">
+              <img src={selectedImage || product.image} alt={product.name} />
+            </div>
+
+            <div className="product-detail-gallery__nav">
+              <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image">
+                <ChevronLeft size={18} />
+              </button>
+              <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            <div className="product-detail-gallery__thumbs" aria-label="Product images">
+              {galleryImages.map((image, index) => (
                 <button
-                  key={i}
+                  key={`${image}-${index}`}
                   type="button"
+                  className={selectedImage === image ? "is-active" : ""}
                   onClick={() => setSelectedImage(image)}
-                  className={`flex-shrink-0 w-12 h-12 rounded-lg bg-gray-100 border-2 ${selectedImage === image ? "border-[var(--tribull-green)]" : "border-transparent"} hover:border-gray-400 overflow-hidden`}
+                  aria-label={`View image ${index + 1}`}
                 >
-                  <img
-                    src={image}
-                    alt={`View ${i + 1}`}
-                    className="w-full h-full object-contain"
-                  />
+                  <img src={image} alt={`Product view ${index + 1}`} />
                 </button>
               ))}
             </div>
-          </div>
+          </section>
 
-          <div className="flex flex-col gap-8">
-            <div>
-              <h1 className="text-4xl font-bold mb-4">{product.name}</h1>
+          <section className="product-detail-panel" aria-label="Product information">
+            <div className="product-detail-panel__eyebrow">{product.category}</div>
+            <h1 className="product-detail-panel__heading">{product.name}</h1>
 
-              <div className="flex items-center gap-2 mb-6">
-                <div className="flex gap-1">
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Star
-                      key={i}
-                      size={18}
-                      className="fill-yellow-400 text-yellow-400"
-                    />
-                  ))}
-                </div>
-                <span className="text-sm text-gray-600">41 reviews</span>
+            <div className="product-detail-panel__rating">
+              <div className="product-detail-panel__stars" aria-label="Rated 4.8 out of 5">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star key={star} size={16} fill="currentColor" />
+                ))}
               </div>
-
-              <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} className="product-price--detail" />
+              <span>4.8</span>
+              <small>41 reviews</small>
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold mb-3">SIZE: {selectedSize}</label>
-              <div className="flex gap-2 flex-wrap">
-                {sizes.map((size) => (
+            <ProductPrice
+              sellingPrice={product.price}
+              originalPrice={resolveOriginalPrice(product)}
+              productName={product.name}
+              className="product-price--detail"
+            />
+
+            <p className="product-detail-panel__description">{productDescription}</p>
+
+            <div className="product-detail-option">
+              <div className="product-detail-option__header">
+                <span>Colour</span>
+                <b>{selectedColor}</b>
+              </div>
+              <div className="product-detail-swatches" aria-label="Colour selector">
+                {colorOptions.map((option) => (
                   <button
-                    key={size}
-                    onClick={() => setSelectedSize(size)}
-                    className={`product-detail-size-button flex h-10 w-10 items-center justify-center rounded-full border font-medium transition ${
-                      selectedSize === size
-                        ? "border-[#333333] bg-[#333333] text-white active:text-white focus:text-white"
-                        : "border-[#6b7280] bg-[#6b7280] text-white hover:border-[#333333] hover:bg-[#333333]"
-                    }`}
+                    key={option.name}
+                    className={selectedColor === option.name ? "is-selected" : ""}
+                    type="button"
+                    onClick={() => setSelectedColor(option.name)}
+                    aria-label={`Select ${option.name}`}
+                    title={option.name}
+                    style={{ background: option.value }}
                   >
-                    {size}
+                    <span aria-hidden="true" />
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="flex gap-4 items-center">
-              <div className="flex items-center gap-4 border border-gray-300 rounded px-3 py-2">
-                <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="rounded bg-transparent px-2 text-[var(--tribull-green)] font-bold hover:bg-transparent"
-                >
-                  −
+            <div className="product-detail-option">
+              <div className="product-detail-option__header">
+                <span>Size</span>
+                {selectedSize ? <b>{selectedSize}</b> : <button type="button" className="product-detail-option__guide" onClick={() => setIsSizeGuideOpen(true)}>Size guide</button>}
+              </div>
+
+              <div className="product-detail-sizes">
+                {sizeOptions.map((size) => (
+                  <button
+                    key={size}
+                    type="button"
+                    className={selectedSize === size ? "is-selected" : ""}
+                    onClick={() => {
+                      setSelectedSize(size);
+                      setSizeError("");
+                    }}
+                  >
+                    {size}
+                  </button>
+                ))}
+              </div>
+              {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
+            </div>
+
+            <div className="product-detail-cta-row">
+              <div className="product-detail-qty" aria-label="Quantity selector">
+                <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
+                  <Minus size={16} />
                 </button>
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Math.max(1, Number.parseInt(e.target.value, 10) || 1))}
-                  className="w-12 text-center border-0 outline-none"
-                  min="1"
-                />
-                <button
-                  onClick={() => setQuantity(quantity + 1)}
-                  className="rounded bg-transparent px-2 text-[var(--tribull-green)] font-bold hover:bg-transparent"
-                >
-                  +
+                <span>{quantity}</span>
+                <button type="button" onClick={() => setQuantity((current) => current + 1)} aria-label="Increase quantity">
+                  <Plus size={16} />
                 </button>
               </div>
 
-              <button onClick={(event) => addCurrentProductToCart(event.currentTarget)} className={`product-detail-add-to-cart flex-1 bg-[#333333] hover:bg-[#222222] text-white active:text-white focus:text-white font-bold py-3 px-6 rounded flex items-center justify-center gap-2 transition ${isAdded ? "bg-[#444444] text-white" : ""}`}>
-                {isAdded ? <Check size={20} /> : <ShoppingCart size={20} />}
-                {isAdded ? "ADDED TO CART" : "ADD TO CART"}
+              <button
+                type="button"
+                className="product-detail-add-to-cart"
+                onClick={(event) => addCurrentProductToCart(event.currentTarget)}
+              >
+                {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
+                {isAdded ? "Added to cart" : "Add to cart"}
+                <ArrowRight size={18} />
               </button>
             </div>
 
-            <div className="product-detail-delivery">
-              <div className="product-detail-delivery__title"><Package size={20} /> <span>Estimated Delivery Date</span></div>
-              <div className="product-detail-delivery__form">
-                <input type="text" inputMode="numeric" maxLength={6} placeholder="Enter Pincode" aria-label="Enter pincode" />
-                <button type="button">Check</button>
+            <div className="product-detail-pincode">
+              <label htmlFor="product-pin">Delivery check</label>
+              <div className="product-detail-pincode__field">
+                <input
+                  id="product-pin"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pincode}
+                  placeholder="Enter 6-digit PIN"
+                  onChange={(event) => setPincode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+                <button type="button" onClick={handlePincodeSubmit}>Check</button>
               </div>
-              <div className="product-detail-delivery__powered">Powered by <strong>Tribull Delivery</strong></div>
+              {pincodeFeedback.kind !== "idle" ? (
+                <p className={pincodeFeedback.kind === "success" ? "is-success" : "is-error"}>{pincodeFeedback.message}</p>
+              ) : (
+                <p className="product-detail-pincode__hint">Service checks are configured for supported delivery zones.</p>
+              )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-gray-200">
-              <div className="text-center">
-                <ShieldCheck className="mx-auto mb-2" size={24} />
-                <div className="text-xs font-semibold">Premium Quality</div>
-              </div>
-              <div className="text-center">
-                <Truck className="mx-auto mb-2" size={24} />
-                <div className="text-xs font-semibold">Free Shipping</div>
-              </div>
-              <div className="text-center">
-                <ShieldCheck className="mx-auto mb-2" size={24} />
-                <div className="text-xs font-semibold">2-Day Delivery</div>
-              </div>
-              <div className="text-center">
-                <Headphones className="mx-auto mb-2" size={24} />
-                <div className="text-xs font-semibold">24/7 Support</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <section className="product-detail-description" aria-labelledby="product-description">
-        <div className="product-detail-description__tabs">
-          <button type="button" className={activeInfoTab === "description" ? "is-active" : ""} onClick={() => setActiveInfoTab("description")}>Description</button>
-          <button type="button" className={activeInfoTab === "additional" ? "is-active" : ""} onClick={() => setActiveInfoTab("additional")}>Additional Information</button>
-        </div>
-        {activeInfoTab === "description" ? (
-          <div className="product-detail-description__body">
-            <p>{productDescription}</p>
-            <p><strong>Note:</strong> Printed T-shirts and hoodies are not embroidered.</p>
-            <p><strong>Wash Note:</strong> Machine wash in cold water with mild detergent. Dry in the shade, do not iron directly on the print, do not bleach, and do not tumble dry.</p>
-            <p><strong>Standard Sizing:</strong> We follow standard sizing across our collections.</p>
-            <p><strong>Estimated Order Processing Time:</strong> 24 to 48 hours</p>
-            <p><strong>Estimated Delivery Time:</strong> Depends on the delivery location.</p>
-          </div>
-        ) : (
-          <div className="product-detail-information-table">
-            <div><strong>Size</strong><span>S, M, L, XL, 2XL</span></div>
-          </div>
-        )}
-      </section>
-
-      <section className="product-detail-recommendations" aria-labelledby="you-may-also-like">
-        <div className="product-detail-recommendations__heading">
-          <h2 id="you-may-also-like">You May Also Like</h2>
-        </div>
-        <div className="product-detail-recommendations__grid">
-          {recommendations.map((recommendation, recommendationIndex) => (
-            <Link
-              key={`${recommendation.name}-${recommendationIndex}`}
-              href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendation.image)}`}
-              className="product-detail-recommendation-card"
-            >
-              <img src={recommendation.image} alt={recommendation.name} loading="lazy" />
-              <h3>{recommendation.name}</h3>
-              <ProductPrice sellingPrice={recommendation.price} originalPrice={resolveOriginalPrice(recommendation)} productName={recommendation.name} />
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      <section className="product-detail-reviews" aria-labelledby="customer-reviews">
-        <h2 id="customer-reviews">Customer Reviews</h2>
-        <div className="product-detail-reviews__content">
-          <div className="product-detail-reviews__summary">
-            <div className="product-detail-reviews__rating">
-              <div className="product-detail-reviews__stars">
-                {[1, 2, 3, 4].map((star) => <Star key={star} size={22} fill="currentColor" />)}
-                <Star size={22} fill="currentColor" />
-              </div>
-              <span>4.33 out of 5</span>
-            </div>
-            <p>Based on 3 reviews</p>
-          </div>
-          <div className="product-detail-reviews__breakdown" aria-label="Rating breakdown">
-            {[5, 4, 3, 2, 1].map((rating, index) => (
-              <div className="product-detail-reviews__breakdown-row" key={rating}>
-                <div className="product-detail-reviews__small-stars">
-                  {Array.from({ length: 5 }, (_, starIndex) => <Star key={starIndex} size={18} fill={starIndex < rating ? "currentColor" : "none"} />)}
+            <div className="product-detail-features" aria-label="Performance details">
+              {[
+                { icon: ShieldCheck, label: "Premium quality" },
+                { icon: Truck, label: "Free shipping" },
+                { icon: PackageCheck, label: "Express dispatch" },
+                { icon: Sparkles, label: "Limited edit" },
+              ].map(({ icon: Icon, label }) => (
+                <div key={label} className="product-detail-feature">
+                  <Icon size={18} />
+                  <span>{label}</span>
                 </div>
-                <span className={`product-detail-reviews__bar product-detail-reviews__bar--${index}`} />
-                <span>{index === 0 ? 1 : index === 1 ? 2 : 0}</span>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <section className="product-detail-benefits" aria-label="Product benefits">
+          {benefitItems.map((benefit) => (
+            <div key={benefit.title} className="product-detail-benefit">
+              <span>{benefit.title}</span>
+              <small>{benefit.detail}</small>
+            </div>
+          ))}
+        </section>
+
+        <section className="product-detail-info" aria-label="Product details and policies">
+          <div className="product-detail-info__tabs" role="tablist" aria-label="Product info tabs">
+            {Object.entries(accordionMap).map(([key, item]) => {
+              const isActive = activeInfoTab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  className={isActive ? "is-active" : ""}
+                  onClick={() => setActiveInfoTab(key as typeof activeInfoTab)}
+                >
+                  {item.title}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="product-detail-info__panel">
+            {Object.entries(accordionMap).map(([key, item]) => (
+              <div key={key} className={activeInfoTab === key ? "is-visible" : ""}>
+                {activeInfoTab === key ? <p>{item.content}</p> : null}
               </div>
             ))}
           </div>
-          <div className="product-detail-reviews__action">
-            <button type="button" className="product-detail-reviews__button">Write a review</button>
+        </section>
+
+        <section className="product-detail-recommendations" aria-labelledby="you-may-also-like">
+          <div className="product-detail-recommendations__header">
+            <p>Recommended picks</p>
+            <h2 id="you-may-also-like">You may also like</h2>
+          </div>
+
+          <div className="product-detail-recommendations__grid">
+            {recommendationPool.map((recommendation, recommendationIndex) => (
+              <Link
+                key={`${recommendation.name}-${recommendationIndex}`}
+                href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendation.image)}`}
+                className="product-detail-recommendation-card"
+              >
+                <img src={recommendation.image} alt={recommendation.name} loading="lazy" />
+                <div>
+                  <h3>{recommendation.name}</h3>
+                  <ProductPrice
+                    sellingPrice={recommendation.price}
+                    originalPrice={resolveOriginalPrice(recommendation)}
+                    productName={recommendation.name}
+                  />
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      </main>
+
+      {isSizeGuideOpen ? (
+        <div className="product-detail-guides" aria-modal="true" role="dialog" aria-label="Size guide">
+          <div className="product-detail-guides__panel">
+            <div className="product-detail-guides__header">
+              <h3>Size guide</h3>
+              <button type="button" onClick={() => setIsSizeGuideOpen(false)} aria-label="Close size guide">
+                <ChevronUp size={18} />
+              </button>
+            </div>
+            <div className="product-detail-guides__grid">
+              {[
+                ["XS", "Chest 34\" / Length 26\""],
+                ["S", "Chest 36\" / Length 27\""],
+                ["M", "Chest 38\" / Length 28\""],
+                ["L", "Chest 40\" / Length 29\""],
+                ["XL", "Chest 42\" / Length 30\""],
+                ["XXL", "Chest 44\" / Length 31\""],
+              ].map(([size, measurements]) => (
+                <div key={size} className="product-detail-guides__row">
+                  <span>{size}</span>
+                  <small>{measurements}</small>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </section>
-
+      ) : null}
     </div>
   );
 }
