@@ -4,7 +4,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { Link, useParams } from "wouter";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 
 interface ProductData extends OriginalPriceFields {
@@ -96,6 +96,14 @@ const allCategoryProducts: Record<string, ProductData[]> = {
 };
 
 const sizeOptions = ["XS", "S", "M", "L", "XL", "XXL"];
+const productImageViews = [
+  { label: "Full view", position: "50% 50%", zoom: 1 },
+  { label: "Upper detail", position: "50% 22%", zoom: 1.2 },
+  { label: "Fabric detail", position: "50% 43%", zoom: 1.55 },
+  { label: "Side detail", position: "24% 50%", zoom: 1.3 },
+  { label: "Sleeve detail", position: "76% 48%", zoom: 1.3 },
+  { label: "Lower detail", position: "50% 78%", zoom: 1.2 },
+];
 const colorOptions = [
   { name: "Ivory", value: "#f3efe7" },
   { name: "Graphite", value: "#1d1d1d" },
@@ -108,8 +116,9 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState(colorOptions[0].name);
-  const [selectedImage, setSelectedImage] = useState("");
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
+  const [isInfoOpen, setIsInfoOpen] = useState(true);
   const [headerCartCount, setHeaderCartCount] = useState(0);
   const [cart, setCart] = useState<Record<string, number>>(() => {
     try {
@@ -162,25 +171,17 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (product?.image) {
-      setSelectedImage(product.image);
+      setSelectedImageIndex(0);
       setSelectedColor((current) => current || colorOptions[0].name);
     }
   }, [product?.image]);
 
   if (!product) return <div className="p-8">Product not found.</div>;
 
-  const galleryImages = useMemo(() => Array.from(new Set([
-    product.image,
-    ...categoryProducts.map((item) => item.image),
-    "/products/front-white.png",
-    "/products/flat-white.png",
-    "/products/hanger-white.png",
-  ])).slice(0, 5), [categoryProducts, product.image]);
-
-  const selectedImageIndex = Math.max(0, galleryImages.indexOf(selectedImage || product.image));
   const priceValue = Number(product.price.replace(/[^0-9]/g, ""));
   const originalPriceValue = resolveOriginalPrice(product);
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
+  const memberPrice = Math.floor(priceValue * 0.95);
   const recommendationPool = [
     ...categoryProducts.filter((_, productIndex) => productIndex !== index),
     ...Object.entries(allCategoryProducts)
@@ -191,9 +192,11 @@ export default function ProductDetailPage() {
   const productDescription = `${product.name} is a premium ${product.category.toLowerCase()} staple designed for elevated daily wear. Built with a soft cotton blend, durable print finish, and an easy, relaxed silhouette for all-day comfort.`;
 
   const benefitItems = [
-    { title: "Fabric Quality", detail: "Premium cotton feel with breathable comfort" },
-    { title: "Fit & Comfort", detail: "Relaxed silhouette built for everyday movement" },
-    { title: "Print & Finish", detail: "Detailed artwork with a clean, lasting finish" },
+    { title: "Fit", detail: "Relaxed" },
+    { title: "Collar", detail: "Classic" },
+    { title: "Occasion", detail: "Casual" },
+    { title: "Fabric", detail: "Cotton blend" },
+    { title: "Style", detail: product.category },
   ];
 
   const accordionMap = {
@@ -226,7 +229,7 @@ export default function ProductDetailPage() {
           name: product.name,
           price: priceValue,
           originalPrice: originalPriceNumber,
-          image: selectedImage || product.image,
+          image: product.image,
           variant: `Size: ${selectedSize} / ${selectedColor}`,
         },
       }));
@@ -237,7 +240,7 @@ export default function ProductDetailPage() {
     setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + quantity }));
     window.dispatchEvent(new Event("tribull-cart-updated"));
     setSizeError("");
-    if (source) animateAddToCart(source, selectedImage || product.image);
+    if (source) animateAddToCart(source, product.image);
     setIsAdded(true);
     window.setTimeout(() => setIsAdded(false), 1200);
   };
@@ -261,8 +264,10 @@ export default function ProductDetailPage() {
 
   const navigateGallery = (direction: "next" | "prev") => {
     const currentIndex = selectedImageIndex;
-    const nextIndex = direction === "next" ? (currentIndex + 1) % galleryImages.length : (currentIndex - 1 + galleryImages.length) % galleryImages.length;
-    setSelectedImage(galleryImages[nextIndex]);
+    const nextIndex = direction === "next"
+      ? (currentIndex + 1) % productImageViews.length
+      : (currentIndex - 1 + productImageViews.length) % productImageViews.length;
+    setSelectedImageIndex(nextIndex);
   };
 
   return (
@@ -287,48 +292,59 @@ export default function ProductDetailPage() {
 
       <main className="product-detail-page__main">
         <div className="product-detail-page__shell">
-          <aside className="product-detail-editorial" aria-label="Brand story">
-            <span className="product-detail-editorial__eyebrow">Tribull Studio</span>
-            <div className="product-detail-editorial__line" aria-hidden="true" />
-            <p>Built for movement, culture, and everyday statement dressing.</p>
-          </aside>
-
           <section className="product-detail-gallery" aria-label="Product gallery">
             <div className="product-detail-gallery__status">
-              <span className="product-detail-gallery__label">New Arrival</span>
-              <span className="product-detail-gallery__count">{String(selectedImageIndex + 1).padStart(2, "0")} / {String(galleryImages.length).padStart(2, "0")}</span>
+              <span className="product-detail-gallery__label">Tribull Studio</span>
+              <span className="product-detail-gallery__count">{String(selectedImageIndex + 1).padStart(2, "0")} / {String(productImageViews.length).padStart(2, "0")}</span>
             </div>
 
-            <div className="product-detail-gallery__viewport">
-              <img src={selectedImage || product.image} alt={product.name} />
-            </div>
-
-            <div className="product-detail-gallery__nav">
-              <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image">
-                <ChevronLeft size={18} />
-              </button>
-              <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image">
-                <ChevronRight size={18} />
-              </button>
-            </div>
-
-            <div className="product-detail-gallery__thumbs" aria-label="Product images">
-              {galleryImages.map((image, index) => (
+            <div className="product-detail-gallery__body">
+              <div className="product-detail-gallery__thumbs" aria-label="Product image views">
+                {productImageViews.map((view, viewIndex) => (
                 <button
-                  key={`${image}-${index}`}
+                  key={view.label}
                   type="button"
-                  className={selectedImage === image ? "is-active" : ""}
-                  onClick={() => setSelectedImage(image)}
-                  aria-label={`View image ${index + 1}`}
+                  className={selectedImageIndex === viewIndex ? "is-active" : ""}
+                  onClick={() => setSelectedImageIndex(viewIndex)}
+                  aria-label={`View ${view.label.toLowerCase()}`}
+                  aria-pressed={selectedImageIndex === viewIndex}
                 >
-                  <img src={image} alt={`Product view ${index + 1}`} />
+                  <img
+                    src={product.image}
+                    alt=""
+                    aria-hidden="true"
+                    style={{ objectPosition: view.position, transform: `scale(${view.zoom})` }}
+                  />
                 </button>
               ))}
+              </div>
+
+              <div className="product-detail-gallery__media">
+                <div className="product-detail-gallery__viewport">
+                  <img
+                    src={product.image}
+                    alt={`${product.name} — ${productImageViews[selectedImageIndex].label}`}
+                    style={{
+                      objectPosition: productImageViews[selectedImageIndex].position,
+                      transform: `scale(${productImageViews[selectedImageIndex].zoom})`,
+                    }}
+                  />
+                  <span className="product-detail-gallery__dispatch">Dispatch within <b>24 hours</b></span>
+                </div>
+                <div className="product-detail-gallery__nav">
+                  <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view">
+                    <ChevronLeft size={18} />
+                  </button>
+                  <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image view">
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
 
           <section className="product-detail-panel" aria-label="Product information">
-            <div className="product-detail-panel__eyebrow">{product.category}</div>
+            <div className="product-detail-panel__eyebrow">{product.category} <span>·</span> SKU: {category.toUpperCase()}-{String(index + 1).padStart(3, "0")}</div>
             <h1 className="product-detail-panel__heading">{product.name}</h1>
 
             <div className="product-detail-panel__rating">
@@ -337,8 +353,7 @@ export default function ProductDetailPage() {
                   <Star key={star} size={16} fill="currentColor" />
                 ))}
               </div>
-              <span>4.8</span>
-              <small>41 reviews</small>
+              <span>4.8 <small>· 41 reviews</small></span>
             </div>
 
             <ProductPrice
@@ -347,43 +362,31 @@ export default function ProductDetailPage() {
               productName={product.name}
               className="product-price--detail"
             />
+            <p className="product-detail-tax-note">Tax included.</p>
 
             <p className="product-detail-panel__description">{productDescription}</p>
 
-            <div className="product-detail-option">
-              <div className="product-detail-option__header">
-                <span>Colour</span>
-                <b>{selectedColor}</b>
-              </div>
-              <div className="product-detail-swatches" aria-label="Colour selector">
-                {colorOptions.map((option) => (
-                  <button
-                    key={option.name}
-                    className={selectedColor === option.name ? "is-selected" : ""}
-                    type="button"
-                    onClick={() => setSelectedColor(option.name)}
-                    aria-label={`Select ${option.name}`}
-                    title={option.name}
-                    style={{ background: option.value }}
-                  >
-                    <span aria-hidden="true" />
-                  </button>
-                ))}
-              </div>
+            <div className="product-detail-member-price">
+              <span>Member price <b>₹{memberPrice.toLocaleString("en-IN")}</b></span>
+              <small>Join the Tribull community for member-only savings.</small>
             </div>
 
             <div className="product-detail-option">
               <div className="product-detail-option__header">
                 <span>Size</span>
-                {selectedSize ? <b>{selectedSize}</b> : <button type="button" className="product-detail-option__guide" onClick={() => setIsSizeGuideOpen(true)}>Size guide</button>}
+                <button type="button" className="product-detail-option__guide" onClick={() => setIsSizeGuideOpen(true)}>Size guide</button>
+              </div>
+              <div className="product-detail-size-summary">
+                <span>{selectedSize ? `Selected: ${selectedSize}` : "Choose your size"}</span>
               </div>
 
               <div className="product-detail-sizes">
-                {sizeOptions.map((size) => (
+                {["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"].map((size) => (
                   <button
                     key={size}
                     type="button"
-                    className={selectedSize === size ? "is-selected" : ""}
+                    className={`${selectedSize === size ? "is-selected" : ""} ${["3XL", "4XL", "5XL"].includes(size) ? "is-unavailable" : ""}`.trim()}
+                    disabled={["3XL", "4XL", "5XL"].includes(size)}
                     onClick={() => {
                       setSelectedSize(size);
                       setSizeError("");
@@ -394,6 +397,25 @@ export default function ProductDetailPage() {
                 ))}
               </div>
               {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
+            </div>
+
+            <section className="product-detail-offers" aria-label="Offers">
+              <h2>Best offers for you</h2>
+              <div className="product-detail-offers__grid">
+                <div className="product-detail-offer">
+                  <p><b>10% off</b> your first order. Minimum order value ₹999.</p>
+                  <div><span>Coupon code</span><strong>FIRST10</strong></div>
+                </div>
+                <div className="product-detail-offer product-detail-offer--muted">
+                  <p>Member-only offers, made for your next favourite.</p>
+                  <div><span>Explore</span><strong>TRIBULL CLUB</strong></div>
+                </div>
+              </div>
+            </section>
+
+            <div className="product-detail-return-note">
+              <ShieldCheck size={17} />
+              <span>Easy 10-day return and exchange on this product. No questions asked.</span>
             </div>
 
             <div className="product-detail-cta-row">
@@ -407,11 +429,26 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              <button
-                type="button"
-                className="product-detail-add-to-cart"
-                onClick={(event) => addCurrentProductToCart(event.currentTarget)}
-              >
+              <div className="product-detail-color-option">
+                <span>Colour</span>
+                <div className="product-detail-swatches" aria-label="Colour selector">
+                  {colorOptions.map((option) => (
+                    <button
+                      key={option.name}
+                      className={selectedColor === option.name ? "is-selected" : ""}
+                      type="button"
+                      onClick={() => setSelectedColor(option.name)}
+                      aria-label={`Select ${option.name}`}
+                      title={option.name}
+                      style={{ background: option.value }}
+                    >
+                      <span aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <button type="button" className="product-detail-add-to-cart" onClick={(event) => addCurrentProductToCart(event.currentTarget)}>
                 {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
                 {isAdded ? "Added to cart" : "Add to cart"}
                 <ArrowRight size={18} />
@@ -456,6 +493,7 @@ export default function ProductDetailPage() {
         </div>
 
         <section className="product-detail-benefits" aria-label="Product benefits">
+          <h2>Key highlights</h2>
           {benefitItems.map((benefit) => (
             <div key={benefit.title} className="product-detail-benefit">
               <span>{benefit.title}</span>
@@ -465,37 +503,37 @@ export default function ProductDetailPage() {
         </section>
 
         <section className="product-detail-info" aria-label="Product details and policies">
-          <div className="product-detail-info__tabs" role="tablist" aria-label="Product info tabs">
+          <h2>Product description</h2>
+          <div className="product-detail-info__tabs" aria-label="Product details">
             {Object.entries(accordionMap).map(([key, item]) => {
-              const isActive = activeInfoTab === key;
+              const isActive = activeInfoTab === key && isInfoOpen;
               return (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  className={isActive ? "is-active" : ""}
-                  onClick={() => setActiveInfoTab(key as typeof activeInfoTab)}
-                >
-                  {item.title}
-                </button>
+                <div className={`product-detail-info__item ${isActive ? "is-active" : ""}`} key={key}>
+                  <button
+                    type="button"
+                    aria-expanded={isActive}
+                    onClick={() => {
+                      if (activeInfoTab === key) setIsInfoOpen((open) => !open);
+                      else {
+                        setActiveInfoTab(key as typeof activeInfoTab);
+                        setIsInfoOpen(true);
+                      }
+                    }}
+                  >
+                    <span>{item.title}</span>
+                    {isActive ? <Minus size={17} /> : <Plus size={17} />}
+                  </button>
+                  {isActive ? <p>{item.content}</p> : null}
+                </div>
               );
             })}
-          </div>
-
-          <div className="product-detail-info__panel">
-            {Object.entries(accordionMap).map(([key, item]) => (
-              <div key={key} className={activeInfoTab === key ? "is-visible" : ""}>
-                {activeInfoTab === key ? <p>{item.content}</p> : null}
-              </div>
-            ))}
           </div>
         </section>
 
         <section className="product-detail-recommendations" aria-labelledby="you-may-also-like">
           <div className="product-detail-recommendations__header">
-            <p>Recommended picks</p>
-            <h2 id="you-may-also-like">You may also like</h2>
+            <p>Style it your way</p>
+            <h2 id="you-may-also-like">Frequently bought together</h2>
           </div>
 
           <div className="product-detail-recommendations__grid">
@@ -547,6 +585,21 @@ export default function ProductDetailPage() {
           </div>
         </div>
       ) : null}
+
+      <div className="product-detail-sticky-cart" aria-label="Quick add to cart">
+        <div>
+          <ProductPrice
+            sellingPrice={product.price}
+            originalPrice={resolveOriginalPrice(product)}
+            productName={product.name}
+            className="product-price--sticky"
+          />
+          <small>Tax included.</small>
+        </div>
+        <button type="button" onClick={(event) => addCurrentProductToCart(event.currentTarget)}>
+          {isAdded ? "Added to cart" : "Add to cart"}
+        </button>
+      </div>
     </div>
   );
 }
