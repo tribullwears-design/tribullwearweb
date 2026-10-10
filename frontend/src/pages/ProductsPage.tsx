@@ -11,6 +11,7 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultProducts, type Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
+import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
 
 export type { Product } from "../../../shared/products";
 
@@ -185,6 +186,7 @@ export default function ProductsPage() {
           {visibleProducts.map((product) => {
             const isWishlisted = wishlist.includes(product.id);
             const isAdded = addedProduct === product.id;
+            const hoverImage = getShowcaseProductHoverImage(product.image);
             return (
               <article
                 className="catalog-product-card"
@@ -200,7 +202,8 @@ export default function ProductsPage() {
                 }}
               >
                 <div className="catalog-product-card__image">
-                  <img src={product.image} alt={product.name} loading="lazy" />
+                  <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}

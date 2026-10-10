@@ -96,8 +96,8 @@ const allCategoryProducts: Record<string, ProductData[]> = {
   ],
 };
 
-const sizeOptions = ["XS", "S", "M", "L", "XL", "XXL"];
-const productImageViews = [
+const sizeOptions = ["M", "L", "XL"];
+const croppedProductImageViews = [
   { label: "Full view", position: "50% 50%", zoom: 1 },
   { label: "Upper detail", position: "50% 22%", zoom: 1.2 },
   { label: "Fabric detail", position: "50% 43%", zoom: 1.55 },
@@ -105,18 +105,32 @@ const productImageViews = [
   { label: "Sleeve detail", position: "76% 48%", zoom: 1.3 },
   { label: "Lower detail", position: "50% 78%", zoom: 1.2 },
 ];
-const colorOptions = [
-  { name: "Ivory", value: "#f3efe7" },
-  { name: "Graphite", value: "#1d1d1d" },
-  { name: "Stone", value: "#d6c9b7" },
-  { name: "Charcoal", value: "#575b5f" },
+const blackTShirtImageViews = [
+  { label: "Front view", image: "/products/B1.jpg.jpeg" },
+  { label: "Back view", image: "/products/B2.jpg.jpeg" },
+  { label: "Back detail", image: "/products/B3.jpg.jpeg" },
+  { label: "Collar detail", image: "/products/B4.jpg.jpeg" },
+  { label: "Label detail", image: "/products/B5.jpg.jpeg" },
+  { label: "Size chart", image: "/products/B6.jpg.jpeg" },
 ];
+const whiteTShirtImageViews = [
+  { label: "Front view", image: "/products/W1.jpg.jpeg" },
+  { label: "Back view", image: "/products/W2.jpg.jpeg" },
+  { label: "Back detail", image: "/products/W3.jpg.jpeg" },
+  { label: "Collar detail", image: "/products/W4.jpg.jpeg" },
+  { label: "Label detail", image: "/products/W5.jpg" },
+  { label: "Size chart", image: "/products/W6.jpg.jpeg" },
+];
+const tShirtColors = [
+  { name: "Black", value: "#171717" },
+  { name: "White", value: "#ffffff" },
+] as const;
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState(colorOptions[0].name);
+  const [selectedColor, setSelectedColor] = useState<"Black" | "White" | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [isInfoOpen, setIsInfoOpen] = useState(true);
@@ -169,11 +183,24 @@ export default function ProductDetailPage() {
     category: category || "Tribull",
   } : undefined;
   const product = linkedProduct ?? categoryProducts[index];
+  const isTShirtColorVariant = product?.image === getShowcaseProductImage(0) || product?.image === getShowcaseProductImage(1);
+  const initialColor = product?.image === getShowcaseProductImage(1) ? "White" : "Black";
+  const activeColor = selectedColor ?? initialColor;
+  const productImageViews = isTShirtColorVariant
+    ? activeColor === "Black" ? blackTShirtImageViews : whiteTShirtImageViews
+    : croppedProductImageViews;
+
+  const navigateGallery = (direction: "next" | "prev") => {
+    const nextIndex = direction === "next"
+      ? (selectedImageIndex + 1) % productImageViews.length
+      : (selectedImageIndex - 1 + productImageViews.length) % productImageViews.length;
+    setSelectedImageIndex(nextIndex);
+  };
 
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor((current) => current || colorOptions[0].name);
+      setSelectedColor(product.image === getShowcaseProductImage(1) ? "White" : "Black");
     }
   }, [product?.image]);
 
@@ -230,8 +257,10 @@ export default function ProductDetailPage() {
           name: product.name,
           price: priceValue,
           originalPrice: originalPriceNumber,
-          image: product.image,
-          variant: `Size: ${selectedSize} / ${selectedColor}`,
+          image: isTShirtColorVariant
+            ? activeColor === "Black" ? blackTShirtImageViews[0].image : whiteTShirtImageViews[0].image
+            : product.image,
+          variant: `Size: ${selectedSize}${isTShirtColorVariant ? ` / Colour: ${activeColor}` : ""}`,
         },
       }));
     } catch {
@@ -261,14 +290,6 @@ export default function ProductDetailPage() {
       kind: "success",
       message: `Estimated delivery for ${numericPin}: 2–5 business days in this service area.`,
     });
-  };
-
-  const navigateGallery = (direction: "next" | "prev") => {
-    const currentIndex = selectedImageIndex;
-    const nextIndex = direction === "next"
-      ? (currentIndex + 1) % productImageViews.length
-      : (currentIndex - 1 + productImageViews.length) % productImageViews.length;
-    setSelectedImageIndex(nextIndex);
   };
 
   return (
@@ -311,10 +332,12 @@ export default function ProductDetailPage() {
                   aria-pressed={selectedImageIndex === viewIndex}
                 >
                   <img
-                    src={product.image}
+                    src={"image" in view ? view.image : product.image}
                     alt=""
                     aria-hidden="true"
-                    style={{ objectPosition: view.position, transform: `scale(${view.zoom})` }}
+                    style={"image" in view
+                      ? view.label === "Size chart" ? { objectFit: "contain" } : undefined
+                      : { objectPosition: view.position, transform: `scale(${view.zoom})` }}
                   />
                 </button>
               ))}
@@ -323,9 +346,11 @@ export default function ProductDetailPage() {
               <div className="product-detail-gallery__media">
                 <div className="product-detail-gallery__viewport">
                   <img
-                    src={product.image}
+                    src={"image" in productImageViews[selectedImageIndex] ? productImageViews[selectedImageIndex].image : product.image}
                     alt={`${product.name} — ${productImageViews[selectedImageIndex].label}`}
-                    style={{
+                    style={"image" in productImageViews[selectedImageIndex]
+                      ? productImageViews[selectedImageIndex].label === "Size chart" ? { objectFit: "contain" } : undefined
+                      : {
                       objectPosition: productImageViews[selectedImageIndex].position,
                       transform: `scale(${productImageViews[selectedImageIndex].zoom})`,
                     }}
@@ -382,12 +407,11 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="product-detail-sizes">
-                {["S", "M", "L", "XL", "2XL", "3XL", "4XL", "5XL"].map((size) => (
+                {sizeOptions.map((size) => (
                   <button
                     key={size}
                     type="button"
-                    className={`${selectedSize === size ? "is-selected" : ""} ${["3XL", "4XL", "5XL"].includes(size) ? "is-unavailable" : ""}`.trim()}
-                    disabled={["3XL", "4XL", "5XL"].includes(size)}
+                    className={selectedSize === size ? "is-selected" : ""}
                     onClick={() => {
                       setSelectedSize(size);
                       setSizeError("");
@@ -430,24 +454,28 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              <div className="product-detail-color-option">
-                <span>Colour</span>
-                <div className="product-detail-swatches" aria-label="Colour selector">
-                  {colorOptions.map((option) => (
-                    <button
-                      key={option.name}
-                      className={selectedColor === option.name ? "is-selected" : ""}
-                      type="button"
-                      onClick={() => setSelectedColor(option.name)}
-                      aria-label={`Select ${option.name}`}
-                      title={option.name}
-                      style={{ background: option.value }}
-                    >
-                      <span aria-hidden="true" />
-                    </button>
-                  ))}
+              {isTShirtColorVariant ? (
+                <div className="product-detail-color-option">
+                  <span>Colour: {activeColor}</span>
+                  <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
+                    {tShirtColors.map((option) => (
+                      <button
+                        key={option.name}
+                        className={activeColor === option.name ? "is-selected" : ""}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColor(option.name);
+                          setSelectedImageIndex(0);
+                        }}
+                        aria-label={`Select ${option.name} T-shirt`}
+                        aria-pressed={activeColor === option.name}
+                        title={option.name}
+                        style={{ background: option.value }}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <button type="button" className="product-detail-add-to-cart" onClick={(event) => addCurrentProductToCart(event.currentTarget)}>
                 {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}

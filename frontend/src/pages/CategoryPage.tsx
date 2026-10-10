@@ -9,7 +9,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 
 export type CategoryProduct = OriginalPriceFields & {
   name: string;
@@ -295,6 +295,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
 
 function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
+  const hoverImage = getShowcaseProductHoverImage(item.image);
   const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`;
 
   return (
@@ -305,7 +306,8 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
         style={{ transitionDelay: `${delay}s` }}
       >
         <div className="category-catalog-card__image-wrap">
-          <img src={item.image} alt={item.name} className="category-page__image" />
+          <img src={item.image} alt={item.name} className="category-page__image product-image-primary" />
+          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="category-page__image product-image-hover" /> : null}
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -553,9 +555,13 @@ export default function CategoryPage() {
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => {
             const image = getShowcaseProductImage(index);
+            const hoverImage = getShowcaseProductHoverImage(image);
             return (
               <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
-                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+                <div className="product-card__image">
+                  <img src={image} alt={item.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                </div>
               </Link>
             );
           })}
@@ -588,9 +594,13 @@ export default function CategoryPage() {
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => {
             const image = getShowcaseProductImage(index);
+            const hoverImage = getShowcaseProductHoverImage(image);
             return (
               <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
-                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+                <div className="product-card__image">
+                  <img src={image} alt={item.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                </div>
               </Link>
             );
           })}
@@ -623,9 +633,13 @@ export default function CategoryPage() {
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => {
             const image = getShowcaseProductImage(index);
+            const hoverImage = getShowcaseProductHoverImage(image);
             return (
               <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
-                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+                <div className="product-card__image">
+                  <img src={image} alt={item.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                </div>
               </Link>
             );
           })}
@@ -658,9 +672,13 @@ export default function CategoryPage() {
         <div className="category-best-selling-grid">
           {catalog.map((item, index) => {
             const image = getShowcaseProductImage(index);
+            const hoverImage = getShowcaseProductHoverImage(image);
             return (
               <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
-                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+                <div className="product-card__image">
+                  <img src={image} alt={item.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                </div>
               </Link>
             );
           })}

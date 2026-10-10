@@ -7,7 +7,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
-import { getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -94,6 +94,7 @@ function Reveal({
 
 function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[]; delay?: number; showMeta?: boolean; href: string }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
+  const hoverImage = getShowcaseProductHoverImage(item[0]);
   return (
     <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`}>
       <article
@@ -101,7 +102,10 @@ function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[
         className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "reveal-visible" : null)}
         style={{ transitionDelay: `${delay}s` }}
       >
-        <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
+        <div className="product-card__image">
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
+          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+        </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} productName={item[1]} /></div>}
       </article>
     </Link>

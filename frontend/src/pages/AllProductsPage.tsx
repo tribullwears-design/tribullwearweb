@@ -7,6 +7,7 @@ import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { allProducts } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
+import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -100,34 +101,38 @@ export default function AllProductsPage() {
         </div>
 
         <section className="all-products-grid" aria-label="All products grid">
-          {allProducts.map((product) => (
-            <article className="all-products-card" key={product.name}>
-              <div className="all-products-card__image">
-                <img src={product.image} alt={product.name} loading="lazy" />
-                <button
-                  className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}
-                  type="button"
-                  aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
-                  aria-pressed={wishlist.includes(product.id)}
-                  onClick={(event) => toggleWishlist(product.id, event.currentTarget)}
-                >
-                  <Heart size={18} fill={wishlist.includes(product.id) ? "currentColor" : "none"} />
-                </button>
-                <button
-                  className={`all-products-card__cart ${addedProduct === product.id ? "is-added" : ""}`}
-                  type="button"
-                  aria-label={`Add ${product.name} to cart`}
-                  onClick={(event) => addToCart(product.id, event.currentTarget)}
-                >
-                  {addedProduct === product.id ? <Check size={17} /> : <ShoppingCart size={17} />}
-                </button>
-              </div>
-              <div className="all-products-card__meta">
-                <h2>{product.name}</h2>
-                <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} />
-              </div>
-            </article>
-          ))}
+          {allProducts.map((product) => {
+            const hoverImage = getShowcaseProductHoverImage(product.image);
+            return (
+              <article className="all-products-card" key={product.name}>
+                <div className="all-products-card__image">
+                  <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                  <button
+                    className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}
+                    type="button"
+                    aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                    aria-pressed={wishlist.includes(product.id)}
+                    onClick={(event) => toggleWishlist(product.id, event.currentTarget)}
+                  >
+                    <Heart size={18} fill={wishlist.includes(product.id) ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    className={`all-products-card__cart ${addedProduct === product.id ? "is-added" : ""}`}
+                    type="button"
+                    aria-label={`Add ${product.name} to cart`}
+                    onClick={(event) => addToCart(product.id, event.currentTarget)}
+                  >
+                    {addedProduct === product.id ? <Check size={17} /> : <ShoppingCart size={17} />}
+                  </button>
+                </div>
+                <div className="all-products-card__meta">
+                  <h2>{product.name}</h2>
+                  <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} />
+                </div>
+              </article>
+            );
+          })}
         </section>
       </main>
     </div>
