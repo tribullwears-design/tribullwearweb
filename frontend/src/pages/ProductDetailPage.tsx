@@ -3,6 +3,7 @@ import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
+import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -537,13 +538,15 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="product-detail-recommendations__grid">
-            {recommendationPool.map((recommendation, recommendationIndex) => (
+            {recommendationPool.map((recommendation, recommendationIndex) => {
+              const recommendationImage = getShowcaseProductImage(recommendationIndex);
+              return (
               <Link
                 key={`${recommendation.name}-${recommendationIndex}`}
-                href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendation.image)}`}
+                href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendationImage)}`}
                 className="product-detail-recommendation-card"
               >
-                <img src={recommendation.image} alt={recommendation.name} loading="lazy" />
+                <img src={recommendationImage} alt={recommendation.name} loading="lazy" />
                 <div>
                   <h3>{recommendation.name}</h3>
                   <ProductPrice
@@ -553,7 +556,8 @@ export default function ProductDetailPage() {
                   />
                 </div>
               </Link>
-            ))}
+              );
+            })}
           </div>
         </section>
       </main>

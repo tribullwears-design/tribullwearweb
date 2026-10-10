@@ -7,6 +7,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -22,10 +23,6 @@ const productImages = {
   frontWhite: "/products/front-white.png",
   hangerWhite: "/products/hanger-white.png",
   flatWhite: "/products/flat-white.png",
-  essentialMensShirt: "/products/essential-mens-shirt.png",
-  essentialTshirts: "/products/essential-tshirts.png",
-  essentialOversized: "/products/essential-oversized.png",
-  essentialHoodies: "/products/essential-hoodies.png",
 };
 
 const newArrivals = [
@@ -255,10 +252,10 @@ export default function Home() {
             <div className="product-grid">
               {newArrivals.map((item, idx) => (
                 <ProductCard
-                  item={item}
+                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
-                  href={`/product/hollywood-${idx}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(item[0])}`}
+                  href={`/product/hollywood-${idx}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
                 />
               ))}
             </div>
@@ -276,10 +273,10 @@ export default function Home() {
             <div className="product-grid product-grid--image-only">
               {bestSelling.map((item, idx) => (
                 <ProductCard
-                  item={item}
+                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
-                  href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(item[0])}`}
+                  href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
                 />
               ))}
             </div>
@@ -303,7 +300,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more with Dudeme!</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img src="/products/tshirt.jpg" alt="Custom graphic T-shirt" />
+              <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" />
             </Reveal>
           </div>
         </div>
@@ -316,30 +313,35 @@ export default function Home() {
           </Reveal>
           <Reveal variant="scale" stagger className="essentials-grid essentials-grid--compact">
             {[
-              { image: productImages.essentialTshirts, label: "Oversized", alt: "Oversized" },
-              { image: productImages.essentialHoodies, label: "Hoodie", alt: "Hoodie" },
-            ].map((item) => (
-              <a key={item.label} href="#footer" className="essential-card parallax-tilt">
-                <div className="essential-card__visual">
-                  <div
-                    className="essential-card__backdrop"
-                    aria-hidden="true"
-                    style={{ backgroundImage: `url("${item.image}")` }}
-                  />
-                  <img src={item.image} alt={item.alt} />
-                </div>
-                <span>{item.label}</span>
-              </a>
-            ))}
+              { label: "Black Tee", alt: "Black T-shirt front and back views" },
+              { label: "White Tee", alt: "White T-shirt front and back views" },
+              { label: "Black Hoodie", alt: "Black hoodie front and back views" },
+              { label: "White Hoodie", alt: "White hoodie front and back views" },
+            ].map((item, index) => {
+              const image = getShowcaseProductImage(index);
+              return (
+                <a key={item.label} href="#footer" className="essential-card parallax-tilt">
+                  <div className="essential-card__visual">
+                    <div
+                      className="essential-card__backdrop"
+                      aria-hidden="true"
+                      style={{ backgroundImage: `url("${image}")` }}
+                    />
+                    <img src={image} alt={item.alt} />
+                  </div>
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
           </Reveal>
         </div>
 
         <div className="bottom-visuals">
           <Reveal variant="scale" stagger>
             <div className="bottom-visuals__grid">
-              <div className="visual-block visual-block--green"><img src={productImages.flatWhite} alt="Graphic spider T-shirt" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(1)} alt="White T-shirt front and back views" /></div>
               <div className="visual-block visual-block--cream"><span className="float-slow">Made for<br /><em>every day.</em></span></div>
-              <div className="visual-block visual-block--green"><img src={productImages.backBlack} alt="Black oversized graphic T-shirt" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(0)} alt="Black T-shirt front and back views" /></div>
             </div>
           </Reveal>
         </div>

@@ -9,6 +9,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
+import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 
 export type CategoryProduct = OriginalPriceFields & {
   name: string;
@@ -42,10 +43,10 @@ function liveCategoryDefinition(categorySlug: string, hierarchy: CategoryHierarc
 }
 
 const rotationImages = [
-  "/products/back-black.png",
-  "/products/flat-white.png",
-  "/products/front-white.png",
-  "/products/hanger-white.png",
+  getShowcaseProductImage(0),
+  getShowcaseProductImage(1),
+  getShowcaseProductImage(2),
+  getShowcaseProductImage(3),
 ];
 
 export const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
@@ -430,10 +431,10 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Signature Print Oversized Tee", price: "₹979", image: rotationImages[1] },
     ],
     "acid-oversized": [
-      { name: "Acid Shadow Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
-      { name: "Acid Signal Oversized Tee", price: "₹1,049", image: "/products/batman.jpg" },
-      { name: "Acid Drift Washed Tee", price: "₹1,099", image: "/products/bollywood.jpg" },
-      { name: "Acid Core Graphic Tee", price: "₹1,149", image: "/products/hollywood.jpg" },
+      { name: "Acid Shadow Washed Tee", price: "₹999", image: rotationImages[0] },
+      { name: "Acid Signal Oversized Tee", price: "₹1,049", image: rotationImages[1] },
+      { name: "Acid Drift Washed Tee", price: "₹1,099", image: rotationImages[0] },
+      { name: "Acid Core Graphic Tee", price: "₹1,149", image: rotationImages[1] },
     ],
     hoodie: [
       { name: "Classic Tribull Hoodie", price: "₹1,299", image: rotationImages[3] },
@@ -511,7 +512,8 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products category-page__grid--catalog">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          const displayItem = { ...item, image: getShowcaseProductImage(index) };
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={displayItem} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(displayItem, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
@@ -549,11 +551,14 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          {catalog.map((item, index) => {
+            const image = getShowcaseProductImage(index);
+            return (
+              <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
+                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
@@ -581,11 +586,14 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          {catalog.map((item, index) => {
+            const image = getShowcaseProductImage(index);
+            return (
+              <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
+                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
@@ -613,11 +621,14 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          {catalog.map((item, index) => {
+            const image = getShowcaseProductImage(index);
+            return (
+              <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
+                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
@@ -645,11 +656,14 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          {catalog.map((item, index) => {
+            const image = getShowcaseProductImage(index);
+            return (
+              <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(image)}`} className="product-card">
+                <div className="product-card__image"><img src={image} alt={item.name} loading="lazy" /></div>
+              </Link>
+            );
+          })}
         </div>
       </div>
     );
