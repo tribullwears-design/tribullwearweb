@@ -424,13 +424,11 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     "round-neck": catalog,
     oversized: [
       { name: "Daily Uniform Oversized Tee", price: "₹799", image: rotationImages[0] },
-      { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[2] },
-      { name: "Heavyweight Essential Tee", price: "₹899", image: rotationImages[1] },
-      { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[3] },
-      { name: "Everyday Core Oversized Tee", price: "₹829", image: rotationImages[2] },
-      { name: "Urban Form Oversized Tee", price: "₹879", image: rotationImages[0] },
-      { name: "Classic Fit Oversized Tee", price: "₹929", image: rotationImages[3] },
-      { name: "Signature Print Oversized Tee", price: "₹979", image: rotationImages[1] },
+      { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[0] },
+      { name: "Heavyweight Essential Tee", price: "₹899", image: rotationImages[0] },
+      { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[1] },
+      { name: "Everyday Core Oversized Tee", price: "₹829", image: rotationImages[1] },
+      { name: "Urban Form Oversized Tee", price: "₹879", image: rotationImages[1] },
     ],
     "acid-oversized": [
       { name: "Acid Shadow Washed Tee", price: "₹999", image: rotationImages[0] },
@@ -439,14 +437,12 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Acid Core Graphic Tee", price: "₹1,149", image: rotationImages[1] },
     ],
     hoodie: [
-      { name: "Classic Tribull Hoodie", price: "₹1,299", image: rotationImages[3] },
-      { name: "Forest Logo Hoodie", price: "₹1,399", image: rotationImages[0] },
-      { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[1] },
-      { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[2] },
-      { name: "Everyday Core Hoodie", price: "₹1,349", image: rotationImages[0] },
-      { name: "Urban Form Hoodie", price: "₹1,449", image: rotationImages[2] },
-      { name: "Classic Pullover Hoodie", price: "₹1,549", image: rotationImages[3] },
-      { name: "Signature Print Hoodie", price: "₹1,649", image: rotationImages[1] },
+      { name: "Classic Tribull Hoodie", price: "₹1,299", image: rotationImages[2] },
+      { name: "Forest Logo Hoodie", price: "₹1,399", image: rotationImages[2] },
+      { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[2] },
+      { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[3] },
+      { name: "Everyday Core Hoodie", price: "₹1,349", image: rotationImages[3] },
+      { name: "Urban Form Hoodie", price: "₹1,449", image: rotationImages[3] },
     ],
   };
 
@@ -514,8 +510,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products category-page__grid--catalog">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          const displayItem = { ...item, image: getShowcaseProductImage(index) };
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={displayItem} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(displayItem, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
