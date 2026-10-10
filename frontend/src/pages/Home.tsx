@@ -317,20 +317,14 @@ export default function Home() {
           </Reveal>
           <Reveal variant="scale" stagger className="essentials-grid essentials-grid--compact">
             {[
-              { label: "Black Tee", alt: "Black T-shirt front and back views" },
-              { label: "White Tee", alt: "White T-shirt front and back views" },
-              { label: "Black Hoodie", alt: "Black hoodie front and back views" },
-              { label: "White Hoodie", alt: "White hoodie front and back views" },
-            ].map((item, index) => {
-              const image = getShowcaseProductImage(index);
+              { label: "Oversized", alt: "Black oversized T-shirt front and back views", imageIndex: 0, theme: "oversized" },
+              { label: "Hoodie", alt: "Black hoodie front and back views", imageIndex: 2, theme: "hoodie" },
+            ].map((item) => {
+              const image = getShowcaseProductImage(item.imageIndex);
               return (
-                <a key={item.label} href="#footer" className="essential-card parallax-tilt">
+                <a key={item.label} href="#footer" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
                   <div className="essential-card__visual">
-                    <div
-                      className="essential-card__backdrop"
-                      aria-hidden="true"
-                      style={{ backgroundImage: `url("${image}")` }}
-                    />
+                    <div className="essential-card__backdrop" aria-hidden="true" />
                     <img src={image} alt={item.alt} />
                   </div>
                   <span>{item.label}</span>
