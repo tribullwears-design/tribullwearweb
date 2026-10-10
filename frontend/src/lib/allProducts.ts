@@ -1,4 +1,5 @@
 import type { OriginalPriceFields } from "./productPrice";
+import { getShowcaseProductImage } from "./storefrontProductImage";
 
 export type AllProduct = OriginalPriceFields & {
   id: string;
@@ -18,4 +19,7 @@ export const allProducts: AllProduct[] = [
   { id: "all-products-hoodie-essential", name: "Hoodie Essential", price: "₹1,299", image: "/products/essential-hoodies.png" },
   { id: "all-products-washed-tee", name: "Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
   { id: "all-products-premium-oversized", name: "Premium Oversized", price: "₹1,099", image: "/products/hanger-white.png" },
-];
+].map((product, index) => ({
+  ...product,
+  image: getShowcaseProductImage(index),
+}));

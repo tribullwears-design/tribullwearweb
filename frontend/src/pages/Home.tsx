@@ -115,9 +115,6 @@ function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[
 export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
-  const heroImgRef = useRef<HTMLImageElement>(null);
-  const heroCopyRef = useRef<HTMLDivElement>(null);
-  const heroStampRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -178,25 +175,6 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  useEffect(() => {
-    let raf = 0;
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y < 1200) {
-          if (heroImgRef.current) heroImgRef.current.style.transform = `translate3d(0, ${y * 0.08}px, 0)`;
-          if (heroCopyRef.current) heroCopyRef.current.style.transform = `translate3d(0, ${y * 0.1}px, 0)`;
-          if (heroStampRef.current) heroStampRef.current.style.transform = `translate3d(0, ${y * 0.16}px, 0) rotate(${y * 0.04}deg)`;
-        }
-        raf = 0;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
       <div className="ticker" aria-label="Announcement">
@@ -228,11 +206,11 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className="hero__images">
             <div className="hero__image">
-              <img ref={heroImgRef} src={brandAssets.hero} alt="Tribull collection" />
+              <img src={brandAssets.hero} alt="Tribull collection" />
             </div>
           </div>
           <div className="hero__wash" />
-          <div className="hero__copy" ref={heroCopyRef}>
+          <div className="hero__copy">
             <Reveal variant="blur" delay={0.1}>
               <p className="eyebrow" style={{ display: 'none' }}>The everyday uniform / 2026</p>
             </Reveal>
@@ -243,7 +221,7 @@ export default function Home() {
               <a className="button button--cream" href="#arrivals" style={{ display: 'none' }}>Shop now <ArrowUpRight size={17} /></a>
             </Reveal>
           </div>
-          <div className="hero__stamp float-fast" ref={heroStampRef}>TRIBULL<br /><span>EST. 2024</span></div>
+          <div className="hero__stamp float-fast">TRIBULL<br /><span>EST. 2024</span></div>
         </section>
 
         <div className="peach-wrapper">

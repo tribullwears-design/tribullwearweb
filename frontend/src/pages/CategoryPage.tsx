@@ -241,38 +241,16 @@ interface CategoryHeroProps {
 }
 
 function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps) {
-  const heroImgRef = useRef<HTMLImageElement>(null);
-  const heroCopyRef = useRef<HTMLDivElement>(null);
-  const heroStampRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let raf = 0;
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y < 800) {
-          if (heroImgRef.current) heroImgRef.current.style.transform = `translate3d(0, ${y * 0.22}px, 0) scale(1.04)`;
-          if (heroCopyRef.current) heroCopyRef.current.style.transform = `translate3d(0, ${y * 0.1}px, 0)`;
-          if (heroStampRef.current) heroStampRef.current.style.transform = `translate3d(0, ${y * 0.16}px, 0) rotate(${y * 0.04}deg)`;
-        }
-        raf = 0;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   return (
     <section className="hero category-hero-section" aria-label={`${title} collection`}>
       <div className="hero__images">
         <div className="hero__image">
-          <img ref={heroImgRef} src={image} alt={`${title} collection hero`} />
+          <img src={image} alt={`${title} collection hero`} />
         </div>
       </div>
       <div className="hero__wash" />
-      <div className="hero__copy" ref={heroCopyRef}>
+      <div className="hero__copy">
         <Reveal variant="blur" delay={0.1}>
           <p className="eyebrow">{subtitle}</p>
         </Reveal>
@@ -285,7 +263,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
           </Reveal>
         )}
       </div>
-      <div className="hero__stamp float-fast" ref={heroStampRef}>
+      <div className="hero__stamp float-fast">
         {title.toUpperCase()}<br />
         <span>EXCLUSIVE</span>
       </div>
@@ -429,6 +407,12 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[1] },
       { name: "Everyday Core Oversized Tee", price: "₹829", image: rotationImages[1] },
       { name: "Urban Form Oversized Tee", price: "₹879", image: rotationImages[1] },
+      { name: "Essential Black Oversized Tee", price: "₹899", image: rotationImages[0] },
+      { name: "Classic Black Oversized Tee", price: "₹929", image: rotationImages[0] },
+      { name: "Relaxed Black Oversized Tee", price: "₹979", image: rotationImages[0] },
+      { name: "Essential White Oversized Tee", price: "₹899", image: rotationImages[1] },
+      { name: "Classic White Oversized Tee", price: "₹929", image: rotationImages[1] },
+      { name: "Relaxed White Oversized Tee", price: "₹979", image: rotationImages[1] },
     ],
     "acid-oversized": [
       { name: "Acid Shadow Washed Tee", price: "₹999", image: rotationImages[0] },
@@ -443,6 +427,12 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[3] },
       { name: "Everyday Core Hoodie", price: "₹1,349", image: rotationImages[3] },
       { name: "Urban Form Hoodie", price: "₹1,449", image: rotationImages[3] },
+      { name: "Essential Black Hoodie", price: "₹1,399", image: rotationImages[2] },
+      { name: "Classic Black Pullover Hoodie", price: "₹1,499", image: rotationImages[2] },
+      { name: "Relaxed Black Hoodie", price: "₹1,549", image: rotationImages[2] },
+      { name: "Essential White Hoodie", price: "₹1,399", image: rotationImages[3] },
+      { name: "Classic White Pullover Hoodie", price: "₹1,499", image: rotationImages[3] },
+      { name: "Relaxed White Hoodie", price: "₹1,549", image: rotationImages[3] },
     ],
   };
 

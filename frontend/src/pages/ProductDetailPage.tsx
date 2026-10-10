@@ -3,7 +3,7 @@ import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -568,13 +568,17 @@ export default function ProductDetailPage() {
           <div className="product-detail-recommendations__grid">
             {recommendationPool.map((recommendation, recommendationIndex) => {
               const recommendationImage = getShowcaseProductImage(recommendationIndex);
+              const recommendationHoverImage = getShowcaseProductHoverImage(recommendationImage);
               return (
               <Link
-                key={`${recommendation.name}-${recommendationIndex}`}
+                key={`${id}-${recommendation.name}-${recommendationIndex}`}
                 href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendationImage)}`}
                 className="product-detail-recommendation-card"
               >
-                <img src={recommendationImage} alt={recommendation.name} loading="lazy" />
+                <div className="product-detail-recommendation-card__image">
+                  <img src={recommendationImage} alt={recommendation.name} className="product-image-primary" loading="lazy" />
+                  {recommendationHoverImage ? <img src={recommendationHoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                </div>
                 <div>
                   <h3>{recommendation.name}</h3>
                   <ProductPrice
