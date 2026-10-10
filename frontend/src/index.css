@@ -3022,7 +3022,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .product-detail-page {
   --detail-ink: #27251f;
   --detail-muted: #77756f;
-  --detail-paper: #f6f4ef;
+  --detail-paper: #ffffff;
   --detail-line: #e9e6de;
   background: var(--detail-paper);
   color: var(--detail-ink);
