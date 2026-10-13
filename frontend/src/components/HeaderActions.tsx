@@ -7,6 +7,7 @@ import ProductPrice from "./ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { allProducts } from "../lib/allProducts";
+import { getLoginUrl } from "../const";
 
 type Cart = Record<string, number>;
 type CartItem = { name: string; price: number; originalPrice?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number; image: string; variant?: string };
@@ -120,6 +121,7 @@ export default function HeaderActions() {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
   const [otpError, setOtpError] = useState("");
+  const [googleSignInError, setGoogleSignInError] = useState("");
   const [demoOtp, setDemoOtp] = useState<string | undefined>();
   const [resendSeconds, setResendSeconds] = useState(0);
   const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
@@ -245,7 +247,18 @@ export default function HeaderActions() {
     setLoginStep("phone");
     setAccountSection("main");
     setOtpError("");
+    setGoogleSignInError("");
     setOverlay("account");
+  };
+
+  const handleGoogleSignIn = () => {
+    try {
+      setGoogleSignInError("");
+      window.location.assign(getLoginUrl());
+    } catch (error) {
+      console.error("Could not start Google sign-in.", error);
+      setGoogleSignInError("Google sign-in is unavailable. Please try phone sign-in or contact support.");
+    }
   };
 
   const beginProfileEdit = () => {
@@ -752,7 +765,8 @@ export default function HeaderActions() {
                   <button className="header-account-modal__submit" type="submit">Get OTP</button>
                 </form>
                 <div className="header-login-divider"><span>OR</span></div>
-                <button className="google-sign-in" type="button" onClick={() => window.alert("Google Sign-In will connect when a Google client ID is configured.")}><GoogleLogo />Continue with Google</button>
+                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn}><GoogleLogo />Continue with Google</button>
+                {googleSignInError && <p className="header-form-error" role="alert">{googleSignInError}</p>}
               </> : <>
                 <p className="otp-instruction">Enter the OTP sent to {countryCode} {phoneNumber.replace(/(\d{5})(\d{5})/, "$1 $2")}</p>
                 <form onSubmit={verifyOtp}>

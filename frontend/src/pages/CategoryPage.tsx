@@ -294,12 +294,6 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           >
             <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
           </button>
-        </div>
-        <div className="category-page__meta">
-          <div>
-            <h2>{item.name}</h2>
-            <ProductPrice sellingPrice={item.price} originalPrice={resolveOriginalPrice(item)} productName={item.name} />
-          </div>
           <button
             type="button"
             className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
@@ -313,6 +307,12 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           >
             {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
           </button>
+        </div>
+        <div className="category-page__meta">
+          <div>
+            <h2>{item.name}</h2>
+            <ProductPrice sellingPrice={item.price} originalPrice={resolveOriginalPrice(item)} productName={item.name} />
+          </div>
         </div>
       </article>
     </Link>
@@ -384,7 +384,6 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   const [cart, setCart] = useState<Record<string, number>>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
   });
-  const [addedProduct, setAddedProduct] = useState<string | null>(null);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -456,7 +455,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
 
   const addToCart = (item: CategoryProduct) => {
     const key = productKey(item);
-    if (addedProduct === key) {
+    if ((cart[key] || 0) > 0) {
       window.dispatchEvent(new Event("tribull-open-cart"));
       return;
     }
@@ -475,7 +474,6 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       window.dispatchEvent(new Event("tribull-cart-updated"));
       return nextCart;
     });
-    setAddedProduct(key);
   };
 
   return (
@@ -506,7 +504,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products category-page__grid--catalog">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={(cart[key] || 0) > 0} />;
         })}
       </div>
     </>

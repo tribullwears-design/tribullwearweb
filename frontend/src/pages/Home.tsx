@@ -1,8 +1,8 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
-import { useEffect, useRef, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
@@ -94,17 +94,44 @@ function Reveal({
 
 function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[]; delay?: number; showMeta?: boolean; href: string }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
+  const [, setLocation] = useLocation();
+  const [isOpening, setIsOpening] = useState(false);
+  const openingTimer = useRef<number | null>(null);
   const hoverImage = getShowcaseProductHoverImage(item[0]);
+
+  useEffect(() => () => {
+    if (openingTimer.current !== null) window.clearTimeout(openingTimer.current);
+  }, []);
+
+  const handleProductClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+      || event.detail === 0
+      || !window.matchMedia("(hover: none) and (pointer: coarse)").matches
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) return;
+
+    event.preventDefault();
+    if (isOpening) return;
+    setIsOpening(true);
+    openingTimer.current = window.setTimeout(() => setLocation(href), 520);
+  };
+
   return (
-    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`}>
+    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
       <article
         ref={ref}
-        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "reveal-visible" : null)}
-        style={{ transitionDelay: `${delay}s` }}
+        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null, hoverImage ? "has-tap-preview" : null)}
+        style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
       >
         <div className="product-card__image">
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
-          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="eager" /> : null}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} productName={item[1]} /></div>}
       </article>
