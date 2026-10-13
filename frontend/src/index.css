@@ -111,6 +111,7 @@ main > * + * { margin-top: 0; }
 .mobile-category-menu__subcategory { display:flex; align-items:center; gap:10px; padding:9px 0; color:rgba(27,54,45,.72); font:600 13px/1.2 Montserrat,sans-serif; letter-spacing:.06em; }
 .mobile-category-menu__subcategory:hover { color:var(--tribull-green); }
 .mobile-category-menu__links { margin-top:18px; padding:14px 0 8px; border-top:1px solid rgba(27,54,45,.2); border-bottom:1px solid rgba(27,54,45,.2); }
+.mobile-category-menu__group + .mobile-category-menu__links { border-top:0; }
 .mobile-category-menu__links a { display:flex; align-items:center; gap:12px; padding:11px 2px; color:var(--tribull-green); font:700 14px/1.2 Montserrat,sans-serif; letter-spacing:.1em; text-transform:uppercase; }
 .mobile-category-menu__links a:hover { color:rgba(27,54,45,.68); }
 .mobile-category-menu__contact { flex:0 0 auto; margin-top:auto; padding-top:24px; border-top:1px solid rgba(27,54,45,.2); }
