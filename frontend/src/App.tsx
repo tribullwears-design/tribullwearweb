@@ -13,6 +13,7 @@ import Home from "./pages/Home";
 import AllProductsPage from "./pages/AllProductsPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import CheckoutPage from "./pages/CheckoutPage";
+import SearchResultsPage from "./pages/SearchResultsPage";
 
 
 function Router() {
@@ -47,6 +48,7 @@ function Router() {
       <Route path={"/admin26/settings/general"}>{() => <AdminDashboard initialScreen="general-settings" />}</Route>
       <Route path={"/admin26/settings/admin-users"}>{() => <AdminDashboard initialScreen="admin-users" />}</Route>
       <Route path={"/products"} component={AllProductsPage} />
+      <Route path={"/search"} component={SearchResultsPage} />
       <Route path={"/checkout"} component={CheckoutPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />

@@ -26,4 +26,8 @@ export const defaultProducts: Product[] = [
   { id: "forest-hoodie", name: "Forest Logo Hoodie", category: "hoodie", price: 1399, image: "/products/back-black.png", created: 15, sold: 74 },
   { id: "graphic-hoodie", name: "Graphic Night Hoodie", category: "hoodie", price: 1499, image: "/products/flat-white.png", created: 14, sold: 61 },
   { id: "studio-hoodie", name: "Studio Heavy Hoodie", category: "hoodie", price: 1599, image: "/products/front-white.png", created: 13, sold: 56 },
+  { id: "everyday-core-hoodie", name: "Everyday Core Hoodie", category: "hoodie", price: 1349, image: "/products/front-white.png", created: 12, sold: 52 },
+  { id: "urban-form-hoodie", name: "Urban Form Hoodie", category: "hoodie", price: 1449, image: "/products/front-white.png", created: 11, sold: 48 },
+  { id: "essential-black-hoodie", name: "Essential Black Hoodie", category: "hoodie", price: 1399, image: "/products/back-black.png", created: 10, sold: 43 },
+  { id: "essential-white-hoodie", name: "Essential White Hoodie", category: "hoodie", price: 1399, image: "/products/front-white.png", created: 9, sold: 39 },
 ];

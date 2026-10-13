@@ -2,7 +2,6 @@ import { ArrowLeft, ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-reac
 import { Link, useParams } from "wouter";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
@@ -271,7 +270,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
+function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   const hoverImage = getShowcaseProductHoverImage(item.image);
   const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(item) ?? "")}&image=${encodeURIComponent(item.image)}`;
@@ -304,8 +303,13 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           <button
             type="button"
             className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(event.currentTarget); }}
-            aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (isAdded) window.dispatchEvent(new Event("tribull-open-cart"));
+              else onAddToCart();
+            }}
+            aria-label={isAdded ? `Go to cart with ${item.name}` : `Add ${item.name} to cart`}
           >
             {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
           </button>
@@ -450,8 +454,12 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
   const productKey = (item: CategoryProduct) => `${categorySlug}-${entrySlug}-${item.name}`;
 
-  const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
+  const addToCart = (item: CategoryProduct) => {
     const key = productKey(item);
+    if (addedProduct === key) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
       window.localStorage.setItem("tribull-cart-items", JSON.stringify({
@@ -468,8 +476,6 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       return nextCart;
     });
     setAddedProduct(key);
-    if (source) animateAddToCart(source, item.image);
-    window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
 
   return (
@@ -500,7 +506,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
       <div className="category-page__grid category-page__grid--products category-page__grid--catalog">
         {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>

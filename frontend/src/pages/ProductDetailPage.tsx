@@ -6,7 +6,6 @@ import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPr
 import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
-import { animateAddToCart } from "../lib/cartAnimation";
 
 interface ProductData extends OriginalPriceFields {
   name: string;
@@ -160,6 +159,7 @@ export default function ProductDetailPage() {
     const syncHeaderCart = () => {
       try {
         const savedCart = JSON.parse(window.localStorage.getItem("tribull-cart") || "{}") as Record<string, number>;
+        setCart(savedCart);
         setHeaderCartCount(Object.values(savedCart).reduce((total, quantityValue) => total + quantityValue, 0));
       } catch {
         setHeaderCartCount(0);
@@ -242,7 +242,12 @@ export default function ProductDetailPage() {
     },
   } as const;
 
-  const addCurrentProductToCart = (source?: HTMLElement) => {
+  const addCurrentProductToCart = () => {
+    if (isAdded) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
+
     if (!selectedSize) {
       setSizeError("Please select a size before adding to cart.");
       return;
@@ -267,12 +272,12 @@ export default function ProductDetailPage() {
       // Keep the cart usable if metadata storage is unavailable.
     }
 
-    setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + quantity }));
+    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + quantity };
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    setCart(nextCart);
     window.dispatchEvent(new Event("tribull-cart-updated"));
     setSizeError("");
-    if (source) animateAddToCart(source, product.image);
     setIsAdded(true);
-    window.setTimeout(() => setIsAdded(false), 1200);
   };
 
   const handlePincodeSubmit = () => {
@@ -344,7 +349,7 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="product-detail-gallery__media">
-                <div className="product-detail-gallery__viewport">
+                <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
                   <img
                     src={"image" in productImageViews[selectedImageIndex] ? productImageViews[selectedImageIndex].image : product.image}
                     alt={`${product.name} — ${productImageViews[selectedImageIndex].label}`}
@@ -355,7 +360,6 @@ export default function ProductDetailPage() {
                       transform: `scale(${productImageViews[selectedImageIndex].zoom})`,
                     }}
                   />
-                  <span className="product-detail-gallery__dispatch">Dispatch within <b>24 hours</b></span>
                 </div>
                 <div className="product-detail-gallery__nav">
                   <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view">
@@ -461,6 +465,7 @@ export default function ProductDetailPage() {
                     {tShirtColors.map((option) => (
                       <button
                         key={option.name}
+                        data-color={option.name}
                         className={activeColor === option.name ? "is-selected" : ""}
                         type="button"
                         onClick={() => {
@@ -470,17 +475,22 @@ export default function ProductDetailPage() {
                         aria-label={`Select ${option.name} T-shirt`}
                         aria-pressed={activeColor === option.name}
                         title={option.name}
-                        style={{ background: option.value }}
+                        style={{
+                          background: option.value,
+                          ...(option.name === "White"
+                            ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
+                            : {}),
+                        }}
                       />
                     ))}
                   </div>
                 </div>
               ) : null}
 
-              <button type="button" className="product-detail-add-to-cart" onClick={(event) => addCurrentProductToCart(event.currentTarget)}>
+              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart}>
                 {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
-                {isAdded ? "Added to cart" : "Add to cart"}
-                <ArrowRight size={18} />
+                {isAdded ? "Go to cart" : "Add to cart"}
+                {!isAdded && <ArrowRight size={18} />}
               </button>
             </div>
 
@@ -632,8 +642,8 @@ export default function ProductDetailPage() {
           />
           <small>Tax included.</small>
         </div>
-        <button type="button" onClick={(event) => addCurrentProductToCart(event.currentTarget)}>
-          {isAdded ? "Added to cart" : "Add to cart"}
+        <button type="button" onClick={addCurrentProductToCart}>
+          {isAdded ? <><Check size={18} /> Go to cart</> : "Add to cart"}
         </button>
       </div>
     </div>

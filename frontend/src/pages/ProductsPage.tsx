@@ -6,7 +6,6 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultProducts, type Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
@@ -114,9 +113,16 @@ export default function ProductsPage() {
     });
   };
 
-  const addToCart = (productId: string, source?: HTMLElement) => {
+  const addToCart = (productId: string) => {
+    if (addedProduct === productId) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
+
     const product = catalogProducts.find((item) => item.id === productId);
-    setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + 1 }));
+    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + 1 };
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    setCart(nextCart);
     if (product) {
       try {
         const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -126,9 +132,7 @@ export default function ProductsPage() {
       }
     }
     window.dispatchEvent(new Event("tribull-cart-updated"));
-    if (product && source) animateAddToCart(source, product.image);
     setAddedProduct(productId);
-    window.setTimeout(() => setAddedProduct((current) => current === productId ? null : current), 1200);
   };
 
   return (
@@ -219,7 +223,7 @@ export default function ProductsPage() {
                     <h2>{product.name}</h2>
                     <ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} />
                   </div>
-                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id, event.currentTarget); }} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
+                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id); }} aria-label={isAdded ? `Go to cart with ${product.name}` : `Add ${product.name} to cart`}>
                     {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}
                   </button>
                 </div>

@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { allProducts } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
@@ -47,7 +46,12 @@ export default function AllProductsPage() {
     window.dispatchEvent(new Event("tribull-wishlist-updated"));
   };
 
-  const addToCart = (productId: string, source: HTMLElement) => {
+  const addToCart = (productId: string) => {
+    if (addedProduct === productId) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
+
     const product = allProducts.find((item) => item.id === productId);
     if (!product) return;
 
@@ -70,9 +74,7 @@ export default function AllProductsPage() {
     window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
     setCart(nextCart);
     window.dispatchEvent(new Event("tribull-cart-updated"));
-    animateAddToCart(source, product.image);
     setAddedProduct(productId);
-    window.setTimeout(() => setAddedProduct((current) => current === productId ? null : current), 1200);
   };
 
   const goBack = () => {
@@ -103,11 +105,14 @@ export default function AllProductsPage() {
         <section className="all-products-grid" aria-label="All products grid">
           {allProducts.map((product) => {
             const hoverImage = getShowcaseProductHoverImage(product.image);
+            const productHref = `/product/${product.id}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.image)}`;
             return (
               <article className="all-products-card" key={product.name}>
                 <div className="all-products-card__image">
-                  <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
-                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                  <Link href={productHref} className="all-products-card__product-link" aria-label={`View ${product.name}`}>
+                    <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                    {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                  </Link>
                   <button
                     className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}
                     type="button"
@@ -120,16 +125,16 @@ export default function AllProductsPage() {
                   <button
                     className={`all-products-card__cart ${addedProduct === product.id ? "is-added" : ""}`}
                     type="button"
-                    aria-label={`Add ${product.name} to cart`}
-                    onClick={(event) => addToCart(product.id, event.currentTarget)}
+                    aria-label={addedProduct === product.id ? `Go to cart with ${product.name}` : `Add ${product.name} to cart`}
+                    onClick={() => addToCart(product.id)}
                   >
                     {addedProduct === product.id ? <Check size={17} /> : <ShoppingCart size={17} />}
                   </button>
                 </div>
-                <div className="all-products-card__meta">
+                <Link href={productHref} className="all-products-card__meta all-products-card__meta-link">
                   <h2>{product.name}</h2>
                   <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} />
-                </div>
+                </Link>
               </article>
             );
           })}

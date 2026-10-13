@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { products, type Product } from "../pages/ProductsPage";
 import { categoryProducts } from "../pages/CategoryPage";
-import { animateAddToCart } from "../lib/cartAnimation";
 import ProductPrice from "./ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
@@ -142,6 +141,12 @@ export default function HeaderActions() {
   }, []);
 
   useEffect(() => {
+    const openCart = () => setOverlay("cart");
+    window.addEventListener("tribull-open-cart", openCart);
+    return () => window.removeEventListener("tribull-open-cart", openCart);
+  }, []);
+
+  useEffect(() => {
     let active = true;
     const syncProducts = (refresh = false) => {
       const request = refresh ? refreshProducts() : fetchProducts();
@@ -188,12 +193,6 @@ export default function HeaderActions() {
     const timer = window.setInterval(() => setResendSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [resendSeconds]);
-
-  const searchResults = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return catalogProducts.slice(0, 6);
-    return catalogProducts.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery));
-  }, [query, catalogProducts]);
 
   const categoryWishlistProducts = Object.entries(categoryProducts).flatMap(([category, entries]) =>
     Object.entries(entries).flatMap(([entry, items]) => items.map((item) => ({
@@ -468,7 +467,7 @@ export default function HeaderActions() {
     saveAddresses(nextAddresses);
   };
 
-  const updateCart = (productId: string, quantity: number, item?: CartItem, source?: HTMLElement) => {
+  const updateCart = (productId: string, quantity: number, item?: CartItem) => {
     const nextCart = { ...cart };
     const nextCartItems = { ...cartItems };
     if (quantity <= 0) delete nextCart[productId];
@@ -481,7 +480,6 @@ export default function HeaderActions() {
     setCartItems(nextCartItems);
     saveCart(nextCart);
     saveCartItems(nextCartItems);
-    if (item && source) animateAddToCart(source, item.image);
   };
 
   const toggleWishlist = (productId: string) => {
@@ -493,7 +491,7 @@ export default function HeaderActions() {
     window.dispatchEvent(new Event("tribull-wishlist-updated"));
   };
 
-  const addSearchProductToCart = (product: Product, source?: HTMLElement) => updateCart(product.id, (cart[product.id] || 0) + 1, product, source);
+  const addSearchProductToCart = (product: Product) => updateCart(product.id, (cart[product.id] || 0) + 1, product);
 
   return (
     <>
@@ -510,8 +508,33 @@ export default function HeaderActions() {
       {overlay === "search" && (
         <section className="header-panel header-search-panel" aria-label="Search products">
           <div className="header-panel__heading"><h2>Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
-          <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" /></label>
-          <div className="header-search-results">{searchResults.length ? searchResults.map((product) => <div className="header-search-result" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.category}</span><ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} /></div><button type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button></div>) : <p className="header-empty-state">No products found.</p>}</div>
+          <form className="header-search-form" onSubmit={(event) => {
+            event.preventDefault();
+            const searchTerm = query.trim();
+            if (!searchTerm) return;
+            closeOverlay();
+            setLocation(`/search?q=${encodeURIComponent(searchTerm)}`);
+          }}>
+            <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" /></label>
+            <button className="header-search-submit" type="submit" disabled={!query.trim()}>View all results</button>
+          </form>
+          <div className="header-search-categories" aria-label="Browse product categories">
+            {[
+              { label: "Oversized", query: "oversized" },
+              { label: "Hoodie", query: "hoodie" },
+            ].map(({ label, query: categoryQuery }) => (
+              <button
+                type="button"
+                key={categoryQuery}
+                onClick={() => {
+                  closeOverlay();
+                  setLocation(`/search?q=${encodeURIComponent(categoryQuery)}`);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </section>
       )}
       {overlay === "account" && (
@@ -647,7 +670,7 @@ export default function HeaderActions() {
                           </div>
                           <div className="header-account-card__actions">
                             <button type="button" onClick={() => toggleWishlist(product.id)}>Remove</button>
-                            <button type="button" onClick={(event) => { updateCart(product.id, (cart[product.id] || 0) + 1, product, event.currentTarget); }}>Add to Cart</button>
+                            <button type="button" onClick={() => { updateCart(product.id, (cart[product.id] || 0) + 1, product); }}>Add to Cart</button>
                           </div>
                         </div>
                       )) : (
