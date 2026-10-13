@@ -6,12 +6,23 @@ type SiteFooterProps = {
 
 type SocialLinks = { facebook: string; instagram: string; pinterest: string; whatsapp: string; linkedin: string };
 
+const defaultSocialLinks = {
+  facebook: "https://www.facebook.com/share/18tqYR5pxD/",
+  instagram: "https://instagram.com/tribull.in?obrf=MWdtZG9ycWc0dmVkaQ%3D%3D",
+  pinterest: "https://pin.it/5UqZJvyWI",
+  whatsapp: "https://wa.me/916385400605",
+};
+
 function readSocialLinks(): SocialLinks {
   try {
     const saved = window.localStorage.getItem("tribull-social-links");
-    return saved ? { facebook: "", instagram: "", pinterest: "", whatsapp: "", linkedin: "", ...JSON.parse(saved) as Partial<SocialLinks> } : { facebook: "", instagram: "", pinterest: "", whatsapp: "", linkedin: "" };
+    const configured = saved ? JSON.parse(saved) as Partial<SocialLinks> : {};
+    return {
+      ...defaultSocialLinks,
+      linkedin: configured.linkedin || "",
+    };
   } catch {
-    return { facebook: "", instagram: "", pinterest: "", whatsapp: "", linkedin: "" };
+    return { ...defaultSocialLinks, linkedin: "" };
   }
 }
 
