@@ -24,6 +24,7 @@ function Router() {
       <Route path={"/admin26/dashboard"}>{() => <AdminDashboard initialScreen="dashboard" />}</Route>
       <Route path={"/admin26/products"}>{() => <AdminDashboard initialScreen="products" />}</Route>
       <Route path={"/admin26/products/add"}>{() => <AdminDashboard initialScreen="add-product" />}</Route>
+      <Route path={"/admin26/products/edit/:id"}>{(params) => <AdminDashboard initialScreen="edit-product" productId={params.id} />}</Route>
       <Route path={"/admin26/products/categories"}>{() => <AdminDashboard initialScreen="categories" />}</Route>
       <Route path={"/admin26/products/inventory"}>{() => <AdminDashboard initialScreen="inventory" />}</Route>
       <Route path={"/admin26/products/banners"}>{() => <AdminDashboard initialScreen="banners" />}</Route>

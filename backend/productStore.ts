@@ -1,4 +1,4 @@
-import { MongoClient, type Collection, type Db, type Filter } from "mongodb";
+import { MongoClient, ObjectId, type Collection, type Db, type Filter, type WithId } from "mongodb";
 import fs from "node:fs";
 import path from "node:path";
 import { listCategories, type CategoryDocument } from "./categoryStore.js";
@@ -61,9 +61,21 @@ function resolveCategory(categories: CategoryDocument[], mainCategoryId: string,
   return { main, subcategory };
 }
 
-function validateProduct(input: ProductInput) {
-  if (!input || typeof input !== "object" || !input.name?.trim() || typeof input.image !== "string" || !input.image || !input.mainCategoryId?.trim() || !input.subcategoryId?.trim()) {
-    throw new Error("Product name, image, main category, and subcategory are required");
+function productFilter(id: string): Filter<ProductDocument> {
+  return ObjectId.isValid(id) ? { $or: [{ id }, { _id: new ObjectId(id) }] } : { id };
+}
+
+function normalizeProduct(product: WithId<ProductDocument>): ProductDocument {
+  const { _id, ...fields } = product;
+  const id = fields.id || _id.toString();
+  return { ...fields, id };
+}
+
+function validateProduct(input: ProductInput, requireImage = true) {
+  if (!input || typeof input !== "object" || typeof input.name !== "string" || !input.name.trim() || typeof input.description !== "string" || typeof input.image !== "string" || (requireImage && !input.image) || typeof input.mainCategoryId !== "string" || !input.mainCategoryId.trim() || typeof input.subcategoryId !== "string" || !input.subcategoryId.trim()) {
+    throw new Error(requireImage
+      ? "Product name, image, main category, and subcategory are required"
+      : "Product name, main category, and subcategory are required");
   }
   if (!Number.isFinite(input.price) || input.price < 0 || !Number.isFinite(input.stock) || input.stock < 0) {
     throw new Error("Product price and stock must be valid non-negative numbers");
@@ -85,7 +97,13 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
   } else if (mainCategoryId !== undefined || subcategoryId !== undefined) {
     throw new Error("Both main category and subcategory are required for product filtering");
   }
-  return collection.find(filter, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+  const products = await collection.find(filter).sort({ createdAt: -1 }).toArray();
+  return products.map(normalizeProduct);
+}
+
+export async function getProduct(id: string) {
+  const product = await (await getCollection()).findOne(productFilter(id));
+  return product ? normalizeProduct(product) : null;
 }
 
 export async function createProduct(input: ProductInput) {
@@ -108,16 +126,32 @@ export async function createProduct(input: ProductInput) {
   return product;
 }
 
-export async function updateProduct(id: string, input: Pick<ProductInput, "mainCategoryId" | "subcategoryId">) {
-  if (!input || !input.mainCategoryId?.trim() || !input.subcategoryId?.trim()) {
-    throw new Error("Main category and subcategory are required");
-  }
-  const categories = await listCategories();
-  const { main, subcategory } = resolveCategory(categories, input.mainCategoryId, input.subcategoryId);
+export async function updateProduct(id: string, input: Partial<ProductInput>) {
+  if (!input || typeof input !== "object") throw new Error("Product update is required");
   const collection = await getCollection();
-  return collection.findOneAndUpdate(
-    { id },
-    { $set: { mainCategoryId: main.value, subcategoryId: subcategory.value, mainCategory: main.label, subcategory: subcategory.label, updatedAt: new Date().toISOString() } },
-    { returnDocument: "after", projection: { _id: 0 } },
+  const filter = productFilter(id);
+  const existing = await collection.findOne(filter);
+  if (!existing) return null;
+  const updatedFields: ProductInput = {
+    name: input.name === undefined ? existing.name : input.name,
+    description: input.description === undefined ? existing.description : input.description,
+    price: input.price === undefined ? existing.price : input.price,
+    compareAt: input.compareAt === undefined ? existing.compareAt : input.compareAt,
+    image: input.image === undefined ? existing.image : input.image,
+    stock: input.stock === undefined ? existing.stock : input.stock,
+    sizes: input.sizes === undefined ? existing.sizes : input.sizes,
+    colors: input.colors === undefined ? existing.colors : input.colors,
+    status: input.status === undefined ? existing.status : input.status,
+    mainCategoryId: input.mainCategoryId === undefined ? existing.mainCategoryId : input.mainCategoryId,
+    subcategoryId: input.subcategoryId === undefined ? existing.subcategoryId : input.subcategoryId,
+  };
+  validateProduct(updatedFields, false);
+  const categories = await listCategories();
+  const { main, subcategory } = resolveCategory(categories, updatedFields.mainCategoryId, updatedFields.subcategoryId);
+  const updated = await collection.findOneAndUpdate(
+    filter,
+    { $set: { ...updatedFields, mainCategoryId: main.value, subcategoryId: subcategory.value, mainCategory: main.label, subcategory: subcategory.label, updatedAt: new Date().toISOString() } },
+    { returnDocument: "after" },
   );
+  return updated ? normalizeProduct(updated) : null;
 }

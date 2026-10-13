@@ -1,9 +1,23 @@
 import { spawn } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { stopTribullBackend } from "./tribull-port.mjs";
 
-const nodeModules = "node_modules";
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+await stopTribullBackend();
+
+const nodeModules = path.join(projectRoot, "node_modules");
 const children = [
-  spawn(process.execPath, [`${nodeModules}/tsx/dist/cli.mjs`, "backend/index.ts"], { stdio: "inherit", env: process.env }),
-  spawn(process.execPath, [`${nodeModules}/vite/bin/vite.js`, "--host"], { stdio: "inherit", env: process.env }),
+  spawn(process.execPath, [`${nodeModules}/tsx/dist/cli.mjs`, "backend/index.ts"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    env: process.env,
+  }),
+  spawn(process.execPath, [`${nodeModules}/vite/bin/vite.js`, "--host"], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    env: process.env,
+  }),
 ];
 
 const shutdown = () => {

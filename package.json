@@ -5,10 +5,11 @@
   "license": "MIT",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "dev:api": "tsx backend/index.ts",
+    "dev:api": "node scripts/dev-api.mjs",
     "dev:client": "vite --host",
     "build": "vite build && esbuild backend/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "node -e \"process.env.NODE_ENV='production'; import('./dist/index.js')\"",
+    "prestart": "npm run build",
+    "start": "node scripts/start.mjs",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
     "format": "prettier --write ."

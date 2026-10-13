@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
-import { createProduct, listProducts, updateProduct } from "./productStore.js";
+import { createProduct, getProduct, listProducts, updateProduct } from "./productStore.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -83,10 +83,20 @@ async function startServer() {
       res.status(status).json({ error: message });
     }
   });
+  app.get("/api/products/:id", async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product request failed";
+      res.status(500).json({ error: message });
+    }
+  });
   app.post("/api/products", async (req, res) => {
     try { res.status(201).json(await createProduct(req.body)); } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") ? 400 : 500;
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
@@ -97,7 +107,7 @@ async function startServer() {
       res.json(product);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      const status = message.includes("not found") ? 404 : message.includes("required") ? 400 : 500;
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
