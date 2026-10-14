@@ -1,10 +1,62 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
+import { X } from "lucide-react";
 
 type SiteFooterProps = {
   className?: string;
 };
 
 type SocialLinks = { facebook: string; instagram: string; pinterest: string; whatsapp: string; linkedin: string };
+type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "careers" | "vouchers" | "community";
+
+const footerTopicContent: Record<FooterTopic, { title: string; description: string; action: string }> = {
+  contact: {
+    title: "Contact Tribull",
+    description: "Need help with a product or order? Message our support team on WhatsApp and include your order number if you have one.",
+    action: "Chat on WhatsApp",
+  },
+  returns: {
+    title: "Returns & Exchanges",
+    description: "Tribull supports exchanges only; refunds and returns are not available. Contact support with your order number for exchange assistance.",
+    action: "Ask about an exchange",
+  },
+  faqs: {
+    title: "Frequently Asked Questions",
+    description: "Find quick answers about shopping, delivery, payments, and exchanges.",
+    action: "Ask another question",
+  },
+  about: {
+    title: "About Tribull",
+    description: "Tribull creates graphic T-shirts and everyday streetwear for people who like to wear their interests. Browse the collection to find your next favourite.",
+    action: "Browse products",
+  },
+  investors: {
+    title: "Investor Relations",
+    description: "For investor and business enquiries, contact the Tribull team directly.",
+    action: "Contact Tribull",
+  },
+  careers: {
+    title: "Careers at Tribull",
+    description: "Interested in working with Tribull? Send the team a message with the role or area you are interested in.",
+    action: "Get in touch",
+  },
+  vouchers: {
+    title: "Gift Vouchers",
+    description: "Contact us to ask about gifting options and available vouchers.",
+    action: "Ask about gifting",
+  },
+  community: {
+    title: "Community Initiatives",
+    description: "For community collaborations or initiatives, tell the Tribull team what you have in mind.",
+    action: "Discuss a collaboration",
+  },
+};
+
+const faqItems = [
+  { question: "How can I check my order?", answer: "Open My Account and select My Orders. Sign in with the phone number used for your order." },
+  { question: "What is the return policy?", answer: "Exchanges are supported; returns and refunds are not available. Contact support with your order number for help." },
+  { question: "How can I get help with delivery?", answer: "Message Tribull support on WhatsApp and share your order number and delivery PIN code." },
+  { question: "Which payment options are available?", answer: "Available payment options are shown at checkout before you place your order." },
+];
 
 const defaultSocialLinks = {
   facebook: "https://www.facebook.com/share/18tqYR5pxD/",
@@ -28,6 +80,7 @@ function readSocialLinks(): SocialLinks {
 
 export default function SiteFooter({ className = "" }: SiteFooterProps) {
   const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => readSocialLinks());
+  const [activeTopic, setActiveTopic] = useState<FooterTopic | null>(null);
 
   useEffect(() => {
     const syncSocialLinks = () => setSocialLinks(readSocialLinks());
@@ -39,6 +92,28 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeTopic) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setActiveTopic(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [activeTopic]);
+
+  const openAccount = (section?: "orders") => {
+    window.dispatchEvent(new CustomEvent("tribull-open-account", { detail: { section } }));
+  };
+
+  const openTopic = (topic: FooterTopic) => (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setActiveTopic(topic);
+  };
+
+  const closeTopic = () => setActiveTopic(null);
+  const activeContent = activeTopic && activeTopic !== "faqs" ? footerTopicContent[activeTopic] : null;
+  const topicActionHref = activeTopic === "about" ? "/products" : `https://wa.me/916385400605?text=${encodeURIComponent(activeTopic === "contact" ? "Hi Tribull, I need help with my order." : `Hi Tribull, I have a question about ${activeContent?.title ?? "your store"}.`)}`;
+
   return (
     <footer className={`site-footer ${className}`.trim()} id="footer">
       <a className="footer__logo" href="#top" aria-label="Tribull home">
@@ -48,11 +123,11 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
         <div className="footer__col">
           <h3 className="footer__col-title">Need Help</h3>
           <div className="footer__links">
-            <a href="#top">Contact Us</a>
-            <a href="#top">Track Order</a>
-            <a href="#top">Returns &amp; Refunds</a>
-            <a href="#top">FAQs</a>
-            <a href="#top">My Account</a>
+            <button type="button" onClick={openTopic("contact")}>Contact Us</button>
+            <button type="button" onClick={() => openAccount("orders")}>Track Order</button>
+            <button type="button" onClick={openTopic("returns")}>Returns &amp; Refunds</button>
+            <button type="button" onClick={openTopic("faqs")}>FAQs</button>
+            <button type="button" onClick={() => openAccount()}>My Account</button>
           </div>
           <div className="footer__badges">
             <span className="footer__badge"><span className="footer__badge-icon">↗</span> Free Shipping</span>
@@ -63,11 +138,11 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
         <div className="footer__col">
           <h3 className="footer__col-title">Company</h3>
           <div className="footer__links">
-            <a href="#top">About Us</a>
-            <a href="#top">Investor Relation</a>
-            <a href="#top">Careers</a>
-            <a href="#top">Gift Vouchers</a>
-            <a href="#top">Community Initiatives</a>
+            <button type="button" onClick={openTopic("about")}>About Us</button>
+            <button type="button" onClick={openTopic("investors")}>Investor Relation</button>
+            <button type="button" onClick={openTopic("careers")}>Careers</button>
+            <button type="button" onClick={openTopic("vouchers")}>Gift Vouchers</button>
+            <button type="button" onClick={openTopic("community")}>Community Initiatives</button>
           </div>
         </div>
       </div>
@@ -87,6 +162,40 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
         <span>© TRIBULL</span>
         <span>100% cotton, always.</span>
       </div>
+      {activeTopic && (
+        <div className="footer-topic-overlay" onMouseDown={(event) => {
+          if (event.target === event.currentTarget) closeTopic();
+        }}>
+          <section className="footer-topic-dialog" role="dialog" aria-modal="true" aria-labelledby="footer-topic-title">
+            <button type="button" className="footer-topic-dialog__close" onClick={closeTopic} aria-label="Close">
+              <X size={20} />
+            </button>
+            <p className="footer-topic-dialog__eyebrow">TRIBULL SUPPORT</p>
+            <h2 id="footer-topic-title">{activeContent?.title ?? footerTopicContent.faqs.title}</h2>
+            {activeTopic === "faqs" ? (
+              <div className="footer-topic-faqs">
+                {faqItems.map((item) => (
+                  <details key={item.question}>
+                    <summary>{item.question}</summary>
+                    <p>{item.answer}</p>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <p className="footer-topic-dialog__description">{activeContent?.description}</p>
+            )}
+            {activeTopic === "about" ? (
+              <a className="footer-topic-dialog__action" href={topicActionHref} onClick={closeTopic}>
+                {activeContent?.action}
+              </a>
+            ) : (
+              <a className="footer-topic-dialog__action" href={topicActionHref} target="_blank" rel="noopener noreferrer">
+                {activeTopic === "faqs" ? footerTopicContent.faqs.action : activeContent?.action}
+              </a>
+            )}
+          </section>
+        </div>
+      )}
     </footer>
   );
 }

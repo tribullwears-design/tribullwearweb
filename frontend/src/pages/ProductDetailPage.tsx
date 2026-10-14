@@ -161,11 +161,6 @@ export default function ProductDetailPage() {
   const [isAdded, setIsAdded] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [sizeError, setSizeError] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [pincodeFeedback, setPincodeFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({
-    kind: "idle",
-    message: "",
-  });
 
   useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
@@ -226,15 +221,12 @@ export default function ProductDetailPage() {
   const priceValue = Number(product.price.replace(/[^0-9]/g, ""));
   const originalPriceValue = resolveOriginalPrice(product);
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
-  const memberPrice = Math.floor(priceValue * 0.95);
   const recommendationPool = [
     ...categoryProducts.filter((_, productIndex) => productIndex !== index),
     ...Object.entries(allCategoryProducts)
       .filter(([productCategory]) => productCategory !== category)
       .flatMap(([, items]) => items),
   ].slice(0, 4);
-
-  const productDescription = `${product.name} is a premium ${product.category.toLowerCase()} staple designed for elevated daily wear. Built with a soft cotton blend, durable print finish, and an easy, relaxed silhouette for all-day comfort.`;
 
   const benefitItems = [
     { title: "Fit", detail: "Relaxed" },
@@ -305,23 +297,6 @@ export default function ProductDetailPage() {
 
     if (!isAdded) addCurrentProductToCart();
     setLocation("/checkout");
-  };
-
-  const handlePincodeSubmit = () => {
-    const numericPin = pincode.replace(/\D/g, "");
-
-    if (!/^\d{6}$/.test(numericPin)) {
-      setPincodeFeedback({
-        kind: "error",
-        message: "Please enter a valid 6-digit PIN code.",
-      });
-      return;
-    }
-
-    setPincodeFeedback({
-      kind: "success",
-      message: `Estimated delivery for ${numericPin}: 2–5 business days in this service area.`,
-    });
   };
 
   return (
@@ -405,12 +380,34 @@ export default function ProductDetailPage() {
             />
             <p className="product-detail-tax-note">Tax included.</p>
 
-            <p className="product-detail-panel__description">{productDescription}</p>
-
-            <div className="product-detail-member-price">
-              <span>Member price <b>₹{memberPrice.toLocaleString("en-IN")}</b></span>
-              <small>Join the Tribull community for member-only savings.</small>
-            </div>
+            {isTShirtColorVariant ? (
+              <div className="product-detail-color-option">
+                <span>Colour: {activeColor}</span>
+                <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
+                  {tShirtColors.map((option) => (
+                    <button
+                      key={option.name}
+                      data-color={option.name}
+                      className={activeColor === option.name ? "is-selected" : ""}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(option.name);
+                        setSelectedImageIndex(0);
+                      }}
+                      aria-label={`Select ${option.name} T-shirt`}
+                      aria-pressed={activeColor === option.name}
+                      title={option.name}
+                      style={{
+                        background: option.value,
+                        ...(option.name === "White"
+                          ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
+                          : {}),
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
 
             <div className="product-detail-option">
               <div className="product-detail-option__header">
@@ -453,11 +450,6 @@ export default function ProductDetailPage() {
               </div>
             </section>
 
-            <div className="product-detail-return-note">
-              <ShieldCheck size={17} />
-              <span>Easy 10-day return and exchange on this product. No questions asked.</span>
-            </div>
-
             <div className="product-detail-cta-row">
               <div className="product-detail-qty" aria-label="Quantity selector">
                 <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
@@ -469,61 +461,11 @@ export default function ProductDetailPage() {
                 </button>
               </div>
 
-              {isTShirtColorVariant ? (
-                <div className="product-detail-color-option">
-                  <span>Colour: {activeColor}</span>
-                  <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
-                    {tShirtColors.map((option) => (
-                      <button
-                        key={option.name}
-                        data-color={option.name}
-                        className={activeColor === option.name ? "is-selected" : ""}
-                        type="button"
-                        onClick={() => {
-                          setSelectedColor(option.name);
-                          setSelectedImageIndex(0);
-                        }}
-                        aria-label={`Select ${option.name} T-shirt`}
-                        aria-pressed={activeColor === option.name}
-                        title={option.name}
-                        style={{
-                          background: option.value,
-                          ...(option.name === "White"
-                            ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
-                            : {}),
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
               <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart}>
                 {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
                 {isAdded ? "Go to cart" : "Add to cart"}
                 {!isAdded && <ArrowRight size={18} />}
               </button>
-            </div>
-
-            <div className="product-detail-pincode">
-              <label htmlFor="product-pin">Delivery check</label>
-              <div className="product-detail-pincode__field">
-                <input
-                  id="product-pin"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pincode}
-                  placeholder="Enter 6-digit PIN"
-                  onChange={(event) => setPincode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                />
-                <button type="button" onClick={handlePincodeSubmit}>Check</button>
-              </div>
-              {pincodeFeedback.kind !== "idle" ? (
-                <p className={pincodeFeedback.kind === "success" ? "is-success" : "is-error"}>{pincodeFeedback.message}</p>
-              ) : (
-                <p className="product-detail-pincode__hint">Service checks are configured for supported delivery zones.</p>
-              )}
             </div>
 
             <div className="product-detail-features" aria-label="Performance details">

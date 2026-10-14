@@ -293,6 +293,16 @@ export default function HeaderActions() {
     setOverlay("account");
   };
 
+  useEffect(() => {
+    const openFooterAccount = (event: Event) => {
+      const section = (event as CustomEvent<{ section?: AccountSection }>).detail?.section;
+      openAccount();
+      if (section && authUser.isAuthenticated && authUser.username) setAccountSection(section);
+    };
+    window.addEventListener("tribull-open-account", openFooterAccount);
+    return () => window.removeEventListener("tribull-open-account", openFooterAccount);
+  }, [authUser]);
+
   const beginProfileEdit = () => {
     setProfileDraft({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
     setProfileError("");
