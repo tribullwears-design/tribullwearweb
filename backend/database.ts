@@ -6,13 +6,20 @@ let clientPromise: Promise<MongoClient> | undefined;
 
 function getMongoUri() {
   if (process.env.MONGODB_URI) return process.env.MONGODB_URI;
-  try {
-    const envPath = path.resolve(process.cwd(), "backend", ".env.production");
-    const line = fs.readFileSync(envPath, "utf8").split(/\r?\n/).find((entry) => entry.startsWith("MONGODB_URI="));
-    return line?.slice("MONGODB_URI=".length).trim();
-  } catch {
-    return undefined;
+  const envCandidates = [
+    path.resolve(process.cwd(), "backend", ".env.local"),
+    path.resolve(process.cwd(), "backend", ".env.production"),
+  ];
+  for (const envPath of envCandidates) {
+    try {
+      const envContents = fs.readFileSync(envPath, "utf8");
+      const line = envContents.split(/\r?\n/).find((entry) => entry.startsWith("MONGODB_URI="));
+      if (line) return line.slice("MONGODB_URI=".length).trim();
+    } catch {
+      // continue to the next candidate
+    }
   }
+  return undefined;
 }
 
 export async function getDatabase(): Promise<Db> {

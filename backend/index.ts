@@ -50,8 +50,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  const localEnvPath = path.resolve(process.cwd(), "backend", ".env.local");
-  if (existsSync(localEnvPath)) process.loadEnvFile(localEnvPath);
+  const envPaths = [
+    path.resolve(process.cwd(), "backend", ".env.local"),
+    path.resolve(process.cwd(), "backend", ".env.production"),
+  ];
+  for (const envPath of envPaths) {
+    if (existsSync(envPath)) process.loadEnvFile(envPath);
+  }
   validateCustomerAuthConfiguration();
 
   const app = express();
