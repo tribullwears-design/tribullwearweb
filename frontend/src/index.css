@@ -1989,7 +1989,6 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   .tribull-page .hero {
     height: auto;
     padding: 6px 0;
-    margin-top: 0;
   }
   .tribull-page .hero__images {
     aspect-ratio: 736 / 414;
@@ -2008,7 +2007,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   .tribull-page .hero {
     height: auto;
     min-height: 0;
-    padding: 0;
+    padding: 4px 0;
   }
   .tribull-page .hero__images {
     grid-template-columns: 1fr;
