@@ -1,10 +1,9 @@
 import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
-import HeaderActions from "../components/HeaderActions";
-import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 
 interface ProductData extends OriginalPriceFields {
@@ -96,6 +95,23 @@ const allCategoryProducts: Record<string, ProductData[]> = {
 };
 
 const sizeOptions = ["M", "L", "XL"];
+const sampleCustomerReviews = [
+  {
+    name: "Sample customer 01",
+    title: "Comfortable everyday tee",
+    comment: "The fabric feels soft and comfortable for everyday wear.",
+  },
+  {
+    name: "Sample customer 02",
+    title: "Looks great",
+    comment: "The print looks neat and the fit feels just right.",
+  },
+  {
+    name: "Sample customer 03",
+    title: "Happy with the quality",
+    comment: "A comfortable T-shirt with a clean finish.",
+  },
+];
 const croppedProductImageViews = [
   { label: "Full view", position: "50% 50%", zoom: 1 },
   { label: "Upper detail", position: "50% 22%", zoom: 1.2 },
@@ -127,6 +143,7 @@ const tShirtColors = [
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<"Black" | "White" | null>(null);
@@ -280,6 +297,16 @@ export default function ProductDetailPage() {
     setIsAdded(true);
   };
 
+  const handleBuyNow = () => {
+    if (!selectedSize) {
+      setSizeError("Please select a size before adding to cart.");
+      return;
+    }
+
+    if (!isAdded) addCurrentProductToCart();
+    setLocation("/checkout");
+  };
+
   const handlePincodeSubmit = () => {
     const numericPin = pincode.replace(/\D/g, "");
 
@@ -299,23 +326,7 @@ export default function ProductDetailPage() {
 
   return (
     <div className="product-detail-page">
-      <div className="product-detail-page__announcement" aria-label="Announcement">
-        <div className="product-detail-page__announcement-track">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <span key={index}>
-              100% cotton <b>shop now</b> <i>✦</i>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <header className="site-header" aria-label="Main nav">
-        <MobileCategoryMenu />
-        <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
-        </a>
-        <HeaderActions />
-      </header>
+      <StorefrontHeader />
 
       <main className="product-detail-page__main">
         <div className="product-detail-page__shell">
@@ -383,7 +394,7 @@ export default function ProductDetailPage() {
                   <Star key={star} size={16} fill="currentColor" />
                 ))}
               </div>
-              <span>4.8 <small>· 41 reviews</small></span>
+              <span>4.8 <a className="product-detail-panel__review-link" href="#product-reviews"><small>· 41 reviews</small></a></span>
             </div>
 
             <ProductPrice
@@ -604,6 +615,26 @@ export default function ProductDetailPage() {
         </section>
       </main>
 
+      <section className="product-detail-reviews" id="product-reviews" aria-labelledby="product-reviews-title">
+        <h2 id="product-reviews-title">Sample customer reviews</h2>
+        <p className="product-detail-reviews__sample-note">Example reviews shown for preview.</p>
+        <div className="product-detail-reviews__list">
+          {sampleCustomerReviews.map((review) => (
+            <article className="product-detail-reviews__card" key={review.name}>
+              <div className="product-detail-reviews__card-header">
+                <strong>{review.name}</strong>
+                <span>Sample review</span>
+              </div>
+              <div className="product-detail-reviews__small-stars" aria-label="5 out of 5 stars">
+                {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={15} fill="currentColor" />)}
+              </div>
+              <h3>{review.title}</h3>
+              <p>{review.comment}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
       {isSizeGuideOpen ? (
         <div className="product-detail-guides" aria-modal="true" role="dialog" aria-label="Size guide">
           <div className="product-detail-guides__panel">
@@ -632,7 +663,7 @@ export default function ProductDetailPage() {
         </div>
       ) : null}
 
-      <div className="product-detail-sticky-cart" aria-label="Quick add to cart">
+      <div className="product-detail-sticky-cart" aria-label="Quick checkout">
         <div>
           <ProductPrice
             sellingPrice={product.price}
@@ -642,8 +673,8 @@ export default function ProductDetailPage() {
           />
           <small>Tax included.</small>
         </div>
-        <button type="button" onClick={addCurrentProductToCart}>
-          {isAdded ? <><Check size={18} /> Go to cart</> : "Add to cart"}
+        <button type="button" onClick={handleBuyNow}>
+          Buy Now
         </button>
       </div>
     </div>

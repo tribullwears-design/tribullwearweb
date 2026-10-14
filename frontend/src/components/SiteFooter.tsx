@@ -55,7 +55,6 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
             <a href="#top">My Account</a>
           </div>
           <div className="footer__badges">
-            <span className="footer__badge"><span className="footer__badge-icon">₹</span> COD Not Available</span>
             <span className="footer__badge"><span className="footer__badge-icon">↗</span> Free Shipping</span>
             <span className="footer__badge"><span className="footer__badge-icon">↻</span> No Returns or Refunds — Exchange Only</span>
           </div>

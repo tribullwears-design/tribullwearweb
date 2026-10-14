@@ -1785,6 +1785,17 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .product-detail-reviews__action { min-height: 138px; display: flex; align-items: center; justify-content: flex-end; padding-left: 40px; border-left: 1px solid rgba(239,49,80,.16); }
 .product-detail-reviews__button { width: min(300px, 100%); min-height: 50px; border: 0; background: var(--tribull-green); color: #fff !important; cursor: pointer; font: 700 16px Montserrat, sans-serif; }
 .product-detail-reviews__button:hover { background: #285243; color: #fff !important; }
+.product-detail-panel__review-link { color: inherit; text-decoration: none; }
+.product-detail-panel__review-link:hover { text-decoration: underline; }
+.product-detail-reviews { scroll-margin-top: 24px; }
+.product-detail-reviews__sample-note { margin: -22px 0 28px; text-align: center; color: #777; font: 500 13px/1.5 Montserrat, sans-serif; }
+.product-detail-reviews__list { max-width: 1260px; margin: 0 auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.product-detail-reviews__card { padding: 22px; border: 1px solid #e8e8e8; background: #fff; }
+.product-detail-reviews__card-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; color: #222; font: 600 13px Montserrat, sans-serif; }
+.product-detail-reviews__card-header span { color: #777; font: 500 11px Montserrat, sans-serif; }
+.product-detail-reviews__card h3 { margin: 10px 0 6px; color: #222; font: 700 15px/1.4 Montserrat, sans-serif; }
+.product-detail-reviews__card p { margin: 0; color: #666; font: 500 13px/1.6 Montserrat, sans-serif; }
+@media (max-width: 900px) { .product-detail-reviews__list { grid-template-columns: 1fr; } }
 .product-detail-footer { padding: 54px 48px 22px; background: #f6f6f7; color: #737b84; }
 .product-detail-footer__grid { max-width: 1260px; margin: 0 auto; display: grid; grid-template-columns: 1.35fr repeat(4, 1fr); gap: 34px; }
 .product-detail-footer__brand img { display: block; width: 116px; height: 46px; object-fit: contain; object-position: left center; mix-blend-mode: multiply; margin-bottom: 18px; }
