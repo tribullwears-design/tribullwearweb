@@ -1,7 +1,6 @@
-import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import HeaderActions from "../components/HeaderActions";
+import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { defaultProducts, type Product } from "../../../shared/products";
@@ -115,16 +114,7 @@ export default function SearchResultsPage() {
 
   return (
     <div className="search-page">
-      <header className="search-page__header">
-        <Link href="/" className="search-page__back" aria-label="Back to home">
-          <ArrowLeft size={18} />
-          <span>Home</span>
-        </Link>
-        <Link href="/" className="search-page__brand" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
-        </Link>
-        <HeaderActions />
-      </header>
+      <StorefrontHeader />
 
       <main className="search-page__content">
         <div className="search-page__heading">

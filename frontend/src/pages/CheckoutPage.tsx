@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import { products, type Product } from "./ProductsPage";
+import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
@@ -157,6 +158,20 @@ function createInvoicePdf(lines: string[], logo: Awaited<ReturnType<typeof loadI
     offset += part.length;
   });
   return new Blob([pdf], { type: "application/pdf" });
+}
+
+function CheckoutStorefrontHeader({ onBack }: { onBack: () => void }) {
+  return (
+    <>
+      <StorefrontHeader />
+      <div className="checkout-context-bar">
+        <button type="button" className="checkout-header__back" onClick={onBack}>
+          <ArrowLeft size={16} /> Back to Cart
+        </button>
+        <span className="checkout-header__eyebrow">Checkout</span>
+      </div>
+    </>
+  );
 }
 
 export default function CheckoutPage() {
@@ -354,19 +369,7 @@ export default function CheckoutPage() {
   if (!orderPlaced && cartDetails.entries.length === 0) {
     return (
       <div className="checkout-page checkout-page--empty">
-        <header className="checkout-header">
-          <div className="checkout-header__back-area">
-            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-              <ArrowLeft size={16} /> Back to Cart
-            </button>
-          </div>
-          <a className="wordmark" href="/" aria-label="Tribull home">
-            <img src="/products/logo.png" alt="TRIBULL" />
-          </a>
-          <div className="checkout-header__title-wrap">
-            <span className="checkout-header__eyebrow">Checkout</span>
-          </div>
-        </header>
+        <CheckoutStorefrontHeader onBack={goBackToCart} />
 
         <main className="checkout-empty-state">
           <div className="checkout-empty-state__card">
@@ -383,19 +386,7 @@ export default function CheckoutPage() {
   if (orderPlaced) {
     return (
       <div className="checkout-page checkout-page--success">
-        <header className="checkout-header">
-          <div className="checkout-header__back-area">
-            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-              <ArrowLeft size={16} /> Back to Cart
-            </button>
-          </div>
-          <a className="wordmark" href="/" aria-label="Tribull home">
-            <img src="/products/logo.png" alt="TRIBULL" />
-          </a>
-          <div className="checkout-header__title-wrap">
-            <span className="checkout-header__eyebrow">Checkout</span>
-          </div>
-        </header>
+        <CheckoutStorefrontHeader onBack={goBackToCart} />
 
         <main className="checkout-success">
           <div className="checkout-success__panel">
@@ -497,19 +488,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="checkout-page">
-      <header className="checkout-header">
-        <div className="checkout-header__back-area">
-          <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-            <ArrowLeft size={16} /> Back to Cart
-          </button>
-        </div>
-        <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
-        </a>
-        <div className="checkout-header__title-wrap">
-          <span className="checkout-header__eyebrow">Checkout</span>
-        </div>
-      </header>
+      <CheckoutStorefrontHeader onBack={goBackToCart} />
 
       <main className="checkout-layout">
         <section className="checkout-form-area">

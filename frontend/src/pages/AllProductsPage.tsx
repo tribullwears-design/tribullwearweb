@@ -1,7 +1,7 @@
-import { ArrowLeft, Check, Heart, ShoppingCart } from "lucide-react";
+import { Check, Heart, ShoppingCart } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import HeaderActions from "../components/HeaderActions";
+import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { allProducts } from "../lib/allProducts";
@@ -77,24 +77,9 @@ export default function AllProductsPage() {
     setAddedProduct(productId);
   };
 
-  const goBack = () => {
-    if (window.history.length > 1) window.history.back();
-  };
-
   return (
     <div className="all-products-page">
-      <header className="all-products-header">
-        <button type="button" className="all-products-back" onClick={goBack} aria-label="Go back">
-          <ArrowLeft size={18} />
-          <span>Back</span>
-        </button>
-
-        <Link href="/" className="all-products-brand" aria-label="Back to home">
-          <img src="/products/logo.png" alt="TRIBULL" />
-        </Link>
-
-        <HeaderActions />
-      </header>
+      <StorefrontHeader />
 
       <main className="all-products-content">
         <div className="all-products-heading-wrap">

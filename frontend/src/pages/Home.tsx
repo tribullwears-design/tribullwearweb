@@ -3,8 +3,7 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-r
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
-import MobileCategoryMenu from "../components/MobileCategoryMenu";
-import HeaderActions from "../components/HeaderActions";
+import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
@@ -49,14 +48,6 @@ const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
-}
-
-function Wordmark({ inverse = false }: { inverse?: boolean }) {
-  return (
-    <a className={`wordmark ${inverse ? "wordmark--inverse" : ""}`} href="#top" aria-label="Tribull home">
-      <img src={brandAssets.logo} alt="TRIBULL" />
-    </a>
-  );
 }
 
 function Reveal({
@@ -204,30 +195,18 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      <div className="ticker" aria-label="Announcement">
-        <div className="ticker__track">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <span key={index}>100% COTTON.<b>SHOP NOW</b><i>✦</i></span>
-          ))}
-        </div>
-      </div>
-
-      <header className="site-header">
-        <MobileCategoryMenu />
-        <Wordmark />
-        <HeaderActions />
-      </header>
-
-      <nav className="category-nav" aria-label="Cinema categories">
-        <div className="category-nav__track">
-          {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
-            <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
-              <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
-              <span className="category-nav__label">{label}</span>
-            </a>
-          ))}
-        </div>
-      </nav>
+      <StorefrontHeader>
+        <nav className="category-nav" aria-label="Cinema categories">
+          <div className="category-nav__track">
+            {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
+              <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
+                <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
+                <span className="category-nav__label">{label}</span>
+              </a>
+            ))}
+          </div>
+        </nav>
+      </StorefrontHeader>
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
