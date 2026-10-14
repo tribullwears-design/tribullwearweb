@@ -3,15 +3,17 @@ import { Link, useParams } from "wouter";
 import { apiFetch } from "../lib/api";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
+import { defaultProducts } from "../../../shared/products";
+import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 import StorefrontHeader from "../components/StorefrontHeader";
 
 export type CategoryProduct = {
   id?: string;
   name: string;
+  category?: string;
   price: string;
   image: string;
 };
@@ -287,7 +289,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
+function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`;
 
@@ -296,10 +298,13 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
       <article
         ref={ref}
         className={`category-page__card category-cinema-product reveal-scale-in ${visible ? "reveal-visible" : ""} cursor-pointer hover:shadow-lg transition-shadow`}
-        style={{ transitionDelay: `${delay}s` }}
+        style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
       >
         <div className="category-catalog-card__image-wrap">
-          <img src={item.image} alt={item.name} className="category-page__image" />
+          <img src={item.image} alt={item.name} className="category-page__image product-image-primary" />
+          {getShowcaseProductHoverImage(item.image) && (
+            <img src={getShowcaseProductHoverImage(item.image)} alt="" aria-hidden="true" className="category-page__image product-image-hover" />
+          )}
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -309,42 +314,42 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
           >
             <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
           </button>
+          <button
+            type="button"
+            className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(); }}
+            aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
+          >
+            {isAdded ? <Check size={17} /> : <ShoppingCart size={17} />}
+          </button>
         </div>
         <div className="category-page__meta">
           <div>
             <h2>{item.name}</h2>
             <p>{item.price}</p>
           </div>
-          <button
-            type="button"
-            className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(event.currentTarget); }}
-            aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
-          >
-            {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
-          </button>
         </div>
       </article>
     </Link>
   );
 }
 
-type CatalogTab = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
-type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
-
 function GlobalNavigation() {
   return <StorefrontHeader />;
 }
 
-function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
+function DynamicCategoryNav({ categorySlug, selectedSubcategory }: { categorySlug: string; selectedSubcategory?: string }) {
   const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
+  const visibleSubcategories = definition.subcategories
+    .filter(({ slug }) => slug !== selectedSubcategory)
+    .slice(0, selectedSubcategory ? 5 : undefined);
 
   return (
     <nav className="category-nav cinema-category-nav" aria-label={`${definition.title} categories`}>
       <div className="category-nav__track">
-        {definition.subcategories.map(({ label, slug, image }) => (
+        {visibleSubcategories.map(({ label, slug, image }) => (
           <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>
             <span className="category-nav__image"><img src={image} alt="" /></span>
             <span className="category-nav__label">{label}</span>
@@ -355,54 +360,31 @@ function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
   );
 }
 
-const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
-  { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
+type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
+type CatalogFilter = "oversized" | "hoodie";
+const catalogFilters: { id: CatalogFilter; label: string; icon: string }[] = [
   { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
+const hoodieProducts = defaultProducts.filter((product) => product.category === "hoodie");
+const hoodieColorVariants: CategoryProduct[] = hoodieProducts.slice(0, 4).map((product) => ({
+  id: `${product.id}-white`,
+  name: `${product.name} - White`,
+  category: product.category,
+  price: `₹${product.price.toLocaleString("en-IN")}`,
+  image: getShowcaseProductImage(3),
+}));
 
-function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: CategoryProduct[]; categorySlug: string; entrySlug: string }) {
-  const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
+function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
   const [sort, setSort] = useState<CatalogSort>("featured");
-  const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
-  const databaseOnly = !categoryProducts[categorySlug]?.[entrySlug];
+  const [filter, setFilter] = useState<CatalogFilter>("oversized");
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
   const [cart, setCart] = useState<Record<string, number>>(() => {
-    try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
+    try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}") as Record<string, number>; } catch { return {}; }
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setStoredCatalog([]);
-    setProductsLoading(true);
-    const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-    void apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id: string; name: string; price: number; image: string }[];
-      })
-      .then((products) => {
-        if (active) {
-          setStoredCatalog(products.map((product) => ({
-            id: product.id,
-            name: product.name,
-            price: `₹${product.price.toLocaleString("en-IN")}`,
-            image: product.image,
-          })));
-          setProductsLoading(false);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error("Category product request failed.", error);
-        if (active) setProductsLoading(false);
-      });
-    return () => { active = false; };
-  }, [categorySlug, entrySlug]);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -420,43 +402,39 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     };
   }, []);
 
-  const tabCatalogs: Record<CatalogTab, CategoryProduct[]> = {
-    "round-neck": [...catalog, ...storedCatalog],
-    oversized: databaseOnly ? [] : [
-      { name: "Daily Uniform Oversized Tee", price: "₹799", image: rotationImages[0] },
-      { name: "Street Frame Oversized Tee", price: "₹849", image: rotationImages[2] },
-      { name: "Heavyweight Essential Tee", price: "₹899", image: rotationImages[1] },
-      { name: "Graphic Motion Oversized Tee", price: "₹949", image: rotationImages[3] },
-    ],
-    "acid-oversized": databaseOnly ? [] : [
-      { name: "Acid Shadow Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
-      { name: "Acid Signal Oversized Tee", price: "₹1,049", image: "/products/batman.jpg" },
-      { name: "Acid Drift Washed Tee", price: "₹1,099", image: "/products/bollywood.jpg" },
-      { name: "Acid Core Graphic Tee", price: "₹1,149", image: "/products/hollywood.jpg" },
-    ],
-    hoodie: databaseOnly ? [] : [
-      { name: "Classic Tribull Hoodie", price: "₹1,299", image: rotationImages[3] },
-      { name: "Forest Logo Hoodie", price: "₹1,399", image: rotationImages[0] },
-      { name: "Graphic Night Hoodie", price: "₹1,499", image: rotationImages[1] },
-      { name: "Studio Heavy Hoodie", price: "₹1,599", image: rotationImages[2] },
-    ],
-  };
-
   const visibleCatalog = useMemo(() => {
-    const items = [...tabCatalogs[selectedTab]];
+    const baseProducts = defaultProducts.filter((product) => filter === "hoodie"
+      ? product.category === "hoodie"
+      : product.category !== "hoodie");
+    const filtered: CategoryProduct[] = filter === "hoodie"
+      ? [
+        ...baseProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          price: `₹${product.price.toLocaleString("en-IN")}`,
+          image: getShowcaseProductImage(2 + (baseProducts.indexOf(product) % 2)),
+        })),
+        ...hoodieColorVariants,
+      ]
+      : baseProducts.map((product, index) => ({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        price: `₹${product.price.toLocaleString("en-IN")}`,
+        image: getShowcaseProductImage(index % 2),
+      }));
     const price = (value: string) => Number(value.replace(/[^0-9]/g, ""));
-    if (sort === "low") items.sort((a, b) => price(a.price) - price(b.price));
-    if (sort === "high") items.sort((a, b) => price(b.price) - price(a.price));
-    if (sort === "newest") items.reverse();
-    if (sort === "selling") items.sort((a, b) => b.name.length - a.name.length);
-    return items;
-  }, [catalog, storedCatalog, selectedTab, sort]);
+    if (sort === "low") filtered.sort((a, b) => price(a.price) - price(b.price));
+    if (sort === "high") filtered.sort((a, b) => price(b.price) - price(a.price));
+    if (sort === "newest") filtered.reverse();
+    if (sort === "selling") filtered.sort((a, b) => b.name.length - a.name.length);
+    return filtered;
+  }, [filter, sort]);
 
-  const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
-  const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
   const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
-  const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
+  const addToCart = (item: CategoryProduct) => {
     const key = productKey(item);
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -467,46 +445,43 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     } catch {
       // Keep the existing quantity cart usable if metadata storage is unavailable.
     }
-    setCart((current) => {
-      const nextCart = { ...current, [key]: (current[key] || 0) + 1 };
-      window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
-      window.dispatchEvent(new Event("tribull-cart-updated"));
-      return nextCart;
-    });
+    const nextCart = { ...cart, [key]: (cart[key] || 0) + 1 };
+    setCart(nextCart);
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    window.dispatchEvent(new Event("tribull-cart-updated"));
     setAddedProduct(key);
-    if (source) animateAddToCart(source, item.image);
     window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
 
   return (
     <>
       <div className="category-catalog-controls">
-        <div className="category-catalog-tabs" aria-label="Product categories">
-          {catalogTabs.map(({ id, label, icon }) => (
-            <button key={id} type="button" className={`category-catalog-tab ${selectedTab === id ? "is-active" : ""}`} onClick={() => setSelectedTab(id)} aria-pressed={selectedTab === id}>
+        <div className="category-catalog-tabs" aria-label="Filter products by style">
+          {catalogFilters.map(({ id, label, icon }) => (
+            <button key={id} type="button" className={`category-catalog-tab ${filter === id ? "is-active" : ""}`} onClick={() => setFilter(id)} aria-pressed={filter === id}>
               <img src={icon} alt="" />
               <span>{label}</span>
             </button>
           ))}
         </div>
-        <div className="category-catalog-toolbar">
-          <p>Showing: <strong>{selectedLabel}</strong></p>
-          <label>
-            <span>Sort by:</span>
-            <select value={sort} onChange={(event) => setSort(event.target.value as CatalogSort)} aria-label="Sort products">
-              <option value="featured">Featured</option>
-              <option value="newest">Newest</option>
-              <option value="low">Price: Low to High</option>
-              <option value="high">Price: High to Low</option>
-              <option value="selling">Best Selling</option>
-            </select>
-          </label>
-        </div>
+      </div>
+      <div className="category-catalog-toolbar">
+        <p>Showing: <strong>{filter}</strong> ({visibleCatalog.length})</p>
+        <label>
+          <span>Sort by:</span>
+          <select value={sort} onChange={(event) => setSort(event.target.value as CatalogSort)} aria-label="Sort products">
+            <option value="featured">Featured</option>
+            <option value="newest">Newest</option>
+            <option value="low">Price: Low to High</option>
+            <option value="high">Price: High to Low</option>
+            <option value="selling">Best Selling</option>
+          </select>
+        </label>
       </div>
       <div className="category-page__grid category-page__grid--products">
-        {productsLoading && databaseOnly ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {
+        {visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.04 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.06 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
@@ -729,12 +704,10 @@ export default function CategoryPage() {
     const entry = category.subcategories.find((item) => item.slug === selectedSlug || normalizeCategorySlug(item.label) === selectedSlug);
     if (!entry) return <div className="p-8">Category not found.</div>;
     const entrySlug = entry.slug;
-    const catalog = categoryProducts[categorySlug]?.[entrySlug] ?? [];
-
     return (
       <div className="category-products-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug={categorySlug} />
+        <DynamicCategoryNav categorySlug={categorySlug} selectedSubcategory={entrySlug} />
 
         <div className="category-hero" aria-label={`${entry.label} featured collection`}>
           <div className="category-hero__visual">
@@ -747,7 +720,7 @@ export default function CategoryPage() {
           </div>
         </div>
 
-        <CategoryProductsView catalog={catalog} categorySlug={categorySlug} entrySlug={entrySlug} />
+        <CategoryProductsView categorySlug={categorySlug} entrySlug={entrySlug} />
       </div>
     );
   }

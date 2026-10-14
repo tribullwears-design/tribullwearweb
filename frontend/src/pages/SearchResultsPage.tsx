@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, useLocation } from "wouter";
+import { Search } from "lucide-react";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { useScrollReveal } from "../hooks/useScrollReveal";
@@ -9,6 +10,7 @@ import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
 type SortOrder = "relevance" | "price-low" | "price-high" | "newest";
+type SearchCategory = "oversized" | "hoodie";
 
 const searchProductImages = {
   oversized: [
@@ -59,9 +61,52 @@ function SearchResultCard({
 }
 
 export default function SearchResultsPage() {
-  const query = new URLSearchParams(window.location.search).get("q")?.trim() || "";
+  const [, setLocation] = useLocation();
+  const initialSearchParams = new URLSearchParams(window.location.search);
+  const [query, setQuery] = useState(() => initialSearchParams.get("q")?.trim() || "");
+  const [searchInput, setSearchInput] = useState(query);
+  const [selectedCategory, setSelectedCategory] = useState<SearchCategory | null>(() => {
+    const category = initialSearchParams.get("category");
+    return category === "oversized" || category === "hoodie" ? category : null;
+  });
   const [catalogProducts, setCatalogProducts] = useState<Product[]>(defaultProducts);
   const [sortOrder, setSortOrder] = useState<SortOrder>("relevance");
+
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
+  useEffect(() => {
+    const syncSearchFromLocation = () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      const category = searchParams.get("category");
+      setQuery(searchParams.get("q")?.trim() || "");
+      setSelectedCategory(category === "oversized" || category === "hoodie" ? category : null);
+    };
+    const selectCategory = (event: Event) => {
+      const { category, query } = (event as CustomEvent<{ category: SearchCategory; query: string }>).detail;
+      setSelectedCategory(category);
+      setQuery(query);
+      setSearchInput(query);
+    };
+    window.addEventListener("popstate", syncSearchFromLocation);
+    window.addEventListener("tribull-search-category-selected", selectCategory);
+    return () => {
+      window.removeEventListener("popstate", syncSearchFromLocation);
+      window.removeEventListener("tribull-search-category-selected", selectCategory);
+    };
+  }, []);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextQuery = searchInput.trim();
+    setQuery(nextQuery);
+    const searchParams = new URLSearchParams();
+    if (selectedCategory) searchParams.set("category", selectedCategory);
+    if (nextQuery) searchParams.set("q", nextQuery);
+    const search = searchParams.toString();
+    setLocation(search ? `/search?${search}` : "/search");
+  };
 
   useEffect(() => {
     let active = true;
@@ -87,13 +132,17 @@ export default function SearchResultsPage() {
       ? supportedProducts.filter((product) => matchesProductSearch(product, query))
       : supportedProducts;
 
-    return [...matches].sort((first, second) => {
+    const categoryMatches = selectedCategory
+      ? matches.filter((product) => getProductSearchCategory(product) === selectedCategory)
+      : matches;
+
+    return [...categoryMatches].sort((first, second) => {
       if (sortOrder === "price-low") return first.price - second.price;
       if (sortOrder === "price-high") return second.price - first.price;
       if (sortOrder === "newest") return second.created - first.created;
       return second.sold - first.sold;
     });
-  }, [supportedProducts, query, sortOrder]);
+  }, [supportedProducts, query, selectedCategory, sortOrder]);
   const productsWithImages = matchingProducts.map((product, index) => {
     const category = getProductSearchCategory(product);
     const variantIndex = matchingProducts
@@ -110,7 +159,7 @@ export default function SearchResultsPage() {
   const productsByCategory = (["oversized", "hoodie"] as const).map((category) => ({
     category,
     products: productsWithImages.filter((product) => getProductSearchCategory(product) === category),
-  })).filter(({ products }) => products.length > 0);
+  })).filter(({ category, products }) => products.length > 0 && (!selectedCategory || category === selectedCategory));
 
   return (
     <div className="search-page">
@@ -119,7 +168,17 @@ export default function SearchResultsPage() {
       <main className="search-page__content">
         <div className="search-page__heading">
           <p>Search results</p>
-          <h1>{query ? `Results for “${query}”` : "Oversized & Hoodie"}</h1>
+          <h1>{query ? `Results for “${query}”` : selectedCategory === "oversized" ? "Oversized" : selectedCategory === "hoodie" ? "Hoodie" : "Oversized & Hoodie"}</h1>
+          <form className="search-page__search-form" onSubmit={submitSearch} role="search">
+            <Search size={18} aria-hidden="true" />
+            <input
+              aria-label="Search products or categories"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              placeholder="Search products or categories"
+            />
+            <button type="submit">Search</button>
+          </form>
         </div>
 
         <div className="search-page__toolbar">

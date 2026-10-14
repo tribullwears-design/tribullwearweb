@@ -8,6 +8,8 @@ const showcaseProductImages = [
 const showcaseHoverImages: Record<string, string> = {
   [showcaseProductImages[0]]: "/products/B1.jpg.jpeg",
   [showcaseProductImages[1]]: "/products/W1.jpg.jpeg",
+  [showcaseProductImages[2]]: showcaseProductImages[3],
+  [showcaseProductImages[3]]: showcaseProductImages[2],
 };
 
 export function getShowcaseProductImage(index: number) {
