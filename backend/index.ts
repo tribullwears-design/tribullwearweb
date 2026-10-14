@@ -65,7 +65,9 @@ async function startServer() {
 
   const allowedOrigins = new Set(process.env.NODE_ENV === "production" ? [] : [
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://192.168.31.155:3000",
+    "http://192.168.31.155:3001",
   ]);
   if (process.env.FRONTEND_URL) {
     try {
@@ -138,19 +140,60 @@ async function startServer() {
     }
   });
   app.post("/api/auth/google", loginLimiter, async (req, res) => {
-    const { credential } = req.body ?? {};
+    const { credential, flow } = req.body ?? {};
     if (typeof credential !== "string" || !credential) return res.status(400).json({ error: "Google credential is required" });
+    if (flow !== "signin" && flow !== "signup") return res.status(400).json({ error: "Choose sign in or sign up to continue with Google" });
     try {
       const profile = await verifyGoogleCredential(credential);
       const linked = await findGoogleCustomer(profile.sub);
-      if (linked?.isProfileComplete) {
-        issueCustomerSession(res, linked);
-        return res.json({ user: safeCustomer(linked) });
+      if (linked) {
+        if (normalizeCustomerEmail(linked.email) !== profile.email) {
+          return res.status(409).json({ error: "This Google account is linked to a different email address." });
+        }
+        const name = typeof linked.name === "string" && linked.name.trim() ? linked.name.trim() : profile.name;
+        const mobile = typeof linked.mobile === "string" && isValidCustomerMobile(linked.mobile)
+          ? linked.mobile
+          : "";
+        const missingFields: ("name" | "mobile")[] = [];
+        if (name.trim().length < 2 || name.trim().length > 80) missingFields.push("name");
+        if (!mobile) missingFields.push("mobile");
+
+        if (missingFields.length === 0) {
+          const customer = linked.isProfileComplete
+            ? linked
+            : await completeGoogleProfile(profile.sub, name, mobile);
+          if (!customer) return res.status(409).json({ error: "Unable to complete your Google profile." });
+          issueCustomerSession(res, customer);
+          return res.json({ user: safeCustomer(customer) });
+        }
+
+        return res.json({
+          requiresProfile: true,
+          pendingToken: createPendingGoogleToken({ ...profile, name }),
+          email: profile.email,
+          name,
+          missingFields,
+        });
       }
-      if (await findCustomerByEmail(profile.email) && !linked) {
+
+      const emailCustomer = await findCustomerByEmail(profile.email);
+      if (flow === "signin") {
+        return res.status(404).json({ error: "Google account not registered. Please sign up first." });
+      }
+      if (emailCustomer) {
         return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
       }
-      return res.json({ requiresProfile: true, pendingToken: createPendingGoogleToken(profile), email: profile.email, name: profile.name });
+
+      const missingFields: ("name" | "mobile")[] = [];
+      if (profile.name.length < 2 || profile.name.length > 80) missingFields.push("name");
+      missingFields.push("mobile");
+      return res.json({
+        requiresProfile: true,
+        pendingToken: createPendingGoogleToken(profile),
+        email: profile.email,
+        name: profile.name,
+        missingFields,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Google sign-in failed";
       if (message.includes("not configured")) return res.status(503).json({ error: message });
@@ -162,15 +205,39 @@ async function startServer() {
   app.post("/api/auth/google/complete-profile", loginLimiter, async (req, res) => {
     const { pendingToken, name, mobile } = req.body ?? {};
     if (typeof pendingToken !== "string") return res.status(400).json({ error: "Google profile token is required" });
-    if (typeof name !== "string" || name.trim().length < 2 || name.trim().length > 80) return res.status(400).json({ error: "Enter a name between 2 and 80 characters" });
-    if (typeof mobile !== "string" || !isValidCustomerMobile(mobile)) return res.status(400).json({ error: "Enter a valid mobile number" });
     try {
       const profile = readPendingGoogleToken(pendingToken);
-      let customer = await completeGoogleProfile(profile.sub, name, mobile);
-      if (!customer) customer = await insertGoogleCustomer(profile, name, mobile);
-      if (!customer) return res.status(409).json({ error: "This email is already registered" });
+      const linked = await findGoogleCustomer(profile.sub);
+      if (linked && normalizeCustomerEmail(linked.email) !== profile.email) {
+        return res.status(409).json({ error: "This Google account is linked to a different email address." });
+      }
+      if (!linked && await findCustomerByEmail(profile.email)) {
+        return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
+      }
+
+      const savedName = typeof linked?.name === "string" && linked.name.trim()
+        ? linked.name.trim()
+        : profile.name;
+      const savedMobile = typeof linked?.mobile === "string" && isValidCustomerMobile(linked.mobile)
+        ? linked.mobile
+        : "";
+      const finalName = savedName || (typeof name === "string" ? name.trim() : "");
+      const finalMobile = savedMobile || (typeof mobile === "string" ? mobile : "");
+      if (finalName.length < 2 || finalName.length > 80) return res.status(400).json({ error: "Enter a name between 2 and 80 characters" });
+      if (!isValidCustomerMobile(finalMobile)) return res.status(400).json({ error: "Enter a valid mobile number" });
+
+      let customer = await completeGoogleProfile(profile.sub, finalName, finalMobile);
+      if (!customer) customer = await insertGoogleCustomer(profile, finalName, finalMobile);
+      if (!customer) {
+        const racedCustomer = await findGoogleCustomer(profile.sub);
+        if (racedCustomer && normalizeCustomerEmail(racedCustomer.email) === profile.email && racedCustomer.isProfileComplete) {
+          customer = racedCustomer;
+        } else {
+          return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
+        }
+      }
       issueCustomerSession(res, customer);
-      return res.status(201).json({ user: safeCustomer(customer) });
+      return res.json({ user: safeCustomer(customer) });
     } catch (error) {
       if (error instanceof Error && error.name === "JsonWebTokenError") return res.status(401).json({ error: "Google profile session is invalid or expired" });
       console.error("Google profile completion failed", error);
@@ -426,7 +493,31 @@ async function startServer() {
     } catch (error) { sendError(res, error); }
   });
 
-  // Serve static files from dist/public in production
+  app.use("/api", (_req, res) => {
+    res.status(404).json({ error: "API route not found" });
+  });
+  app.use((error: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (req.path !== "/api" && !req.path.startsWith("/api/")) return next(error);
+
+    const errorStatus = typeof error === "object" && error !== null && "status" in error
+      ? error.status
+      : undefined;
+    const status = typeof errorStatus === "number" && errorStatus >= 400 && errorStatus <= 599
+      ? errorStatus
+      : 500;
+    if (status >= 500) console.error("API request failed", error);
+
+    const message = status >= 500
+      ? "Internal server error"
+      : error instanceof SyntaxError
+        ? "Invalid JSON request body"
+        : error instanceof Error
+          ? error.message
+          : "Request failed";
+    res.status(status).json({ error: message });
+  });
+
+  // Serve the storefront from `/`; registered API routes and API errors take precedence.
   const staticPath =
     process.env.NODE_ENV === "production"
       ? path.resolve(__dirname, "public")

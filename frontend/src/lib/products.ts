@@ -2,6 +2,8 @@ import type { Product } from "../../../shared/products";
 import { parsePrice, resolveOriginalPrice } from "./productPrice";
 
 type ApiProduct = Omit<Product, "price" | "originalPrice"> & {
+  status?: "Active" | "Draft";
+  createdAt?: string;
   price?: string | number | null;
   sellingPrice?: string | number | null;
   currentPrice?: string | number | null;
@@ -39,10 +41,14 @@ export function mapApiProduct(product: ApiProduct): Product {
   return {
     id: product.id,
     name: product.name,
-    category: product.category,
+    category: product.category || ("subcategoryId" in product && typeof product.subcategoryId === "string"
+      ? product.subcategoryId
+      : "mainCategoryId" in product && typeof product.mainCategoryId === "string"
+        ? product.mainCategoryId
+        : "products"),
     image: product.image,
-    created: product.created,
-    sold: product.sold,
+    created: product.created ?? (typeof product.createdAt === "string" ? Date.parse(product.createdAt) : 0),
+    sold: product.sold ?? 0,
     price,
     ...(originalPrice === undefined ? {} : { originalPrice }),
   };
@@ -65,7 +71,8 @@ async function request<T>(path: string, method: "GET" | "POST" | "PATCH", body?:
 
 export async function fetchProducts(): Promise<Product[]> {
   if (cachedProducts) return cachedProducts;
-  productsRequest ||= request<ApiProduct[]>("/api/products", "GET").then((products) => products.map(mapApiProduct));
+  productsRequest ||= request<ApiProduct[]>("/api/products", "GET")
+    .then((products) => products.filter((product) => product.status !== "Draft").map(mapApiProduct));
   try {
     cachedProducts = await productsRequest;
     return cachedProducts;

@@ -197,11 +197,11 @@ export default function ProductsPage() {
                 key={product.id}
                 role="link"
                 tabIndex={0}
-                onClick={() => setLocation(`/product/${product.category}-${catalogProducts.findIndex((item) => item.id === product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`)}
+                onClick={() => setLocation(`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setLocation(`/product/${product.category}-${catalogProducts.findIndex((item) => item.id === product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`);
+                    setLocation(`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`);
                   }
                 }}
               >

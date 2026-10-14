@@ -6,6 +6,7 @@ import {
   UserRound, Users, X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { products as storeProducts, type Product } from "./ProductsPage";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
@@ -125,7 +126,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
     <label><span>Price</span><input required type="number" min="0" step="any" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
     <label><span>Compare-at price</span><input type="number" min="0" step="any" value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
-    <div className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</div>
+    <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
@@ -396,6 +397,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [editingProductCategory, setEditingProductCategory] = useState("");
   const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
   const [productUpdateError, setProductUpdateError] = useState("");
+  const productUpdateInFlight = useRef(false);
   const [databaseProducts, setDatabaseProducts] = useState<StoredProduct[]>([]);
   const [productsError, setProductsError] = useState("");
   const [productsLoading, setProductsLoading] = useState(false);
@@ -571,6 +573,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setSavedNotice("Price must be a valid number greater than or equal to 0.");
       return;
     }
+    productUpdateInFlight.current = true;
     setProductSaving(true);
     setSavedNotice("");
     try {
@@ -714,7 +717,23 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       if (!request.signal.aborted) setEditProductLoading(false);
     }
   };
-  const closeProductEditor = () => {
+  const closeProductEditor = (forceOrEvent: boolean | React.MouseEvent<HTMLElement> = false) => {
+    const force = forceOrEvent === true;
+    if (productSaving && !force) return;
+    const hasUnsavedChanges = editingProduct && (
+      editingProductForm.name !== editingProduct.name
+      || editingProductForm.description !== editingProduct.description
+      || editingProductForm.price !== String(editingProduct.price)
+      || editingProductForm.compareAt !== (editingProduct.compareAt === null ? "" : String(editingProduct.compareAt))
+      || editingProductForm.category !== editingProduct.mainCategoryId
+      || editingProductForm.subcategory !== editingProduct.subcategoryId
+      || editingProductForm.image !== editingProduct.image
+      || editingProductForm.stock !== String(editingProduct.stock)
+      || editingProductForm.sizes !== editingProduct.sizes.join(", ")
+      || editingProductForm.colors !== editingProduct.colors.join(", ")
+      || editingProductForm.status !== editingProduct.status
+    );
+    if (!force && hasUnsavedChanges && !window.confirm("Discard your unsaved changes?")) return;
     editProductRequest.current?.abort();
     editProductRequest.current = null;
     setIsProductEditorOpen(false);
@@ -725,7 +744,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   };
   const saveEditedProduct = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!editingProduct) return;
+    if (!editingProduct || productUpdateInFlight.current) return;
     const price = Number(editingProductForm.price);
     const stock = Number(editingProductForm.stock);
     const compareAt = editingProductForm.compareAt.trim() ? Number(editingProductForm.compareAt) : null;
@@ -769,12 +788,22 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
         throw new Error(details?.error || "Product could not be updated.");
       }
-      const updatedProduct = await response.json() as StoredProduct;
+      const responseBody: unknown = await response.json();
+      if (!responseBody || typeof responseBody !== "object" || !("id" in responseBody)
+        || responseBody.id !== editingProduct.id) {
+        throw new Error("The server returned an invalid product update response.");
+      }
+      const updatedProduct = responseBody as StoredProduct;
       setDatabaseProducts((current) => current.map((item) => item.id === updatedProduct.id ? updatedProduct : item));
-      closeProductEditor();
+      window.dispatchEvent(new Event("tribull-products-updated"));
+      toast.success("Product updated successfully!");
+      closeProductEditor(true);
     } catch (error) {
-      setEditProductError(error instanceof Error ? error.message : "Unable to update product. Please try again.");
+      const detail = error instanceof Error ? error.message : "Unable to update product. Please try again.";
+      setEditProductError(detail);
+      toast.error("Failed to update product. Please try again.", { description: detail });
     } finally {
+      productUpdateInFlight.current = false;
       setProductSaving(false);
     }
   };

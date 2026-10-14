@@ -6,7 +6,7 @@ export type CustomerDocument = {
   name: string;
   email: string;
   mobile: string;
-  passwordHash: string | null;
+  passwordHash?: string | null;
   googleId?: string;
   authProviders: ("password" | "google")[];
   isProfileComplete: boolean;
@@ -111,7 +111,10 @@ export async function insertCustomer(customer: Omit<CustomerDocument, "_id">) {
 export async function updateGoogleProfile(googleId: string, name: string, mobile: string) {
   return (await getCollection()).findOneAndUpdate(
     { googleId },
-    { $set: { name, mobile, isProfileComplete: true, updatedAt: new Date() } },
+    {
+      $set: { name, mobile, isProfileComplete: true, updatedAt: new Date() },
+      $addToSet: { authProviders: "google" },
+    },
     { returnDocument: "after" },
   );
 }

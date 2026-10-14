@@ -3,14 +3,19 @@ import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { Link, useLocation, useParams } from "wouter";
+import { apiFetch } from "../lib/api";
+import { Link, useParams } from "wouter";
 import { useEffect, useState } from "react";
 
 interface ProductData extends OriginalPriceFields {
+  id?: string;
   name: string;
   price: string;
   image: string;
   category: string;
+  description?: string;
+  sizes?: string[];
+  colors?: string[];
 }
 
 const allCategoryProducts: Record<string, ProductData[]> = {
@@ -143,10 +148,10 @@ const tShirtColors = [
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [, setLocation] = useLocation();
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState<"Black" | "White" | null>(null);
+  const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [isInfoOpen, setIsInfoOpen] = useState(true);
@@ -187,16 +192,72 @@ export default function ProductDetailPage() {
   const index = Number.parseInt(separatorIndex > 0 ? id?.slice(separatorIndex + 1) || "0" : "0", 10);
   const categoryProducts = allCategoryProducts[category] || [];
   const query = new URLSearchParams(window.location.search);
-  const linkedProduct = query.get("name") && query.get("image") ? {
+  const linkedProduct: ProductData | undefined = query.get("name") && query.get("image") ? {
     name: query.get("name") || "Selected product",
     price: query.get("price") || "₹0",
     originalPrice: query.get("originalPrice") ? Number(query.get("originalPrice")) : undefined,
     image: query.get("image") || "",
     category: category || "Tribull",
   } : undefined;
-  const product = linkedProduct ?? categoryProducts[index];
+  useEffect(() => {
+    let active = true;
+    const loadStoredProduct = () => {
+      setStoredProduct(null);
+      if (!id || !/^(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{24})$/i.test(id)) return;
+      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store" })
+        .then(async (response) => {
+          if (!response.ok) {
+            if (response.status !== 404) throw new Error("Unable to load product details.");
+            return null;
+          }
+          return await response.json() as {
+            id: string;
+            name: string;
+            description: string;
+            price: number;
+            compareAt: number | null;
+            image: string;
+            mainCategory: string;
+            sizes: string[];
+            colors: string[];
+          };
+        })
+        .then((product) => {
+          if (!active || !product) return;
+          setStoredProduct({
+            id: product.id,
+            name: product.name,
+            description: product.description,
+            price: `₹${product.price.toLocaleString("en-IN")}`,
+            originalPrice: product.compareAt ?? undefined,
+            image: product.image,
+            category: product.mainCategory,
+            sizes: product.sizes,
+            colors: product.colors,
+          });
+        })
+        .catch((error: unknown) => {
+          console.error("Product detail request failed.", error);
+        });
+    };
+    loadStoredProduct();
+    window.addEventListener("tribull-products-updated", loadStoredProduct);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", loadStoredProduct);
+    };
+  }, [id]);
+  const product = storedProduct ?? linkedProduct ?? categoryProducts[index];
   const isTShirtColorVariant = product?.image === getShowcaseProductImage(0) || product?.image === getShowcaseProductImage(1);
-  const initialColor = product?.image === getShowcaseProductImage(1) ? "White" : "Black";
+  const productColorOptions = storedProduct?.colors?.length
+    ? storedProduct.colors.map((name) => ({
+      name,
+      value: tShirtColors.find((color) => color.name.toLowerCase() === name.toLowerCase())?.value || name.toLowerCase(),
+    }))
+    : tShirtColors;
+  const hasProductColors = isTShirtColorVariant || Boolean(storedProduct?.colors?.length);
+  const availableSizes = storedProduct?.sizes?.length ? storedProduct.sizes : sizeOptions;
+  const initialColor = storedProduct?.colors?.[0] || (product?.image === getShowcaseProductImage(1) ? "White" : "Black");
   const activeColor = selectedColor ?? initialColor;
   const productImageViews = isTShirtColorVariant
     ? activeColor === "Black" ? blackTShirtImageViews : whiteTShirtImageViews
@@ -212,7 +273,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor(product.image === getShowcaseProductImage(1) ? "White" : "Black");
+      setSelectedColor(storedProduct?.colors?.[0] || (product.image === getShowcaseProductImage(1) ? "White" : "Black"));
     }
   }, [product?.image]);
 
@@ -227,6 +288,8 @@ export default function ProductDetailPage() {
       .filter(([productCategory]) => productCategory !== category)
       .flatMap(([, items]) => items),
   ].slice(0, 4);
+
+  const productDescription = product.description || `${product.name} is a premium ${product.category.toLowerCase()} staple designed for elevated daily wear. Built with a soft cotton blend, durable print finish, and an easy, relaxed silhouette for all-day comfort.`;
 
   const benefitItems = [
     { title: "Fit", detail: "Relaxed" },
@@ -419,7 +482,7 @@ export default function ProductDetailPage() {
               </div>
 
               <div className="product-detail-sizes">
-                {sizeOptions.map((size) => (
+                {availableSizes.map((size) => (
                   <button
                     key={size}
                     type="button"
@@ -460,6 +523,35 @@ export default function ProductDetailPage() {
                   <Plus size={16} />
                 </button>
               </div>
+
+              {hasProductColors ? (
+                <div className="product-detail-color-option">
+                  <span>Colour: {activeColor}</span>
+                  <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
+                    {productColorOptions.map((option) => (
+                      <button
+                        key={option.name}
+                        data-color={option.name}
+                        className={activeColor === option.name ? "is-selected" : ""}
+                        type="button"
+                        onClick={() => {
+                          setSelectedColor(option.name);
+                          setSelectedImageIndex(0);
+                        }}
+                        aria-label={`Select ${option.name} T-shirt`}
+                        aria-pressed={activeColor === option.name}
+                        title={option.name}
+                        style={{
+                          background: option.value,
+                          ...(option.name === "White"
+                            ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
+                            : {}),
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart}>
                 {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}

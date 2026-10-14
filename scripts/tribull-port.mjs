@@ -13,7 +13,7 @@ function run(command, args) {
   return result.stdout;
 }
 
-function getListenerPids(port) {
+export function getListenerPids(port) {
   if (process.platform === "win32") {
     const output = run("netstat", ["-ano", "-p", "tcp"]);
     return new Set(
@@ -49,7 +49,7 @@ function getListenerPids(port) {
   return new Set(pids);
 }
 
-function getProcessTree() {
+export function getProcessTree() {
   if (process.platform === "win32") {
     const output = run("powershell.exe", [
       "-NoProfile",
@@ -74,7 +74,7 @@ function getProcessTree() {
     });
 }
 
-function belongsToTribullBackend(pid, processes) {
+export function belongsToTribullService(pid, processes, service) {
   const byPid = new Map(processes.map((process) => [process.pid, process]));
   const lineage = [];
   let current = byPid.get(pid);
@@ -86,10 +86,10 @@ function belongsToTribullBackend(pid, processes) {
   const normalize = (value) => value.replaceAll("\\", "/").toLowerCase();
   const root = normalize(projectRoot).replace(/\/+$/, "");
   const sameProject = lineage.some((process) => normalize(process.commandLine).includes(root));
-  const backendProcess = lineage.some((process) =>
-    /(?:backend\/index\.ts|dist\/index\.js)/i.test(normalize(process.commandLine)),
-  );
-  return sameProject && backendProcess;
+  const serviceProcess = service === "backend"
+    ? lineage.some((process) => /(?:backend\/index\.ts|dist\/index\.js)/i.test(normalize(process.commandLine)))
+    : lineage.some((process) => /(?:^|\/)node_modules\/(?:\.bin\/)?vite(?:\/|\.|$|\s)/i.test(normalize(process.commandLine)));
+  return sameProject && serviceProcess;
 }
 
 export async function stopTribullBackend(port = 5001) {
@@ -99,7 +99,7 @@ export async function stopTribullBackend(port = 5001) {
   const processes = getProcessTree();
   const stalePids = [];
   for (const pid of pids) {
-    if (!belongsToTribullBackend(pid, processes)) {
+    if (!belongsToTribullService(pid, processes, "backend")) {
       const process = processes.find((entry) => entry.pid === pid);
       throw new Error(
         `Port ${port} is occupied by an unidentified process (PID ${pid}: ${process?.commandLine || "unknown"}); leaving it running.`,

@@ -15,6 +15,7 @@ type CartItems = Record<string, CartItem>;
 
 type Overlay = "search" | "account" | "wishlist" | "cart" | null;
 type LoginStep = "login" | "signup" | "forgot" | "verify-otp" | "new-password" | "google-profile" | "profile";
+type GoogleProfileField = "name" | "mobile";
 type AccountSection = "main" | "profile" | "orders" | "wishlist" | "addresses";
 type AuthUser = {
   username: string;
@@ -127,6 +128,7 @@ export default function HeaderActions() {
   const [signupName, setSignupName] = useState("");
   const [signupMobile, setSignupMobile] = useState("");
   const [pendingGoogleToken, setPendingGoogleToken] = useState("");
+  const [googleProfileMissingFields, setGoogleProfileMissingFields] = useState<GoogleProfileField[]>([]);
   const [recoveryOtp, setRecoveryOtp] = useState("");
   const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
   const [recoveryPasswordConfirmation, setRecoveryPasswordConfirmation] = useState("");
@@ -421,6 +423,7 @@ export default function HeaderActions() {
       setLoginError("Google sign-in is not configured: VITE_GOOGLE_CLIENT_ID is missing.");
       return;
     }
+    const flow = loginStep === "signup" ? "signup" : "signin";
     setIsSigningIn(true);
     try {
       if (!getGoogleIdentityAPI()) {
@@ -451,7 +454,7 @@ export default function HeaderActions() {
             const response = await apiFetch("/api/auth/google", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ credential }),
+              body: JSON.stringify({ credential, flow }),
             });
             const data: unknown = await response.json();
             if (!response.ok) {
@@ -476,10 +479,13 @@ export default function HeaderActions() {
             if (typeof data === "object" && data !== null && "requiresProfile" in data && data.requiresProfile === true
               && "pendingToken" in data && typeof data.pendingToken === "string"
               && "email" in data && typeof data.email === "string"
-              && "name" in data && typeof data.name === "string") {
+              && "name" in data && typeof data.name === "string"
+              && "missingFields" in data && Array.isArray(data.missingFields)
+              && data.missingFields.every((field) => field === "name" || field === "mobile")) {
               setPendingGoogleToken(data.pendingToken);
               setLoginEmail(data.email);
               setSignupName(data.name);
+              setGoogleProfileMissingFields(data.missingFields);
               setLoginStep("google-profile");
               setLoginSuccess("");
               return;
@@ -682,7 +688,11 @@ export default function HeaderActions() {
       const response = await apiFetch("/api/auth/google/complete-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingToken: pendingGoogleToken, name: signupName.trim(), mobile: signupMobile.trim() }),
+        body: JSON.stringify({
+          pendingToken: pendingGoogleToken,
+          ...(googleProfileMissingFields.includes("name") ? { name: signupName.trim() } : {}),
+          ...(googleProfileMissingFields.includes("mobile") ? { mobile: signupMobile.trim() } : {}),
+        }),
       });
       const data: unknown = await response.json();
       if (!response.ok) {
@@ -702,9 +712,10 @@ export default function HeaderActions() {
         isAuthenticated: true,
       });
       setPendingGoogleToken("");
+      setGoogleProfileMissingFields([]);
       setLoginStep("profile");
       setAccountSection("main");
-      setLoginSuccess("Account created successfully.");
+      setLoginSuccess("Signed in successfully.");
     } catch {
       setLoginError("Unable to reach the account service.");
     } finally {
@@ -1155,7 +1166,7 @@ export default function HeaderActions() {
               {loginError && <p className="header-form-error header-login-status" role="alert">{loginError}</p>}
               {loginSuccess && <p className="header-form-success header-login-status" role="status">{loginSuccess}</p>}
               <form onSubmit={loginStep === "signup" ? handleSignUp : loginStep === "forgot" ? handleForgotPassword : loginStep === "verify-otp" ? handleVerifyRecoveryOtp : loginStep === "new-password" ? handleRecoveryPasswordReset : loginStep === "google-profile" ? handleGoogleProfile : handleEmailSignIn}>
-                {loginStep === "signup" && <label>Name
+                {(loginStep === "signup" || loginStep === "google-profile" && googleProfileMissingFields.includes("name")) && <label>Name
                   <span className="header-login-input">
                     <User size={22} aria-hidden="true" />
                     <input type="text" autoComplete="name" autoFocus value={signupName} onChange={(event) => { setSignupName(event.target.value); setLoginError(""); }} placeholder="Enter your name" required />
@@ -1168,7 +1179,7 @@ export default function HeaderActions() {
                   </span>
                 </label>}
                 {loginStep === "google-profile" && <p className="google-profile-email"><Mail size={18} aria-hidden="true" />{loginEmail}</p>}
-                {(loginStep === "signup" || loginStep === "google-profile") && <label>{loginStep === "signup" ? "Mobile" : "Mobile number"}
+                {(loginStep === "signup" || loginStep === "google-profile" && googleProfileMissingFields.includes("mobile")) && <label>{loginStep === "signup" ? "Mobile" : "Mobile number"}
                   <span className="header-login-input">
                     <Phone size={22} aria-hidden="true" />
                     <input type="tel" autoComplete="tel" inputMode="tel" value={signupMobile} onChange={(event) => { setSignupMobile(event.target.value); setLoginError(""); }} placeholder="Enter your mobile number" required />
@@ -1231,6 +1242,10 @@ export default function HeaderActions() {
               {loginStep === "login" && <>
                 <div className="header-login-divider"><span>OR</span></div>
                 <button className="google-sign-in" type="button" onClick={handleGoogleSignIn}><GoogleLogo />Continue with Google</button>
+              </>}
+              {loginStep === "signup" && <>
+                <div className="header-login-divider"><span>OR</span></div>
+                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn} disabled={isSigningIn}><GoogleLogo />Continue with Google</button>
               </>}
             </div>
           )}

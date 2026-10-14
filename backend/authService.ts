@@ -177,10 +177,7 @@ export async function findGoogleCustomer(googleId: string) {
 export async function completeGoogleProfile(sub: string, name: string, mobile: string) {
   const normalizedMobile = normalizeCustomerMobile(mobile);
   const already = await findCustomerByGoogleId(sub);
-  if (already) {
-    if (already.isProfileComplete) return already;
-    return updateGoogleProfile(sub, name.trim(), normalizedMobile);
-  }
+  if (already) return updateGoogleProfile(sub, name.trim(), normalizedMobile);
   return null;
 }
 
@@ -190,7 +187,6 @@ export async function insertGoogleCustomer(profile: { sub: string; email: string
       name: name.trim(),
       email: profile.email,
       mobile: normalizeCustomerMobile(mobile),
-      passwordHash: null,
       googleId: profile.sub,
       authProviders: ["google"],
       isProfileComplete: true,
@@ -199,7 +195,9 @@ export async function insertGoogleCustomer(profile: { sub: string; email: string
       updatedAt: new Date(),
     });
   } catch (error) {
-    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) return null;
+    if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+      return findCustomerByGoogleId(profile.sub);
+    }
     throw error;
   }
 }

@@ -7,6 +7,8 @@ import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import type { Product } from "../../../shared/products";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -83,7 +85,7 @@ function Reveal({
   );
 }
 
-function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[]; delay?: number; showMeta?: boolean; href: string }) {
+function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: { item: string[]; delay?: number; showMeta?: boolean; href: string; originalPrice?: number }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   const [, setLocation] = useLocation();
   const [isOpening, setIsOpening] = useState(false);
@@ -124,7 +126,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
           {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="eager" /> : null}
         </div>
-        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} productName={item[1]} /></div>}
+        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
     </Link>
   );
@@ -133,6 +135,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[
 export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -141,6 +144,25 @@ export default function Home() {
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((products) => {
+        if (active) setCatalogProducts(products);
+      }).catch((error: unknown) => {
+        console.error("Could not load products for the storefront.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
 
   const lifestyleVideos = ["video1", "video2", "video3", "video4"];
   const lifestyleSlides = Array.from({ length: 6 }, (_, index) => lifestyleVideos[index % lifestyleVideos.length]);
@@ -193,6 +215,30 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
+  const productLink = (product: Product) => `/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(`₹${product.price.toLocaleString("en-IN")}`)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`;
+  const arrivalCards = catalogProducts.length
+    ? catalogProducts.slice(0, 6).map((product) => ({
+      item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
+      href: productLink(product),
+      originalPrice: product.originalPrice,
+    }))
+    : newArrivals.map((item, index) => ({
+      item: [getShowcaseProductImage(index), item[1], item[2]],
+      href: `/product/hollywood-${index}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(index))}`,
+      originalPrice: undefined,
+    }));
+  const bestSellingCards = catalogProducts.length
+    ? [...catalogProducts].sort((first, second) => second.sold - first.sold).slice(0, 6).map((product) => ({
+      item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
+      href: productLink(product),
+      originalPrice: product.originalPrice,
+    }))
+    : bestSelling.map((item, index) => ({
+      item: [getShowcaseProductImage(index), item[1], item[2]],
+      href: `/product/hollywood-${index + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(index))}`,
+      originalPrice: undefined,
+    }));
+
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
       <StorefrontHeader>
@@ -238,12 +284,13 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid">
-              {newArrivals.map((item, idx) => (
+              {arrivalCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
-                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
+                  item={item}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
-                  href={`/product/hollywood-${idx}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
+                  href={href}
+                  originalPrice={originalPrice}
                 />
               ))}
             </div>
@@ -259,12 +306,13 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only">
-              {bestSelling.map((item, idx) => (
+              {bestSellingCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
-                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
+                  item={item}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
-                  href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
+                  href={href}
+                  originalPrice={originalPrice}
                 />
               ))}
             </div>

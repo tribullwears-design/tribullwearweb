@@ -6,9 +6,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
-import { defaultProducts } from "../../../shared/products";
-import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
-import StorefrontHeader from "../components/StorefrontHeader";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import HeaderActions from "../components/HeaderActions";
+import ProductPrice from "../components/ProductPrice";
 
 export type CategoryProduct = {
   id?: string;
@@ -16,6 +16,7 @@ export type CategoryProduct = {
   category?: string;
   price: string;
   image: string;
+  originalPrice?: number | null;
 };
 
 type CategoryDefinition = {
@@ -291,7 +292,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
 
 function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
-  const productLink = `/product/${category}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`;
+  const productLink = `/product/${item.id || `${category}-${index}`}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(item.originalPrice ?? "")}&image=${encodeURIComponent(item.image)}`;
 
   return (
     <Link href={productLink} className="block h-full">
@@ -326,7 +327,7 @@ function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, 
         <div className="category-page__meta">
           <div>
             <h2>{item.name}</h2>
-            <p>{item.price}</p>
+            <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
           </div>
         </div>
       </article>
@@ -385,6 +386,40 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}") as Record<string, number>; } catch { return {}; }
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setStoredCatalog([]);
+    setProductsLoading(true);
+    const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
+    const loadProducts = () => apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load category products.");
+        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string }[];
+      })
+      .then((products) => {
+        if (active) {
+          setStoredCatalog(products.map((product) => ({
+            id: product.id,
+            name: product.name,
+            price: `₹${product.price.toLocaleString("en-IN")}`,
+            image: product.image,
+            originalPrice: product.compareAt,
+          })));
+          setProductsLoading(false);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Category product request failed.", error);
+        if (active) setProductsLoading(false);
+      });
+    void loadProducts();
+    window.addEventListener("tribull-products-updated", loadProducts);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", loadProducts);
+    };
+  }, [categorySlug, entrySlug]);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -504,29 +539,36 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
 
     setProducts([]);
     setLoading(true);
-    void Promise.all(requestedSubcategories.map(async (entrySlug) => {
-      const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-      const response = await apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" });
-      if (!response.ok) throw new Error("Unable to load category products.");
-      return await response.json() as { id: string; name: string; price: number; image: string }[];
-    }))
-      .then((result) => {
-        if (active) {
-          setProducts(result.flat().map((product) => ({
-            id: product.id,
-            name: product.name,
-            price: `₹${product.price.toLocaleString("en-IN")}`,
-            image: product.image,
-          })));
-          setLoading(false);
-        }
-      })
-      .catch((error: unknown) => {
-        console.error("Category product request failed.", error);
-        if (active) setLoading(false);
-      });
-
-    return () => { active = false; };
+    const loadProducts = () => {
+      void Promise.all(requestedSubcategories.map(async (entrySlug) => {
+        const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
+        const response = await apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Unable to load category products.");
+        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string }[];
+      }))
+        .then((result) => {
+          if (active) {
+            setProducts(result.flat().map((product) => ({
+              id: product.id,
+              name: product.name,
+              price: `₹${product.price.toLocaleString("en-IN")}`,
+              image: product.image,
+              originalPrice: product.compareAt,
+            })));
+            setLoading(false);
+          }
+        })
+        .catch((error: unknown) => {
+          console.error("Category product request failed.", error);
+          if (active) setLoading(false);
+        });
+    };
+    loadProducts();
+    window.addEventListener("tribull-products-updated", loadProducts);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", loadProducts);
+    };
   }, [categorySlug, entrySlugsKey]);
 
   if (loading) return <p className="header-empty-state">Loading products...</p>;
@@ -535,7 +577,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
   return (
     <div className="category-best-selling-grid">
       {products.map((item, index) => (
-        <Link key={item.id || `${categorySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
+        <Link key={item.id || `${categorySlug}-${item.name}`} href={`/product/${item.id || `${categorySlug}-${index}`}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(item.originalPrice ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
           <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
         </Link>
       ))}

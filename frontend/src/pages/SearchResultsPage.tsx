@@ -5,7 +5,7 @@ import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { defaultProducts, type Product } from "../../../shared/products";
-import { fetchProducts } from "../lib/products";
+import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
@@ -34,7 +34,7 @@ function SearchResultCard({
 
   return (
     <Link
-      href={`/product/search-${index}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(`₹${product.price}`)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.displayImage)}`}
+      href={`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(`₹${product.price}`)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.displayImage)}`}
       className="search-page__card-link"
     >
       <article
@@ -110,15 +110,19 @@ export default function SearchResultsPage() {
 
   useEffect(() => {
     let active = true;
-    fetchProducts()
+    const syncProducts = (refresh = false) => (refresh ? refreshProducts() : fetchProducts())
       .then((products) => {
         if (active) setCatalogProducts(products);
       })
       .catch((error: unknown) => {
         console.error("Could not load products for search results.", error);
       });
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
     return () => {
       active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
     };
   }, []);
 

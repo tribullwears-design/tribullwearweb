@@ -1,12 +1,14 @@
-import { Check, Heart, ShoppingCart } from "lucide-react";
-import { useEffect, useState } from "react";
+import { ArrowLeft, Check, Heart, ShoppingCart } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
-import { allProducts } from "../lib/allProducts";
+import { allProducts, type AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import type { Product } from "../../../shared/products";
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -21,6 +23,37 @@ export default function AllProductsPage() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((products) => {
+        if (active) setCatalogProducts(products);
+      }).catch((error: unknown) => {
+        console.error("Could not load products for the all-products page.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
+
+  const displayProducts = useMemo<AllProduct[]>(() => [
+    ...catalogProducts.map((product) => ({
+      id: product.id,
+      name: product.name,
+      price: `₹${product.price.toLocaleString("en-IN")}`,
+      ...(product.originalPrice === undefined ? {} : { originalPrice: product.originalPrice }),
+      image: product.image,
+    })),
+    ...allProducts,
+  ], [catalogProducts]);
 
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
@@ -52,7 +85,7 @@ export default function AllProductsPage() {
       return;
     }
 
-    const product = allProducts.find((item) => item.id === productId);
+    const product = displayProducts.find((item) => item.id === productId);
     if (!product) return;
 
     try {
@@ -88,7 +121,7 @@ export default function AllProductsPage() {
         </div>
 
         <section className="all-products-grid" aria-label="All products grid">
-          {allProducts.map((product) => {
+          {displayProducts.map((product) => {
             const hoverImage = getShowcaseProductHoverImage(product.image);
             const productHref = `/product/${product.id}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.image)}`;
             return (
