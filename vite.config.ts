@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
-import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import { defineConfig, loadEnv, type Plugin, type ViteDevServer } from "vite";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
@@ -205,7 +205,11 @@ function vitePluginStorageProxy(): Plugin {
 
 const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, PROJECT_ROOT, ["CATEGORY_"]);
+  const apiBaseUrl = (process.env.CATEGORY_API_URL || env.CATEGORY_API_URL || "").trim().replace(/\/+$/, "");
+
+  return {
   plugins,
   resolve: {
     alias: {
@@ -215,6 +219,7 @@ export default defineConfig({
     },
   },
   envDir: path.resolve(import.meta.dirname),
+  envPrefix: ["VITE_", "CATEGORY_"],
   root: path.resolve(import.meta.dirname, "frontend"),
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
@@ -222,10 +227,10 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    strictPort: false, // Will find next available port if 3000 is busy
+    strictPort: true,
     host: true,
     proxy: {
-      "/api": { target: process.env.CATEGORY_API_URL || "http://localhost:5001", changeOrigin: true },
+      "/api": { target: apiBaseUrl || "http://localhost:5001", changeOrigin: true },
     },
     allowedHosts: [
       ".manuspre.computer",
@@ -235,10 +240,12 @@ export default defineConfig({
       ".manusvm.computer",
       "localhost",
       "127.0.0.1",
+      "192.168.31.155",
     ],
     fs: {
       strict: true,
       deny: ["**/.*"],
     },
   },
+  };
 });

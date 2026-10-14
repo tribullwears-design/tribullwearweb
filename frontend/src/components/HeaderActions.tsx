@@ -1,6 +1,7 @@
-import { Camera, Heart, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { apiFetch } from "../lib/api";
 import { products, type Product } from "../pages/ProductsPage";
 import { categoryProducts } from "../pages/CategoryPage";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -10,7 +11,7 @@ type CartItem = { name: string; price: number; image: string; variant?: string }
 type CartItems = Record<string, CartItem>;
 
 type Overlay = "search" | "account" | "wishlist" | "cart" | null;
-type LoginStep = "phone" | "otp" | "username" | "profile";
+type LoginStep = "login" | "signup" | "forgot" | "verify-otp" | "new-password" | "google-profile" | "profile";
 type AccountSection = "main" | "profile" | "orders" | "wishlist" | "addresses";
 type AuthUser = {
   username: string;
@@ -38,20 +39,6 @@ type OrderEntry = {
   items: { name: string; quantity: number }[];
 };
 
-const requestOtp = async (phoneNumber: string) => {
-  try {
-    const response = await fetch("/api/auth/otp/request", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phoneNumber }),
-    });
-    if (response.ok) return { ok: true, demoOtp: undefined as string | undefined };
-  } catch {
-    // The SMS provider is optional until the backend endpoint is configured.
-  }
-  return { ok: true, demoOtp: "123456" };
-};
-
 function readStorage<T>(key: string, fallback: T): T {
   try {
     const saved = window.localStorage.getItem(key);
@@ -63,6 +50,33 @@ function readStorage<T>(key: string, fallback: T): T {
 
 function formatPrice(price: number) {
   return `₹${price.toLocaleString("en-IN")}`;
+}
+
+function normalizeUsername(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return { valid: false, value: "", message: "Please enter a valid username." };
+  if (!/^[a-zA-Z0-9_]+$/.test(normalized)) return { valid: false, value: "", message: "Please enter a valid username." };
+  if (normalized.length < 3) return { valid: false, value: "", message: "Please enter a valid username." };
+  return { valid: true, value: normalized, message: "" };
+}
+
+function isCustomerLoginResponse(value: unknown): value is { user: { username: string; email?: string; mobile?: string } } {
+  if (typeof value !== "object" || value === null || !("user" in value) || typeof value.user !== "object" || value.user === null || !("username" in value.user) || typeof value.user.username !== "string") {
+    return false;
+  }
+  return (!("email" in value.user) || typeof value.user.email === "string")
+    && (!("mobile" in value.user) || typeof value.user.mobile === "string");
+}
+
+type GooglePromptNotification = { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean };
+type GoogleIdentityAPI = {
+  initialize: (options: { client_id: string; callback: (response: { credential?: string }) => void }) => void;
+  prompt: (listener?: (notification: GooglePromptNotification) => void) => void;
+};
+
+function getGoogleIdentityAPI(): GoogleIdentityAPI | undefined {
+  const candidate = window.google as typeof window.google & { accounts?: { id?: GoogleIdentityAPI } };
+  return candidate?.accounts?.id;
 }
 
 function GoogleLogo() {
@@ -85,14 +99,6 @@ function saveCartItems(items: CartItems) {
   window.localStorage.setItem("tribull-cart-items", JSON.stringify(items));
 }
 
-function normalizeUsername(value: string) {
-  const normalized = value.trim();
-  if (!normalized) return { valid: false, value: "", message: "Please enter a valid username." };
-  if (!/^[a-zA-Z0-9_]+$/.test(normalized)) return { valid: false, value: "", message: "Please enter a valid username." };
-  if (normalized.length < 3) return { valid: false, value: "", message: "Please enter a valid username." };
-  return { valid: true, value: normalized, message: "" };
-}
-
 export default function HeaderActions() {
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -100,9 +106,10 @@ export default function HeaderActions() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
-  const [authUser, setAuthUser] = useState<AuthUser>(() => readStorage("tribull-user", { username: "", isAuthenticated: false }));
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [usernameError, setUsernameError] = useState("");
+  const [authUser, setAuthUser] = useState<AuthUser>(() => ({
+    ...readStorage<AuthUser>("tribull-user", { username: "", isAuthenticated: false }),
+    isAuthenticated: false,
+  }));
   const [accountSection, setAccountSection] = useState<AccountSection>("main");
   const [profileEditing, setProfileEditing] = useState(false);
   const [profileDraft, setProfileDraft] = useState({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
@@ -111,17 +118,58 @@ export default function HeaderActions() {
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
   const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", address: "", city: "", state: "", pinCode: "" });
   const [addressEditId, setAddressEditId] = useState<string | null>(null);
-  const [loginStep, setLoginStep] = useState<LoginStep>("phone");
-  const [countryCode, setCountryCode] = useState("+91");
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [otp, setOtp] = useState<string[]>(Array(6).fill(""));
-  const [otpError, setOtpError] = useState("");
-  const [demoOtp, setDemoOtp] = useState<string | undefined>();
-  const [resendSeconds, setResendSeconds] = useState(0);
+  const [loginStep, setLoginStep] = useState<LoginStep>("login");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupName, setSignupName] = useState("");
+  const [signupMobile, setSignupMobile] = useState("");
+  const [pendingGoogleToken, setPendingGoogleToken] = useState("");
+  const [recoveryOtp, setRecoveryOtp] = useState("");
+  const [recoveryNewPassword, setRecoveryNewPassword] = useState("");
+  const [recoveryPasswordConfirmation, setRecoveryPasswordConfirmation] = useState("");
+  const [showRecoveryPassword, setShowRecoveryPassword] = useState(false);
+  const [showRecoveryPasswordConfirmation, setShowRecoveryPasswordConfirmation] = useState(false);
+  const [recoveryResendSeconds, setRecoveryResendSeconds] = useState(0);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [loginSuccess, setLoginSuccess] = useState("");
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const [loginClosing, setLoginClosing] = useState(false);
   const loginCloseTimerRef = useRef<number | undefined>(undefined);
-  const otpRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const resetRedirectTimerRef = useRef<number | undefined>(undefined);
+  const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const isLoginPanelOpen = overlay === "account" && (loginStep !== "profile" || !authUser.isAuthenticated);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/auth/me")
+      .then(async (response) => {
+        if (!active) return;
+        if (!response.ok) {
+          if (response.status === 401) {
+            const signedOut: AuthUser = { username: "", isAuthenticated: false };
+            setAuthUser(signedOut);
+            window.localStorage.removeItem("tribull-user");
+          }
+          return;
+        }
+        const data: unknown = await response.json();
+        if (active && isCustomerLoginResponse(data)) {
+          const user: AuthUser = {
+            username: data.user.username,
+            email: data.user.email,
+            phone: data.user.mobile,
+            isAuthenticated: true,
+          };
+          setAuthUser(user);
+          window.localStorage.setItem("tribull-user", JSON.stringify(user));
+        }
+      })
+      .catch(() => {
+        // Authentication stays signed out until the backend can confirm a session.
+      });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const syncStores = () => {
@@ -159,13 +207,14 @@ export default function HeaderActions() {
   }, [isLoginPanelOpen]);
   useEffect(() => () => {
     if (loginCloseTimerRef.current !== undefined) window.clearTimeout(loginCloseTimerRef.current);
+    if (resetRedirectTimerRef.current !== undefined) window.clearTimeout(resetRedirectTimerRef.current);
   }, []);
 
   useEffect(() => {
-    if (resendSeconds <= 0) return;
-    const timer = window.setInterval(() => setResendSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [resendSeconds]);
+    if (loginStep !== "verify-otp" || recoveryResendSeconds <= 0) return;
+    const timer = window.setTimeout(() => setRecoveryResendSeconds((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [loginStep, recoveryResendSeconds]);
 
   const searchResults = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -192,13 +241,17 @@ export default function HeaderActions() {
 
   const resetOverlay = () => {
     setOverlay(null);
-    setLoginStep("phone");
+    setLoginStep("login");
     setAccountSection("main");
-    setPhoneNumber("");
-    setOtp(Array(6).fill(""));
-    setOtpError("");
-    setDemoOtp(undefined);
-    setResendSeconds(0);
+    setLoginEmail("");
+    setLoginPassword("");
+    setRecoveryOtp("");
+    setRecoveryNewPassword("");
+    setRecoveryPasswordConfirmation("");
+    setRecoveryResendSeconds(0);
+    setShowLoginPassword(false);
+    setLoginError("");
+    setLoginSuccess("");
   };
 
   const closeOverlay = () => {
@@ -221,6 +274,7 @@ export default function HeaderActions() {
   };
 
   const openAccount = () => {
+    setLoginSuccess("");
     if (loginCloseTimerRef.current !== undefined) {
       window.clearTimeout(loginCloseTimerRef.current);
       loginCloseTimerRef.current = undefined;
@@ -232,9 +286,10 @@ export default function HeaderActions() {
       setOverlay("account");
       return;
     }
-    setLoginStep("phone");
+    setLoginStep("login");
     setAccountSection("main");
-    setOtpError("");
+    setLoginError("");
+    setLoginSuccess("");
     setOverlay("account");
   };
 
@@ -308,105 +363,451 @@ export default function HeaderActions() {
     profileImageInputRef.current?.click();
   };
 
-  const sendOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleEmailSignIn = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedPhone = phoneNumber.replace(/\D/g, "");
-    if (normalizedPhone.length !== 10 || !/^[6-9]\d{9}$/.test(normalizedPhone)) {
-      setOtpError("Enter a valid 10-digit mobile number.");
+    setLoginError("");
+    setLoginSuccess("");
+
+    const email = loginEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLoginError("Enter a valid email address.");
       return;
     }
-    const result = await requestOtp(`${countryCode}${normalizedPhone}`);
-    if (!result.ok) {
-      setOtpError("We could not send the OTP. Please try again.");
-      return;
-    }
-    setDemoOtp(result.demoOtp);
-    setOtp(Array(6).fill(""));
-    setOtpError("");
-    setLoginStep("otp");
-    setResendSeconds(30);
-    window.setTimeout(() => otpRefs.current[0]?.focus(), 50);
-  };
-
-  const updateOtp = (index: number, value: string) => {
-    const digit = value.replace(/\D/g, "").slice(-1);
-    const nextOtp = [...otp];
-    nextOtp[index] = digit;
-    setOtp(nextOtp);
-    setOtpError("");
-    if (digit && index < 5) otpRefs.current[index + 1]?.focus();
-  };
-
-  const handleOtpKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Backspace" && !otp[index] && index > 0) otpRefs.current[index - 1]?.focus();
-  };
-
-  const verifyOtp = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const enteredOtp = otp.join("");
-    if (enteredOtp.length !== 6) {
-      setOtpError("Enter all 6 digits to continue.");
-      return;
-    }
-    if (demoOtp && enteredOtp !== demoOtp) {
-      setOtpError("That OTP is invalid or expired. Please try again.");
+    if (!loginPassword) {
+      setLoginError("Enter your password.");
       return;
     }
 
-    const savedUser = readStorage<AuthUser>("tribull-user", { username: "", isAuthenticated: false });
-    if (savedUser.isAuthenticated && savedUser.username) {
-      setAuthUser(savedUser);
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password: loginPassword }),
+      });
+      const isJson = response.headers.get("content-type")?.includes("application/json") ?? false;
+      if (!isJson) {
+        setLoginError("Email/password authentication is not configured: POST /api/auth/login is unavailable.");
+        return;
+      }
+
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Sign-in failed. Please try again.";
+        setLoginError(message);
+        return;
+      }
+
+      if (!isCustomerLoginResponse(data)) {
+        setLoginError("The sign-in service returned an invalid response. Authentication was not completed.");
+        return;
+      }
+
+      const signedInUser = data.user;
+      const nextUser: AuthUser = {
+        username: signedInUser.username,
+        email: signedInUser.email ?? email,
+        phone: signedInUser.mobile,
+        isAuthenticated: true,
+      };
+      persistUser(nextUser);
+      setLoginSuccess("Signed in successfully.");
       setLoginStep("profile");
       setAccountSection("main");
-      return;
+      setLoginPassword("");
+    } catch {
+      setLoginError("Unable to reach the sign-in service. Email/password authentication may not be configured.");
+    } finally {
+      setIsSigningIn(false);
     }
-
-    setLoginStep("username");
-    setAccountSection("main");
-    setUsernameError("");
-    setUsernameDraft("");
   };
 
-  const handleUsernameSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+  const handleGoogleSignIn = async () => {
+    setLoginError("");
+    setLoginSuccess("");
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      setLoginError("Google sign-in is not configured: VITE_GOOGLE_CLIENT_ID is missing.");
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      if (!getGoogleIdentityAPI()) {
+        if (!googleScriptPromiseRef.current) {
+          googleScriptPromiseRef.current = new Promise<void>((resolve, reject) => {
+            const script = document.createElement("script");
+            script.src = "https://accounts.google.com/gsi/client";
+            script.async = true;
+            script.defer = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error("Unable to load Google Identity Services"));
+            document.head.appendChild(script);
+          });
+        }
+        await googleScriptPromiseRef.current;
+      }
+      const googleIdentity = getGoogleIdentityAPI();
+      if (!googleIdentity) throw new Error("Google Identity Services did not initialize");
+      googleIdentity.initialize({
+        client_id: clientId,
+        callback: async ({ credential }) => {
+          if (!credential) {
+            setLoginError("Google sign-in did not return a credential.");
+            setIsSigningIn(false);
+            return;
+          }
+          try {
+            const response = await apiFetch("/api/auth/google", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ credential }),
+            });
+            const data: unknown = await response.json();
+            if (!response.ok) {
+              const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+                ? data.error
+                : "Google sign-in failed.";
+              setLoginError(message);
+              return;
+            }
+            if (isCustomerLoginResponse(data)) {
+              persistUser({
+                username: data.user.username,
+                email: data.user.email,
+                phone: data.user.mobile,
+                isAuthenticated: true,
+              });
+              setLoginSuccess("Signed in successfully.");
+              setLoginStep("profile");
+              setAccountSection("main");
+              return;
+            }
+            if (typeof data === "object" && data !== null && "requiresProfile" in data && data.requiresProfile === true
+              && "pendingToken" in data && typeof data.pendingToken === "string"
+              && "email" in data && typeof data.email === "string"
+              && "name" in data && typeof data.name === "string") {
+              setPendingGoogleToken(data.pendingToken);
+              setLoginEmail(data.email);
+              setSignupName(data.name);
+              setLoginStep("google-profile");
+              setLoginSuccess("");
+              return;
+            }
+            setLoginError("Google sign-in returned an invalid response.");
+          } catch {
+            setLoginError("Unable to reach the Google sign-in service.");
+          } finally {
+            setIsSigningIn(false);
+          }
+        },
+      });
+      googleIdentity.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setLoginError("Google sign-in was closed before completion. Try again.");
+          setIsSigningIn(false);
+        }
+      });
+    } catch {
+      setLoginError("Google sign-in could not start. Check the Google client ID and allowed website origins.");
+      setIsSigningIn(false);
+    }
+  };
+
+  const openForgotPassword = () => {
+    setLoginStep("forgot");
+    setLoginError("");
+    setLoginSuccess("");
+    setRecoveryOtp("");
+    setRecoveryResendSeconds(0);
+    setRecoveryNewPassword("");
+    setRecoveryPasswordConfirmation("");
+  };
+
+  const switchToSignup = () => {
+    setLoginStep("signup");
+    setLoginError("");
+    setLoginSuccess("");
+  };
+
+  const switchToLogin = () => {
+    setLoginStep("login");
+    setLoginError("");
+    setLoginSuccess("");
+  };
+
+  const handleForgotPassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalized = normalizeUsername(usernameDraft);
-    if (!normalized.valid) {
-      setUsernameError(normalized.message);
+    setLoginError("");
+    setLoginSuccess("");
+    const email = loginEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLoginError("Enter a valid email address.");
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/request-password-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        setLoginError(typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Password recovery failed.");
+        return;
+      }
+      setRecoveryOtp("");
+      setRecoveryResendSeconds(60);
+      setLoginSuccess("");
+      setLoginStep("verify-otp");
+    } catch {
+      setLoginError("Unable to reach the password recovery service.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleVerifyRecoveryOtp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError("");
+    setLoginSuccess("");
+    if (!/^\d{6}$/.test(recoveryOtp)) {
+      setLoginError("Enter the 6-digit code sent to your email.");
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/verify-password-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail.trim(), otp: recoveryOtp }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        setLoginError(typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "OTP verification failed.");
+        return;
+      }
+      if (typeof data !== "object" || data === null || !("verified" in data) || data.verified !== true) {
+        setLoginError("The OTP verification service returned an invalid response.");
+        return;
+      }
+      setRecoveryOtp("");
+      setRecoveryNewPassword("");
+      setRecoveryPasswordConfirmation("");
+      setLoginStep("new-password");
+    } catch {
+      setLoginError("Unable to reach the OTP verification service.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const resendRecoveryOtp = async () => {
+    if (recoveryResendSeconds > 0 || isSigningIn) return;
+    setLoginError("");
+    setLoginSuccess("");
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/resend-password-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: loginEmail.trim() }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        if (typeof data === "object" && data !== null && "resendAfterSeconds" in data && typeof data.resendAfterSeconds === "number") {
+          setRecoveryResendSeconds(data.resendAfterSeconds);
+        }
+        setLoginError(typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Unable to resend the OTP.");
+        return;
+      }
+      setRecoveryOtp("");
+      setRecoveryResendSeconds(60);
+    } catch {
+      setLoginError("Unable to reach the OTP email service.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleRecoveryPasswordReset = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError("");
+    setLoginSuccess("");
+    if (new TextEncoder().encode(recoveryNewPassword).length < 8 || new TextEncoder().encode(recoveryNewPassword).length > 72) {
+      setLoginError("Password must be between 8 and 72 bytes.");
+      return;
+    }
+    if (recoveryNewPassword !== recoveryPasswordConfirmation) {
+      setLoginError("The passwords do not match.");
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: recoveryNewPassword }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        setLoginError(typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Unable to reset your password.");
+        return;
+      }
+      setLoginSuccess("Password updated. Sign in with your new password.");
+      setRecoveryNewPassword("");
+      setRecoveryPasswordConfirmation("");
+      if (resetRedirectTimerRef.current !== undefined) window.clearTimeout(resetRedirectTimerRef.current);
+      resetRedirectTimerRef.current = window.setTimeout(() => {
+        setLoginStep("login");
+        setLoginError("");
+        setLoginPassword("");
+        resetRedirectTimerRef.current = undefined;
+      }, 1600);
+    } catch {
+      setLoginError("Unable to reach the password reset service.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleGoogleProfile = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError("");
+    if (!pendingGoogleToken) {
+      setLoginError("Google profile session expired. Start Google sign-in again.");
+      return;
+    }
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/google/complete-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingToken: pendingGoogleToken, name: signupName.trim(), mobile: signupMobile.trim() }),
+      });
+      const data: unknown = await response.json();
+      if (!response.ok) {
+        setLoginError(typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Unable to complete your Google profile.");
+        return;
+      }
+      if (!isCustomerLoginResponse(data)) {
+        setLoginError("Google profile completion returned an invalid response.");
+        return;
+      }
+      persistUser({
+        username: data.user.username,
+        email: data.user.email,
+        phone: data.user.mobile,
+        isAuthenticated: true,
+      });
+      setPendingGoogleToken("");
+      setLoginStep("profile");
+      setAccountSection("main");
+      setLoginSuccess("Account created successfully.");
+    } catch {
+      setLoginError("Unable to reach the account service.");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleSignUp = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setLoginError("");
+    setLoginSuccess("");
+    const name = signupName.trim();
+    const email = loginEmail.trim();
+    const mobile = signupMobile.trim();
+    if (!name) {
+      setLoginError("Enter your name.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setLoginError("Enter a valid email address.");
+      return;
+    }
+    if (loginPassword.length < 8) {
+      setLoginError("Password must be at least 8 characters.");
+      return;
+    }
+    if (!/^\+?[\d\s()-]{10,18}$/.test(mobile) || mobile.replace(/\D/g, "").length < 10 || mobile.replace(/\D/g, "").length > 15) {
+      setLoginError("Enter a valid mobile number.");
       return;
     }
 
-    const nextUser: AuthUser = {
-      username: normalized.value,
-      isAuthenticated: true,
-      phone: phoneNumber || "",
-      email: "",
-    };
-    persistUser(nextUser);
-    setLoginStep("profile");
-    setAccountSection("main");
-    setUsernameError("");
-    setUsernameDraft("");
+    setIsSigningIn(true);
+    try {
+      const response = await apiFetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password: loginPassword, mobile }),
+      });
+      const isJson = response.headers.get("content-type")?.includes("application/json") ?? false;
+      if (response.status === 404 || !isJson) {
+        setLoginError("Account registration is not configured: POST /api/auth/register is unavailable.");
+        return;
+      }
+
+      const data: unknown = await response.json();
+      if (response.status === 409) {
+        setLoginError("An account with this email already exists. Sign in instead.");
+        return;
+      }
+      if (!response.ok) {
+        const message = typeof data === "object" && data !== null && "error" in data && typeof data.error === "string"
+          ? data.error
+          : "Account registration failed. Please try again.";
+        setLoginError(message);
+        return;
+      }
+
+      if (isCustomerLoginResponse(data)) {
+        persistUser({ username: data.user.username, email: data.user.email ?? email, phone: data.user.mobile ?? mobile, isAuthenticated: true });
+        setLoginStep("profile");
+        setAccountSection("main");
+        setLoginPassword("");
+        setLoginSuccess("Account created successfully.");
+        return;
+      }
+      setLoginError("The registration service returned an invalid response. Account creation was not confirmed.");
+    } catch {
+      setLoginError("Unable to reach the registration service. Account registration may not be configured.");
+    } finally {
+      setIsSigningIn(false);
+    }
   };
 
-  const handleSignOut = () => {
-    persistUser({ ...authUser, isAuthenticated: false });
-    setLoginStep("phone");
-    setAccountSection("main");
-    setOverlay("account");
-    setUsernameError("");
-    setUsernameDraft("");
-    setOtp(Array(6).fill(""));
-    setOtpError("");
-  };
-
-  const resendOtp = async () => {
-    if (resendSeconds > 0) return;
-    const result = await requestOtp(`${countryCode}${phoneNumber.replace(/\D/g, "")}`);
-    setDemoOtp(result.demoOtp);
-    setOtp(Array(6).fill(""));
-    setOtpError("");
-    setResendSeconds(30);
-    window.setTimeout(() => otpRefs.current[0]?.focus(), 50);
+  const handleSignOut = async () => {
+    setProfileError("");
+    try {
+      const response = await apiFetch("/api/auth/logout", { method: "POST" });
+      if (!response.ok) {
+        setProfileError("Unable to sign out right now. Please try again.");
+        return;
+      }
+      persistUser({ username: "", isAuthenticated: false });
+      setLoginStep("login");
+      setAccountSection("main");
+      setOverlay("account");
+      setLoginEmail("");
+      setLoginPassword("");
+      setLoginError("");
+      setLoginSuccess("");
+    } catch {
+      setProfileError("Unable to reach the sign-out service. You are still signed in.");
+    }
   };
 
   const orders = readStorage<OrderEntry[]>("tribull-orders", []);
@@ -522,6 +923,7 @@ export default function HeaderActions() {
                       <p className="header-profile-summary__handle">@{authUser.username}</p>
                     </div>
                   </div>
+                  {loginSuccess && <p className="header-form-success" role="status">{loginSuccess}</p>}
 
                   <nav className="header-account-drawer__nav" aria-label="Account navigation">
                     <button type="button" onClick={() => setAccountSection("profile")}>My Profile</button>
@@ -708,30 +1110,95 @@ export default function HeaderActions() {
               )}
             </div>
           ) : (
-            <>
+            <div className="header-login-content">
               <button className="header-account-modal__close" type="button" aria-label="Close login" onClick={closeOverlay}><X size={20} /></button>
-              <p className="eyebrow">Welcome back</p><h2>{loginStep === "phone" ? "Login" : "Verify OTP"}</h2>
-              {loginStep === "phone" ? <>
-                <form onSubmit={sendOtp}>
-                  <label>Phone number<div className="phone-input"><select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} aria-label="Country code"><option>+91</option><option>+1</option><option>+44</option><option>+971</option></select><input type="tel" inputMode="numeric" autoFocus value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="Enter mobile number" /></div></label>
-                  {otpError && <p className="header-form-error" role="alert">{otpError}</p>}
-                  <button className="header-account-modal__submit" type="submit">Get OTP</button>
-                </form>
+              <img className="header-login-logo" src="/products/logo.png" alt="TRIBULL" />
+              <p className="eyebrow">{loginStep === "signup" ? "Join the Tribe" : loginStep === "forgot" || loginStep === "verify-otp" || loginStep === "new-password" ? "Account Recovery" : loginStep === "google-profile" ? "One Last Step" : "Welcome Back"}</p>
+              <h2>{loginStep === "signup" ? "Sign Up" : loginStep === "forgot" ? "Account Recovery" : loginStep === "verify-otp" ? "Verify Your Email" : loginStep === "new-password" ? "New Password" : loginStep === "google-profile" ? "Complete Profile" : "Login"}</h2>
+              <span className="header-login-heading-rule" aria-hidden="true" />
+              {loginStep === "verify-otp" && <p className="login-recovery-instruction">Enter the 6-digit code sent to your email.<span>{loginEmail}</span></p>}
+              {loginStep === "new-password" && <p className="login-recovery-instruction">Choose a new password for your Tribull account.</p>}
+              {loginError && <p className="header-form-error header-login-status" role="alert">{loginError}</p>}
+              {loginSuccess && <p className="header-form-success header-login-status" role="status">{loginSuccess}</p>}
+              <form onSubmit={loginStep === "signup" ? handleSignUp : loginStep === "forgot" ? handleForgotPassword : loginStep === "verify-otp" ? handleVerifyRecoveryOtp : loginStep === "new-password" ? handleRecoveryPasswordReset : loginStep === "google-profile" ? handleGoogleProfile : handleEmailSignIn}>
+                {loginStep === "signup" && <label>Name
+                  <span className="header-login-input">
+                    <User size={22} aria-hidden="true" />
+                    <input type="text" autoComplete="name" autoFocus value={signupName} onChange={(event) => { setSignupName(event.target.value); setLoginError(""); }} placeholder="Enter your name" required />
+                  </span>
+                </label>}
+                {(loginStep === "login" || loginStep === "signup" || loginStep === "forgot") && <label>Email
+                  <span className="header-login-input">
+                    <Mail size={22} aria-hidden="true" />
+                    <input type="email" autoComplete="email" autoFocus={loginStep === "login" || loginStep === "forgot"} value={loginEmail} onChange={(event) => { setLoginEmail(event.target.value); setLoginError(""); }} placeholder="Enter your email address" required />
+                  </span>
+                </label>}
+                {loginStep === "google-profile" && <p className="google-profile-email"><Mail size={18} aria-hidden="true" />{loginEmail}</p>}
+                {(loginStep === "signup" || loginStep === "google-profile") && <label>{loginStep === "signup" ? "Mobile" : "Mobile number"}
+                  <span className="header-login-input">
+                    <Phone size={22} aria-hidden="true" />
+                    <input type="tel" autoComplete="tel" inputMode="tel" value={signupMobile} onChange={(event) => { setSignupMobile(event.target.value); setLoginError(""); }} placeholder="Enter your mobile number" required />
+                  </span>
+                </label>}
+                {(loginStep === "login" || loginStep === "signup") && <label>Password
+                  <span className="header-password-field">
+                    <LockKeyhole size={22} aria-hidden="true" />
+                    <input type={showLoginPassword ? "text" : "password"} autoComplete={loginStep === "signup" ? "new-password" : "current-password"} value={loginPassword} onChange={(event) => { setLoginPassword(event.target.value); setLoginError(""); }} placeholder="Enter your password" minLength={loginStep === "signup" ? 8 : undefined} required />
+                    <button type="button" aria-label={showLoginPassword ? "Hide password" : "Show password"} aria-pressed={showLoginPassword} onClick={() => setShowLoginPassword((visible) => !visible)}>{showLoginPassword ? <EyeOff size={20} /> : <Eye size={20} />}<span>{showLoginPassword ? "Hide" : "Show"}</span></button>
+                  </span>
+                </label>}
+                {loginStep === "verify-otp" && <label htmlFor="recovery-otp-input">6-digit OTP
+                  <span className="header-login-input recovery-otp-field">
+                    <Mail size={22} aria-hidden="true" />
+                    <input
+                      id="recovery-otp-input"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]{6}"
+                      maxLength={6}
+                      value={recoveryOtp}
+                      onChange={(event) => { setRecoveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6)); setLoginError(""); }}
+                      placeholder="Enter your 6-digit code"
+                      required
+                    />
+                  </span>
+                </label>}
+                {loginStep === "new-password" && <>
+                  <label>New Password
+                    <span className="header-password-field">
+                      <LockKeyhole size={22} aria-hidden="true" />
+                      <input type={showRecoveryPassword ? "text" : "password"} autoComplete="new-password" minLength={8} maxLength={72} value={recoveryNewPassword} onChange={(event) => { setRecoveryNewPassword(event.target.value); setLoginError(""); }} placeholder="Enter a new password" required />
+                      <button type="button" aria-label={showRecoveryPassword ? "Hide new password" : "Show new password"} aria-pressed={showRecoveryPassword} onClick={() => setShowRecoveryPassword((visible) => !visible)}>{showRecoveryPassword ? <EyeOff size={20} /> : <Eye size={20} />}<span>{showRecoveryPassword ? "Hide" : "Show"}</span></button>
+                    </span>
+                  </label>
+                  <label>Confirm New Password
+                    <span className="header-password-field">
+                      <LockKeyhole size={22} aria-hidden="true" />
+                      <input type={showRecoveryPasswordConfirmation ? "text" : "password"} autoComplete="new-password" minLength={8} maxLength={72} value={recoveryPasswordConfirmation} onChange={(event) => { setRecoveryPasswordConfirmation(event.target.value); setLoginError(""); }} placeholder="Confirm your new password" required />
+                      <button type="button" aria-label={showRecoveryPasswordConfirmation ? "Hide confirmation password" : "Show confirmation password"} aria-pressed={showRecoveryPasswordConfirmation} onClick={() => setShowRecoveryPasswordConfirmation((visible) => !visible)}>{showRecoveryPasswordConfirmation ? <EyeOff size={20} /> : <Eye size={20} />}<span>{showRecoveryPasswordConfirmation ? "Hide" : "Show"}</span></button>
+                    </span>
+                  </label>
+                </>}
+                {loginStep === "login" && <button className="forgot-password" type="button" onClick={openForgotPassword}>Forgot Password?</button>}
+                <button className="header-account-modal__submit" type="submit" disabled={isSigningIn}>{isSigningIn ? (loginStep === "signup" ? "Creating Account..." : loginStep === "forgot" ? "Sending OTP..." : loginStep === "verify-otp" ? "Verifying OTP..." : loginStep === "new-password" ? "Resetting Password..." : loginStep === "google-profile" ? "Saving Profile..." : "Signing In...") : <>{loginStep === "signup" ? "Create Account" : loginStep === "forgot" ? "Send OTP" : loginStep === "verify-otp" ? "Verify OTP" : loginStep === "new-password" ? "Reset Password" : loginStep === "google-profile" ? "Complete Sign Up" : "Sign In"} <ArrowRight size={22} /></>}</button>
+              </form>
+              {loginStep === "verify-otp" && <div className="recovery-step-actions">
+                <button type="button" className="forgot-password" onClick={() => { setLoginStep("forgot"); setRecoveryOtp(""); setRecoveryResendSeconds(0); setLoginError(""); }}>Change email</button>
+                <button type="button" className="recovery-resend" onClick={resendRecoveryOtp} disabled={isSigningIn || recoveryResendSeconds > 0}>
+                  {recoveryResendSeconds > 0 ? `Resend OTP in ${recoveryResendSeconds}s` : isSigningIn ? "Sending..." : "Resend OTP"}
+                </button>
+              </div>}
+              {(loginStep === "signup" || loginStep === "login") && <p className="header-signup-prompt">
+                {loginStep === "signup" ? "Already have an account? " : "New to Tribull? "}
+                <button type="button" onClick={loginStep === "signup" ? switchToLogin : switchToSignup}>{loginStep === "signup" ? "Sign In" : "Sign Up"}</button>
+              </p>}
+              {(loginStep === "forgot" || loginStep === "new-password" || loginStep === "google-profile") && <p className="header-signup-prompt"><button type="button" onClick={switchToLogin}>Back to Sign In</button></p>}
+              {loginStep === "login" && <>
                 <div className="header-login-divider"><span>OR</span></div>
-                <button className="google-sign-in" type="button" onClick={() => window.alert("Google Sign-In will connect when a Google client ID is configured.")}><GoogleLogo />Continue with Google</button>
-              </> : <>
-                <p className="otp-instruction">Enter the OTP sent to {countryCode} {phoneNumber.replace(/(\d{5})(\d{5})/, "$1 $2")}</p>
-                <form onSubmit={verifyOtp}>
-                  <div className="otp-inputs" aria-label="One-time password">
-                    {otp.map((digit, index) => <input key={index} ref={(element) => { otpRefs.current[index] = element; }} value={digit} onChange={(event) => updateOtp(index, event.target.value)} onKeyDown={(event) => handleOtpKeyDown(index, event)} inputMode="numeric" maxLength={1} aria-label={`OTP digit ${index + 1}`} />)}
-                  </div>
-                  {demoOtp && <p className="otp-demo-note">SMS service is not configured. Demo OTP: {demoOtp}</p>}
-                  {otpError && <p className="header-form-error" role="alert">{otpError}</p>}
-                  <button className="header-account-modal__submit" type="submit">Verify &amp; Sign In</button>
-                </form>
-                <button className="resend-otp" type="button" disabled={resendSeconds > 0} onClick={resendOtp}>{resendSeconds > 0 ? `Resend OTP in ${resendSeconds}s` : "Resend OTP"}</button>
+                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn}><GoogleLogo />Continue with Google</button>
               </>}
-            </>
+            </div>
           )}
         </section>
       )}

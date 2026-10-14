@@ -1,6 +1,7 @@
 import { ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
+import { apiFetch } from "../lib/api";
 import { products, type Product } from "./ProductsPage";
 
 type CartEntry = {
@@ -135,7 +136,7 @@ export default function CheckoutPage() {
       total: cartDetails.total,
     };
 
-    const response = await fetch("/api/orders", {
+    const response = await apiFetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

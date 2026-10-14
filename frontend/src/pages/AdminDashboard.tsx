@@ -8,6 +8,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { products as storeProducts, type Product } from "./ProductsPage";
 import { useLocation } from "wouter";
+import { apiFetch } from "../lib/api";
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import "./admin-dashboard.css";
@@ -110,7 +111,7 @@ function SectionHeading({ title, action, onAction }: { title: string; action?: s
 function EmptyState({ title, message, action, onAction }: { title: string; message: string; action?: string; onAction?: () => void }) { return <div className="admin-empty-state"><div className="admin-empty-state__icon"><Box size={20} /></div><strong>{title}</strong><span>{message}</span>{action && <button type="button" className="admin-primary-button" onClick={onAction}>{action}</button>}</div>; }
 
 function ProductTable({ products, onSelect, onEdit, alignActionsRight = false }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void; onEdit?: (product: AdminProduct) => void; alignActionsRight?: boolean }) {
-  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button>{onEdit && <button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit</button>}</div></td></tr>)}</tbody></table></div>;
+  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button>{onEdit && product.databaseProduct && <button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit</button>}</div></td></tr>)}</tbody></table></div>;
 }
 function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) { return orders.length ? <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id} onClick={() => onSelect(order)}><td><strong className="admin-order-id">{order.id}</strong></td><td><strong>{order.customer.name}</strong><br /><span>{order.customer.email}</span></td><td>{new Date(order.createdAt).toLocaleString("en-IN")}</td><td>{order.items.reduce((count, item) => count + item.quantity, 0)}</td><td><strong>₹{order.total.toLocaleString("en-IN")}</strong></td><td>{order.payment.status}</td><td><StatusPill status={order.status} /></td><td><button className="admin-more-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(order); }}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div> : <EmptyState title="No orders found." message="Orders will appear here when customers place an order." />; }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
@@ -419,7 +420,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     let active = true;
     setEditProductLoading(true);
     setEditProductError("");
-    void fetch(`/api/products/${encodeURIComponent(productId)}`, { cache: "no-store" })
+    void apiFetch(`/api/products/${encodeURIComponent(productId)}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) {
           const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
@@ -477,7 +478,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setProductsLoading(true);
     setProductsError("");
     try {
-      const response = await fetch("/api/products", { cache: "no-store" });
+      const response = await apiFetch("/api/products", { cache: "no-store" });
       if (!response.ok) throw new Error("Product request failed");
       setDatabaseProducts(await response.json() as StoredProduct[]);
     } catch {
@@ -491,7 +492,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setOrdersLoading(true);
     setOrdersError("");
     try {
-      const response = await fetch("/api/orders", { cache: "no-store" });
+      const response = await apiFetch("/api/orders", { cache: "no-store" });
       if (!response.ok) throw new Error("Order request failed");
       setOrders(await response.json() as AdminOrder[]);
     } catch {
@@ -553,7 +554,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const filteredOrders = screen.startsWith("orders-") ? orders.filter((order) => order.status.toLowerCase() === screen.replace("orders-", "")) : orders;
   const updateOrder = async (id: string, status: OrderStatus) => {
     try {
-      const response = await fetch(`/api/orders/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
+      const response = await apiFetch(`/api/orders/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
       if (!response.ok) throw new Error("Order update failed");
       const updated = await response.json() as AdminOrder;
       setOrders((current) => current.map((order) => order.id === id ? updated : order));
@@ -573,7 +574,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setProductSaving(true);
     setSavedNotice("");
     try {
-      const response = await fetch(productId ? `/api/products/${encodeURIComponent(productId)}` : "/api/products", {
+      const response = await apiFetch(productId ? `/api/products/${encodeURIComponent(productId)}` : "/api/products", {
         method: productId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -639,7 +640,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     try {
       let response: Response;
       try {
-        response = await fetch(url, { cache: "no-store", signal: request.signal });
+        response = await apiFetch(url, { cache: "no-store", signal: request.signal });
       } catch (error) {
         if (request.signal.aborted) return;
         console.error("Edit product request:", {
@@ -747,7 +748,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setProductSaving(true);
     setEditProductError("");
     try {
-      const response = await fetch(`/api/products/${encodeURIComponent(editingProduct.id)}`, {
+      const response = await apiFetch(`/api/products/${encodeURIComponent(editingProduct.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -781,7 +782,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     if (!selectedProduct?.mainCategoryId) return;
     setProductUpdateError("");
     try {
-      const response = await fetch(`/api/products/${encodeURIComponent(selectedProduct.id)}`, {
+      const response = await apiFetch(`/api/products/${encodeURIComponent(selectedProduct.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mainCategoryId: editingProductCategory, subcategoryId: editingProductSubcategory }),
@@ -815,7 +816,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
 
   const renderScreen = () => {
     if (screen === "dashboard") return <><section className="admin-stats-grid">{[["Total Sales", "₹0.00", "No sales recorded", DollarSign], ["Total Orders", String(orders.length), "Current order count", ClipboardList], ["Total Products", String(adminProducts.length), "From store catalog", ShoppingBag], ["Total Customers", String(customers.length), "Registered customers", Users], ["Pending Orders", String(orders.filter((order) => order.status === "Pending").length), "Needs attention", PackageOpen], ["Low Stock Products", String(adminProducts.filter((product) => product.stock < 10).length), "Needs your attention", AlertTriangle]].map(([label, value, note, StatIcon]) => { const IconComponent = StatIcon as Icon; return <div className="admin-stat-card" key={label as string}><div className="admin-stat-icon admin-stat-icon--teal"><IconComponent size={19} /></div><div className="admin-stat-label">{label as string}</div><strong>{value as string}</strong><span>{note as string}</span></div>; })}</section><section className="admin-panel"><SectionHeading title="Recent Orders" action="View all orders" onAction={() => navigate("orders")} /><OrderTable orders={orders.slice(0, 5)} onSelect={setSelectedOrder} /></section><div className="admin-two-column"><section className="admin-panel"><SectionHeading title="Best Selling Products" action="View products" onAction={() => navigate("products")} /><ProductTable products={adminProducts.slice(0, 5)} onSelect={openProduct} /></section><section className="admin-panel"><SectionHeading title="Low Stock Products" action="View inventory" onAction={() => navigate("inventory")} />{adminProducts.filter((product) => product.stock < 10).map((product) => <div className="admin-low-stock-row" key={product.id}><img className="admin-real-product-thumb" src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.sku}</span></div><div className="admin-stock-count"><strong>{product.stock}</strong><span>units left</span></div></div>)}</section></div></>;
-    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}>{productsError ? <EmptyState title="Unable to load saved products" message={productsError} action="Retry" onAction={() => void refreshProducts()} /> : productsLoading ? <p>Loading saved products...</p> : databaseAdminProducts.length ? <ProductTable products={databaseAdminProducts} onSelect={openProduct} onEdit={editProduct} alignActionsRight /> : <EmptyState title="No products found." message="Add a product to see it in your catalog." action="Add Product" onAction={() => navigate("add-product")} />}</AdminPanel>;
+    if (screen === "products") return <AdminPanel title="All Products" action="Add Product" onAction={() => navigate("add-product")}>{productsError ? <EmptyState title="Unable to load saved products" message={productsError} action="Retry" onAction={() => void refreshProducts()} /> : productsLoading ? <p>Loading saved products...</p> : adminProducts.length ? <ProductTable products={adminProducts} onSelect={openProduct} onEdit={editProduct} alignActionsRight /> : <EmptyState title="No products found." message="Add a product to see it in your catalog." action="Add Product" onAction={() => navigate("add-product")} />}</AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
     if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} submitLabel="Save Changes" />}</AdminPanel>;

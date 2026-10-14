@@ -143,45 +143,65 @@ main > * + * { margin-top: 0; }
 .header-empty-state { margin:40px 0; color:rgba(27,54,45,.68); font:600 12px Montserrat,sans-serif; text-align:center; }
 .header-account-modal { position:fixed; z-index:201; top:50%; left:50%; width:min(390px, calc(100vw - 36px)); padding:34px; color:var(--tribull-green); background:#F3EACB; box-shadow:0 20px 70px rgba(8,18,15,.3); transform:translate(-50%, -50%); animation:accountModalIn .3s var(--ease-out) both; }
 .header-account-modal__close { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:30px; height:30px; padding:0; border:0; background:transparent; color:var(--tribull-green); cursor:pointer; }
-.header-login-drawer { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:center; width:min(430px, 100vw); min-height:100vh; padding:30px; overflow-x:hidden; text-align:center; }
-.header-login-drawer > form,
-.header-login-drawer > .header-login-divider,
-.header-login-drawer > .google-sign-in,
-.header-login-drawer > .eyebrow,
-.header-login-drawer > h2,
-.header-login-drawer > .otp-instruction,
-.header-login-drawer > .resend-otp { max-width:100%; box-sizing:border-box; }
-.header-login-drawer > form,
-.header-login-drawer > .header-login-divider,
-.header-login-drawer > .google-sign-in { width:min(100%, 340px); }
+.header-login-drawer { box-sizing:border-box; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; width:min(520px, 100vw); min-height:100vh; min-height:100dvh; padding:clamp(24px, 4vh, 48px) clamp(22px, 6vw, 44px); overflow-x:hidden; color:#193B30; background:#F4EAC8; text-align:center; }
+.header-login-content { position:relative; box-sizing:border-box; display:flex; flex-direction:column; align-items:center; width:min(100%, 440px); max-width:100%; margin:auto; }
+.header-login-logo { display:block; width:min(156px, 42vw); max-height:104px; margin:0 auto clamp(20px, 3vh, 32px); object-fit:contain; }
+.header-login-drawer > .header-login-content > .eyebrow { width:100%; margin:0 0 10px; color:#193B30; font:500 12px/1.4 Montserrat,sans-serif; letter-spacing:.24em; text-align:center; text-transform:uppercase; }
+.header-login-content > h2 { width:100%; margin:0; color:#193B30; font:800 clamp(38px, 7vw, 56px)/1 Montserrat,sans-serif; letter-spacing:.015em; text-align:center; text-transform:uppercase; }
+.header-login-heading-rule { width:42px; height:2px; margin:16px 0 clamp(28px, 4vh, 42px); background:#193B30; }
+.header-login-content > form,
+.header-login-content > .header-login-divider,
+.header-login-content > .google-sign-in,
+.header-login-content > .header-login-status { width:100%; max-width:100%; box-sizing:border-box; }
 .header-account-drawer.header-login-drawer { animation:loginPanelIn 500ms cubic-bezier(.22,1,.36,1) both; }
 .header-account-drawer.header-login-drawer.is-closing { animation:loginPanelOut 500ms cubic-bezier(.22,1,.36,1) both; pointer-events:none; }
-.header-login-drawer > .eyebrow { margin:0 0 10px; text-align:center; }
-.header-login-drawer h2 { width:100%; margin:0 0 28px; font:700 24px/1 Montserrat,sans-serif; letter-spacing:.08em; text-align:center; }
-.header-login-drawer form { display:flex; flex-direction:column; gap:18px; }
-.header-login-drawer label { display:flex; flex-direction:column; gap:7px; min-width:0; font:700 10px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
-.header-login-drawer input,
-.header-login-drawer select,
-.header-login-drawer button { box-sizing:border-box; max-width:100%; }
-.header-login-drawer .header-account-modal__submit,
-.header-login-drawer .google-sign-in { width:100%; }
-.header-login-drawer .phone-input { width:100%; max-width:100%; }
-.header-login-drawer .phone-input input { transition:border-color .22s ease, box-shadow .22s ease, background-color .22s ease; }
-.header-login-drawer .phone-input input:focus { border-color:var(--tribull-green); box-shadow:0 0 0 3px rgba(27,54,45,.08); }
-.header-login-drawer .header-account-modal__submit { transition:transform .22s var(--ease-out), box-shadow .22s ease, filter .22s ease; }
-.header-login-drawer .header-account-modal__submit:hover { transform:translateY(-1px); box-shadow:0 5px 12px rgba(8,18,15,.14); filter:brightness(1.06); }
-.header-login-drawer .google-sign-in { transition:transform .22s var(--ease-out), border-color .22s ease, background-color .22s ease, box-shadow .22s ease; }
-.header-login-drawer .google-sign-in:hover { transform:translateY(-1px); border-color:rgba(27,54,45,.45); background:rgba(255,255,255,.28); box-shadow:0 4px 10px rgba(8,18,15,.08); }
+.header-login-content form { display:flex; flex-direction:column; gap:22px; text-align:left; }
+.header-login-content label { display:flex; flex-direction:column; gap:10px; min-width:0; color:#193B30; font:700 12px/1.2 Montserrat,sans-serif; letter-spacing:.12em; text-transform:uppercase; }
+.header-login-content input,
+.header-login-content button { box-sizing:border-box; max-width:100%; }
+.header-login-content .header-login-input,
+.header-login-content .header-password-field { position:relative; display:flex; align-items:center; width:100%; min-width:0; height:64px; padding:0 18px; gap:16px; border:1.5px solid rgba(25,59,48,.28); border-radius:8px; background:rgba(255,255,255,.72); color:#193B30; transition:border-color .2s ease, box-shadow .2s ease; }
+.header-login-content .header-login-input:focus-within,
+.header-login-content .header-password-field:focus-within { border-color:#193B30; box-shadow:0 0 0 3px rgba(25,59,48,.09); }
+.header-login-content .header-login-input > svg,
+.header-login-content .header-password-field > svg { flex:0 0 auto; color:#193B30; }
+.header-login-content .header-login-input input,
+.header-login-content .header-password-field input { width:100%; min-width:0; height:100%; padding:0; border:0; outline:0; background:transparent; color:#193B30; box-shadow:none; font:500 15px/1.4 Montserrat,sans-serif; letter-spacing:0; text-transform:none; }
+.header-login-content .header-login-input input::placeholder,
+.header-login-content .header-password-field input::placeholder { color:#858680; opacity:1; }
+.header-login-content .header-password-field input { padding-right:0; }
+.header-login-content .header-password-field button { display:flex; align-items:center; justify-content:center; gap:7px; flex:0 0 auto; height:42px; padding:0 0 0 14px; border:0; border-left:1px solid rgba(25,59,48,.22); background:transparent; color:#193B30; cursor:pointer; font:600 12px Montserrat,sans-serif; text-transform:none; }
+.header-login-content .forgot-password { align-self:flex-end; margin-top:-10px; padding:0; border:0; background:transparent; color:#193B30; cursor:pointer; font:600 12px Montserrat,sans-serif; text-decoration:underline; text-underline-offset:4px; }
+.header-login-content .header-account-modal__submit { display:flex; align-items:center; justify-content:center; gap:16px; width:100%; min-height:64px; margin-top:2px; border:0; border-radius:8px; background:#193B30; color:#fff; cursor:pointer; font:700 16px Montserrat,sans-serif; letter-spacing:.14em; text-transform:uppercase; transition:transform .22s var(--ease-out), box-shadow .22s ease, filter .22s ease; }
+.header-login-content .header-account-modal__submit:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 5px 12px rgba(8,18,15,.14); filter:brightness(1.06); }
+.header-login-content .header-account-modal__submit:disabled { opacity:.7; cursor:wait; }
+.header-login-content .header-signup-prompt { margin:18px 0 0; color:rgba(25,59,48,.72); font:500 12px/1.4 Montserrat,sans-serif; }
+.header-login-content .header-signup-prompt button { padding:0; border:0; background:transparent; color:#193B30; cursor:pointer; font:700 12px Montserrat,sans-serif; text-decoration:underline; text-underline-offset:3px; }
+.header-login-content .header-login-divider { display:flex; align-items:center; gap:16px; margin:24px 0 20px; color:rgba(25,59,48,.55); font:700 11px Montserrat,sans-serif; letter-spacing:.12em; }
+.header-login-content .header-login-divider::before,
+.header-login-content .header-login-divider::after { content:""; flex:1; height:1px; background:rgba(25,59,48,.24); }
+.header-login-content .google-sign-in { display:flex; align-items:center; justify-content:center; gap:12px; width:100%; min-height:64px; border:1.5px solid rgba(25,59,48,.28); border-radius:8px; background:rgba(255,255,255,.58); color:#193B30; cursor:pointer; font:600 14px Montserrat,sans-serif; letter-spacing:0; transition:transform .22s var(--ease-out), border-color .22s ease, background-color .22s ease, box-shadow .22s ease; }
+.header-login-content .google-sign-in:hover { transform:translateY(-1px); border-color:rgba(25,59,48,.55); background:rgba(255,255,255,.8); box-shadow:0 4px 10px rgba(8,18,15,.08); }
+.header-login-content .google-logo { width:24px; height:24px; }
+.header-login-content .header-login-status { margin:0 0 14px; text-align:left; }
 .header-login-drawer .header-account-modal__close { right:12px; }
+.google-profile-email { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin:0; color:#193B30; font:600 14px Montserrat,sans-serif; overflow-wrap:anywhere; }
+.login-recovery-instruction { width:100%; margin:-10px 0 24px; color:rgba(25,59,48,.78); font:500 13px/1.55 Montserrat,sans-serif; text-align:center; }
+.login-recovery-instruction span { display:block; margin-top:5px; font-weight:700; overflow-wrap:anywhere; }
+.header-login-content .recovery-otp-field input { text-align:center; font-size:20px; font-weight:700; letter-spacing:.42em; }
+.recovery-step-actions { display:flex; justify-content:space-between; align-items:center; width:100%; margin-top:20px; gap:12px; }
+.header-login-content .recovery-step-actions .forgot-password { align-self:auto; margin:0; text-align:left; }
+.header-login-content .recovery-resend { padding:0; border:0; background:transparent; color:#193B30; cursor:pointer; font:700 12px Montserrat,sans-serif; text-align:right; }
+.header-login-content .recovery-resend:disabled { opacity:.55; cursor:wait; }
 .header-account-modal .eyebrow { margin:0 0 8px; }
 .header-account-modal h2 { margin:0 0 24px; font:700 24px/1 Montserrat,sans-serif; letter-spacing:.08em; }
 .header-account-modal form { display:flex; flex-direction:column; gap:15px; }
 .header-account-modal label { display:flex; flex-direction:column; gap:7px; font:700 10px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
 .header-account-modal input { height:42px; padding:0 11px; border:1px solid rgba(27,54,45,.25); outline:0; background:#fffdf7; color:var(--tribull-green); font:500 13px Montserrat,sans-serif; }
 .header-account-modal__submit, .header-checkout { min-height:44px; border:0; background:var(--tribull-green); color:var(--tribull-cream); cursor:pointer; font:700 11px Montserrat,sans-serif; letter-spacing:.1em; text-transform:uppercase; }
-.phone-input { display:grid; grid-template-columns:78px 1fr; gap:8px; }
-.phone-input select, .phone-input input { min-width:0; height:42px; padding:0 10px; border:1px solid rgba(27,54,45,.25); outline:0; background:#fffdf7; color:var(--tribull-green); font:500 12px Montserrat,sans-serif; }
 .header-form-error { margin:0; color:#9c3f35; font:600 10px/1.4 Montserrat,sans-serif; }
+.header-form-success { margin:14px 22px 0; color:var(--tribull-green); font:600 11px/1.4 Montserrat,sans-serif; }
+.header-login-status { text-align:left; }
 .header-login-divider { display:flex; align-items:center; gap:12px; margin:20px 0 14px; color:rgba(27,54,45,.52); font:700 9px Montserrat,sans-serif; letter-spacing:.12em; }
 .header-login-divider::before, .header-login-divider::after { content:""; flex:1; height:1px; background:rgba(27,54,45,.18); }
 .google-sign-in { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:44px; border:1px solid rgba(27,54,45,.28); background:transparent; color:var(--tribull-green); cursor:pointer; font:700 10px Montserrat,sans-serif; letter-spacing:.04em; }
@@ -322,13 +342,6 @@ main > * + * { margin-top: 0; }
 .header-username-input span { color:rgba(27,54,45,.7); font:700 16px/1 Montserrat,sans-serif; }
 .header-username-input input { flex:1; min-width:0; border:0; outline:0; background:transparent; color:var(--tribull-green); font:500 14px Montserrat,sans-serif; }
 .header-username-hint { margin:10px 0 16px; color:rgba(27,54,45,.72); font:500 11px/1.5 Montserrat,sans-serif; }
-.otp-instruction { margin:0 0 20px; color:rgba(27,54,45,.72); font:500 11px/1.5 Montserrat,sans-serif; }
-.otp-inputs { display:grid; grid-template-columns:repeat(6, 1fr); gap:7px; margin-bottom:15px; }
-.otp-inputs input { width:100%; height:44px; padding:0; border:1px solid rgba(27,54,45,.28); outline:0; background:#fffdf7; color:var(--tribull-green); font:700 18px Montserrat,sans-serif; text-align:center; }
-.otp-inputs input:focus { border-color:var(--tribull-green); box-shadow:0 0 0 2px rgba(27,54,45,.08); }
-.otp-demo-note { margin:0 0 12px; color:rgba(27,54,45,.6); font:500 9px/1.4 Montserrat,sans-serif; }
-.resend-otp { display:block; margin:16px auto 0; padding:0; border:0; background:transparent; color:var(--tribull-green); cursor:pointer; font:700 10px Montserrat,sans-serif; }
-.resend-otp:disabled { color:rgba(27,54,45,.45); cursor:default; }
 .header-quantity { display:flex !important; align-items:center; gap:8px; margin-top:9px; }
 .header-quantity button { display:grid; place-items:center; width:22px; height:22px; padding:0; border:1px solid rgba(27,54,45,.25); background:transparent; color:var(--tribull-green); cursor:pointer; }
 .header-quantity span { margin:0; min-width:12px; text-align:center; }

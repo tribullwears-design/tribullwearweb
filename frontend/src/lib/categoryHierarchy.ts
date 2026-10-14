@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiFetch } from "./api";
 
 export type CategoryChoice = { value: string; label: string; image?: string };
 export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<string, CategoryChoice[]> };
@@ -75,7 +76,7 @@ function toApiDocuments(hierarchy: CategoryHierarchy) {
 
 async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) {
   invalidatePendingCategoryRequest();
-  const response = await fetch(path, {
+  const response = await apiFetch(path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -108,7 +109,7 @@ function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
 export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
   invalidatePendingCategoryRequest();
   try {
-    const response = await fetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) });
+    const response = await apiFetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) });
     if (!response.ok) return false;
     cacheHierarchy(fromApiDocuments(await response.json()));
     return true;
@@ -137,7 +138,7 @@ async function requestCategoryHierarchy() {
   const url = "/api/categories";
   let response: Response;
   try {
-    response = await fetch(url, { cache: "no-store" });
+    response = await apiFetch(url, { cache: "no-store" });
   } catch (error) {
     console.error("CATEGORY API ERROR", {
       status: "unavailable",

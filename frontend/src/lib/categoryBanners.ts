@@ -1,3 +1,5 @@
+import { apiFetch } from "./api";
+
 export type CategoryBanner = {
   id: string;
   categoryId: string;
@@ -9,7 +11,7 @@ export type CategoryBanner = {
 };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, init);
+  const response = await apiFetch(url, init);
   if (!response.ok) {
     const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
     throw new Error(details?.error || "Banner request failed");

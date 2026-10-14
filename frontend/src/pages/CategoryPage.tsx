@@ -1,5 +1,6 @@
 import { ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
 import { Link, useParams } from "wouter";
+import { apiFetch } from "../lib/api";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -402,7 +403,7 @@ function CategoryProductsView({ catalog, categorySlug, entrySlug }: { catalog: C
     setStoredCatalog([]);
     setProductsLoading(true);
     const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-    void fetch(`/api/products?${params.toString()}`, { cache: "no-store" })
+    void apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load category products.");
         return await response.json() as { id: string; name: string; price: number; image: string }[];
@@ -552,7 +553,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
     setLoading(true);
     void Promise.all(requestedSubcategories.map(async (entrySlug) => {
       const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-      const response = await fetch(`/api/products?${params.toString()}`, { cache: "no-store" });
+      const response = await apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" });
       if (!response.ok) throw new Error("Unable to load category products.");
       return await response.json() as { id: string; name: string; price: number; image: string }[];
     }))

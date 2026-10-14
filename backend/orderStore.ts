@@ -1,6 +1,5 @@
-import { MongoClient, type Collection, type Db } from "mongodb";
-import fs from "node:fs";
-import path from "node:path";
+import { type Collection } from "mongodb";
+import { getDatabase } from "./database.js";
 
 export const orderStatuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"] as const;
 export type OrderStatus = typeof orderStatuses[number];
@@ -29,25 +28,8 @@ export type OrderDocument = {
   createdAt: string;
 };
 
-let clientPromise: Promise<MongoClient> | undefined;
-
-function readMongoUri() {
-  if (process.env.MONGODB_URI) return process.env.MONGODB_URI;
-  try {
-    const envPath = path.resolve(process.cwd(), "backend", ".env.production");
-    const line = fs.readFileSync(envPath, "utf8").split(/\r?\n/).find((entry) => entry.startsWith("MONGODB_URI="));
-    return line?.slice("MONGODB_URI=".length).trim();
-  } catch {
-    return undefined;
-  }
-}
-
 async function getCollection(): Promise<Collection<OrderDocument>> {
-  const uri = readMongoUri();
-  if (!uri) throw new Error("MONGODB_URI is not configured");
-  clientPromise ||= new MongoClient(uri).connect();
-  const client = await clientPromise;
-  const db: Db = client.db(process.env.MONGODB_DB || "tribull");
+  const db = await getDatabase();
   const collection = db.collection<OrderDocument>("orders");
   await collection.createIndex({ id: 1 }, { unique: true });
   await collection.createIndex({ status: 1, createdAt: -1 });
