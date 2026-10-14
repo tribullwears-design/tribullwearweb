@@ -1,13 +1,17 @@
-import { ArrowLeft, CheckCircle2, ShieldCheck } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowLeft, CheckCircle2, Download, ShieldCheck } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import { products, type Product } from "./ProductsPage";
+import ProductPrice from "../components/ProductPrice";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import { resolveOriginalPrice } from "../lib/productPrice";
 
 type CartEntry = {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
   image: string;
   quantity: number;
   variant?: string;
@@ -15,7 +19,7 @@ type CartEntry = {
 };
 
 type CartState = Record<string, number>;
-type CartItemMeta = Partial<Product> & { variant?: string; name?: string; image?: string; price?: number };
+type CartItemMeta = Partial<Product> & { variant?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
 
 type CheckoutForm = {
   fullName: string;
@@ -47,6 +51,114 @@ function readStorage<T>(key: string, fallback: T): T {
   }
 }
 
+async function loadInvoiceLogo() {
+  const image = new Image();
+  image.src = "/products/logo.png";
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Could not prepare the Tribull logo for the bill.");
+  context.drawImage(image, 0, 0);
+  const jpeg = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Could not convert the Tribull logo for the bill."));
+    }, "image/jpeg", 0.92);
+  });
+  return {
+    data: new Uint8Array(await jpeg.arrayBuffer()),
+    width: canvas.width,
+    height: canvas.height,
+  };
+}
+
+function createInvoicePdf(lines: string[], logo: Awaited<ReturnType<typeof loadInvoiceLogo>>) {
+  const printableLines = lines.map((line) => line
+    .replace(/₹/g, "INR ")
+    .replace(/×/g, "x")
+    .replace(/[^\x20-\x7E]/g, "?"));
+  const linesPerPage = 38;
+  const pages: string[][] = [];
+  for (let index = 0; index < printableLines.length; index += linesPerPage) {
+    pages.push(printableLines.slice(index, index + linesPerPage));
+  }
+
+  const objects: (string | Uint8Array)[] = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  const logoObjectId = objects.length + 1;
+  const logoHeader = new TextEncoder().encode(`<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${logo.data.length} >>\nstream\n`);
+  const logoFooter = new TextEncoder().encode("\nendstream");
+  const logoObject = new Uint8Array(logoHeader.length + logo.data.length + logoFooter.length);
+  logoObject.set(logoHeader);
+  logoObject.set(logo.data, logoHeader.length);
+  logoObject.set(logoFooter, logoHeader.length + logo.data.length);
+  objects.push(logoObject);
+  const pageReferences: number[] = [];
+
+  pages.forEach((pageLines) => {
+    const pageObjectId = objects.length + 1;
+    const contentObjectId = pageObjectId + 1;
+    pageReferences.push(pageObjectId);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 3 0 R >> /XObject << /Logo ${logoObjectId} 0 R >> >> /Contents ${contentObjectId} 0 R >>`);
+
+    const logoScale = Math.min(110 / logo.width, 54 / logo.height);
+    const logoWidth = logo.width * logoScale;
+    const logoHeight = logo.height * logoScale;
+    const commands = pageReferences.length === 1
+      ? [`q ${logoWidth.toFixed(2)} 0 0 ${logoHeight.toFixed(2)} ${((595 - logoWidth) / 2).toFixed(2)} 770 cm /Logo Do Q`, "BT", "/F1 11 Tf"]
+      : ["BT", "/F1 11 Tf"];
+    let y = pageReferences.length === 1 ? 748 : 790;
+    pageLines.forEach((line, index) => {
+      const escapedLine = line.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+      const textWidth = Math.min(line.length * 5.5, 495);
+      const x = Math.max(50, (595 - textWidth) / 2);
+      commands.push(`1 0 0 1 ${x.toFixed(2)} ${y} Tm (${escapedLine}) Tj`);
+      y -= index === 0 ? 24 : 16;
+    });
+    if (pageReferences.length === pages.length) {
+      y -= 16;
+      commands.push(`1 0 0 1 220 ${y} Tm (Thank you for shopping with Tribull!) Tj`);
+    }
+    commands.push("ET");
+    const stream = commands.join("\n");
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+
+  objects[1] = `<< /Type /Pages /Kids [${pageReferences.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageReferences.length} >>`;
+
+  const encoder = new TextEncoder();
+  const parts: Uint8Array[] = [encoder.encode("%PDF-1.4\n")];
+  const offsets = [0];
+  let byteLength = parts[0].length;
+  objects.forEach((object, index) => {
+    offsets.push(byteLength);
+    const objectBytes = typeof object === "string" ? encoder.encode(object) : object;
+    const objectStart = encoder.encode(`${index + 1} 0 obj\n`);
+    const objectEnd = encoder.encode("\nendobj\n");
+    parts.push(objectStart, objectBytes, objectEnd);
+    byteLength += objectStart.length + objectBytes.length + objectEnd.length;
+  });
+  const xrefOffset = byteLength;
+  let xref = `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    xref += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  xref += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  parts.push(encoder.encode(xref));
+  const pdf = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+  let offset = 0;
+  parts.forEach((part) => {
+    pdf.set(part, offset);
+    offset += part.length;
+  });
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
 export default function CheckoutPage() {
   const [, setLocation] = useLocation();
   const [form, setForm] = useState<CheckoutForm>({
@@ -61,10 +173,33 @@ export default function CheckoutPage() {
     country: "India",
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutForm | "paymentMethod", string>>>({});
-  const [paymentMethod, setPaymentMethod] = useState("cod");
+  const [paymentMethod, setPaymentMethod] = useState("upi");
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
+  const [showTrackingInfo, setShowTrackingInfo] = useState(false);
+  const [showInvoice, setShowInvoice] = useState(false);
+  const [invoiceError, setInvoiceError] = useState("");
   const [placedOrderSummary, setPlacedOrderSummary] = useState<OrderSummary | null>(null);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((nextProducts) => {
+        if (active) setCatalogProducts(nextProducts);
+      }).catch((error: unknown) => {
+        console.error("Failed to load checkout product prices.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
 
   const cartDetails = useMemo(() => {
     const cart = readStorage<CartState>("tribull-cart", {});
@@ -75,11 +210,12 @@ export default function CheckoutPage() {
     for (const [id, quantity] of Object.entries(cart)) {
       if (quantity <= 0) continue;
 
-      const product = products.find((item) => item.id === id);
+      const product = catalogProducts.find((item) => item.id === id)
+        ?? catalogProducts.find((item) => item.name.trim().toLowerCase() === cartItems[id]?.name?.trim().toLowerCase());
       const item = cartItems[id] || product;
       if (!item) continue;
 
-      const price = Number(item.price ?? product?.price ?? 0);
+      const price = Number(product?.price ?? item.price ?? 0);
       const image = item.image ?? product?.image ?? "/products/logo.png";
       const lineTotal = price * quantity;
 
@@ -87,6 +223,7 @@ export default function CheckoutPage() {
         id,
         name: item.name ?? product?.name ?? "Tribull Product",
         price,
+        originalPrice: product?.originalPrice ?? resolveOriginalPrice(item),
         image,
         quantity,
         variant: item.variant,
@@ -99,7 +236,7 @@ export default function CheckoutPage() {
     const total = subtotal + shipping;
 
     return { entries, subtotal, shipping, total };
-  }, [orderPlaced]);
+  }, [catalogProducts, orderPlaced]);
 
   const handleFieldChange = (field: keyof CheckoutForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -172,19 +309,62 @@ export default function CheckoutPage() {
   };
 
   const visibleOrder = placedOrderSummary ?? cartDetails;
+  const downloadBill = async () => {
+    const invoiceLines = [
+      "TRIBULL - ORDER BILL",
+      `Order Number: ${orderNumber}`,
+      `Date: ${new Date().toLocaleDateString("en-IN")}`,
+      "",
+      "CUSTOMER",
+      `Name: ${form.fullName}`,
+      `Email: ${form.email}`,
+      `Phone: ${form.phone}`,
+      `Address: ${form.address}${form.apartment ? `, ${form.apartment}` : ""}`,
+      `${form.city}, ${form.state} ${form.pinCode}, ${form.country}`,
+      "",
+      "ORDER ITEMS",
+      ...visibleOrder.entries.flatMap((item) => [
+        `${item.name}${item.variant ? ` (${item.variant})` : ""}`,
+        `  ${item.quantity} x ${formatPrice(item.price)} = ${formatPrice(item.lineTotal)}`,
+      ]),
+      "",
+      `Subtotal: ${formatPrice(visibleOrder.subtotal)}`,
+      `Shipping: ${formatPrice(visibleOrder.shipping)}`,
+      `Total: ${formatPrice(visibleOrder.total)}`,
+      `Payment: ${paymentMethod === "upi" ? "UPI" : "Credit / Debit Card"}`,
+    ];
+    try {
+      setInvoiceError("");
+      const logo = await loadInvoiceLogo();
+      const pdf = createInvoicePdf(invoiceLines, logo);
+      const downloadUrl = URL.createObjectURL(pdf);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `Tribull-Bill-${orderNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+    } catch (error) {
+      console.error("Could not create the order bill PDF.", error);
+      setInvoiceError("Could not download the bill. Please try again.");
+    }
+  };
 
   if (!orderPlaced && cartDetails.entries.length === 0) {
     return (
       <div className="checkout-page checkout-page--empty">
         <header className="checkout-header">
+          <div className="checkout-header__back-area">
+            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
+              <ArrowLeft size={16} /> Back to Cart
+            </button>
+          </div>
           <a className="wordmark" href="/" aria-label="Tribull home">
             <img src="/products/logo.png" alt="TRIBULL" />
           </a>
           <div className="checkout-header__title-wrap">
             <span className="checkout-header__eyebrow">Checkout</span>
-            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-              <ArrowLeft size={16} /> Back to Cart
-            </button>
           </div>
         </header>
 
@@ -204,14 +384,16 @@ export default function CheckoutPage() {
     return (
       <div className="checkout-page checkout-page--success">
         <header className="checkout-header">
+          <div className="checkout-header__back-area">
+            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
+              <ArrowLeft size={16} /> Back to Cart
+            </button>
+          </div>
           <a className="wordmark" href="/" aria-label="Tribull home">
             <img src="/products/logo.png" alt="TRIBULL" />
           </a>
           <div className="checkout-header__title-wrap">
             <span className="checkout-header__eyebrow">Checkout</span>
-            <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-              <ArrowLeft size={16} /> Back to Cart
-            </button>
           </div>
         </header>
 
@@ -229,7 +411,7 @@ export default function CheckoutPage() {
                   <img src={item.image} alt={item.name} />
                   <div>
                     <strong>{item.name}</strong>
-                    <span>{item.quantity} × {formatPrice(item.price)}</span>
+                    <span>{item.quantity} ×</span><ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
                   </div>
                 </div>
               ))}
@@ -240,9 +422,73 @@ export default function CheckoutPage() {
             </div>
 
             <div className="checkout-success__actions">
-              <button type="button" className="checkout-primary-button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>View Order</button>
+              <button
+                type="button"
+                className="checkout-primary-button"
+                aria-expanded={showInvoice}
+                aria-controls="checkout-invoice"
+                onClick={() => setShowInvoice((visible) => !visible)}
+              >
+                {showInvoice ? "Hide Bill" : "View Order"}
+              </button>
+              <button
+                type="button"
+                className="checkout-secondary-button"
+                aria-expanded={showTrackingInfo}
+                aria-controls="checkout-tracking-info"
+                onClick={() => setShowTrackingInfo((visible) => !visible)}
+              >
+                Track Order
+              </button>
               <button type="button" className="checkout-secondary-button" onClick={continueShopping}>Continue Shopping</button>
             </div>
+            {showTrackingInfo && (
+              <p className="checkout-tracking-info" id="checkout-tracking-info" role="status">
+                Order #{orderNumber} is confirmed. Tracking details will be available once your order has shipped.
+              </p>
+            )}
+            {showInvoice && (
+              <section className="checkout-invoice" id="checkout-invoice" aria-label="Order bill">
+              <div className="checkout-invoice__header">
+                <div>
+                  <p>TRIBULL</p>
+                  <h3>Order Bill</h3>
+                </div>
+                <div>
+                  <strong>Order #{orderNumber}</strong>
+                  <span>{new Date().toLocaleDateString("en-IN")}</span>
+                </div>
+              </div>
+              <div className="checkout-invoice__customer">
+                <strong>Bill to</strong>
+                <span>{form.fullName}</span>
+                <span>{form.phone} / {form.email}</span>
+                <span>{form.address}{form.apartment ? `, ${form.apartment}` : ""}, {form.city}, {form.state} {form.pinCode}, {form.country}</span>
+              </div>
+              <div className="checkout-invoice__items">
+                <div className="checkout-invoice__item checkout-invoice__item--heading">
+                  <span>Item</span><span>Qty</span><span>Amount</span>
+                </div>
+                {visibleOrder.entries.map((item) => (
+                  <div className="checkout-invoice__item" key={`invoice-${item.id}`}>
+                    <span>{item.name}{item.variant ? <small>{item.variant}</small> : null}</span>
+                    <span>{item.quantity}</span>
+                    <span>{formatPrice(item.lineTotal)}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="checkout-invoice__totals">
+                <div><span>Subtotal</span><strong>{formatPrice(visibleOrder.subtotal)}</strong></div>
+                <div><span>Shipping</span><strong>{formatPrice(visibleOrder.shipping)}</strong></div>
+                <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
+                <div><span>Payment method</span><strong>{paymentMethod === "upi" ? "UPI" : "Credit / Debit Card"}</strong></div>
+              </div>
+              <button type="button" className="checkout-primary-button checkout-invoice__download" onClick={downloadBill}>
+                <Download size={15} /> Download PDF
+              </button>
+              {invoiceError && <p className="checkout-payment-error" role="alert">{invoiceError}</p>}
+              </section>
+            )}
           </div>
         </main>
       </div>
@@ -252,14 +498,16 @@ export default function CheckoutPage() {
   return (
     <div className="checkout-page">
       <header className="checkout-header">
+        <div className="checkout-header__back-area">
+          <button type="button" className="checkout-header__back" onClick={goBackToCart}>
+            <ArrowLeft size={16} /> Back to Cart
+          </button>
+        </div>
         <a className="wordmark" href="/" aria-label="Tribull home">
           <img src="/products/logo.png" alt="TRIBULL" />
         </a>
         <div className="checkout-header__title-wrap">
           <span className="checkout-header__eyebrow">Checkout</span>
-          <button type="button" className="checkout-header__back" onClick={goBackToCart}>
-            <ArrowLeft size={16} /> Back to Cart
-          </button>
         </div>
       </header>
 
@@ -334,7 +582,6 @@ export default function CheckoutPage() {
             <h3>Payment</h3>
             <div className="checkout-payment-options">
               {[
-                { id: "cod", label: "Cash on Delivery" },
                 { id: "upi", label: "UPI" },
                 { id: "card", label: "Credit / Debit Card" },
               ].map((option) => (
@@ -362,7 +609,7 @@ export default function CheckoutPage() {
                 <div className="checkout-summary__details">
                   <strong>{item.name}</strong>
                   <span>{item.variant ? `${item.variant}` : "Premium tee"}</span>
-                  <span>{formatPrice(item.price)}</span>
+                  <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
                   <span>Quantity: {item.quantity}</span>
                   <strong className="checkout-summary__line-total">{formatPrice(item.lineTotal)}</strong>
                 </div>

@@ -1,10 +1,13 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
 import { useScrollReveal } from "../hooks/useScrollReveal";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import ProductPrice from "../components/ProductPrice";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -20,10 +23,6 @@ const productImages = {
   frontWhite: "/products/front-white.png",
   hangerWhite: "/products/hanger-white.png",
   flatWhite: "/products/flat-white.png",
-  essentialMensShirt: "/products/essential-mens-shirt.png",
-  essentialTshirts: "/products/essential-tshirts.png",
-  essentialOversized: "/products/essential-oversized.png",
-  essentialHoodies: "/products/essential-hoodies.png",
 };
 
 const newArrivals = [
@@ -44,7 +43,7 @@ const bestSelling = [
   [productImages.backBlack, "Classic Spider Heritage", "₹1,929"],
 ];
 
-const whatsappUrl = (message: string) => `https://wa.me/?text=${encodeURIComponent(message)}`;
+const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${encodeURIComponent(message)}`;
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
@@ -93,25 +92,56 @@ function Reveal({
   );
 }
 
-function ProductCard({ item, delay = 0, showMeta = true }: { item: string[]; delay?: number; showMeta?: boolean }) {
+function ProductCard({ item, delay = 0, showMeta = true, href }: { item: string[]; delay?: number; showMeta?: boolean; href: string }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
+  const [, setLocation] = useLocation();
+  const [isOpening, setIsOpening] = useState(false);
+  const openingTimer = useRef<number | null>(null);
+  const hoverImage = getShowcaseProductHoverImage(item[0]);
+
+  useEffect(() => () => {
+    if (openingTimer.current !== null) window.clearTimeout(openingTimer.current);
+  }, []);
+
+  const handleProductClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+      || event.detail === 0
+      || !window.matchMedia("(hover: none) and (pointer: coarse)").matches
+      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) return;
+
+    event.preventDefault();
+    if (isOpening) return;
+    setIsOpening(true);
+    openingTimer.current = window.setTimeout(() => setLocation(href), 520);
+  };
+
   return (
-    <article
-      ref={ref}
-      className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "reveal-visible" : null)}
-      style={{ transitionDelay: `${delay}s` }}
-    >
-      <div className="product-card__image"><img src={item[0]} alt={item[1]} loading="lazy" /></div>
-      {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><p>{item[2]}</p></div>}
-    </article>
+    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
+      <article
+        ref={ref}
+        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null, hoverImage ? "has-tap-preview" : null)}
+        style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
+      >
+        <div className="product-card__image">
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
+          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="eager" /> : null}
+        </div>
+        {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} productName={item[1]} /></div>}
+      </article>
+    </Link>
   );
 }
 
 export default function Home() {
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
-  const heroImgRef = useRef<HTMLImageElement>(null);
-  const heroCopyRef = useRef<HTMLDivElement>(null);
-  const heroStampRef = useRef<HTMLDivElement>(null);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -172,25 +202,6 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  useEffect(() => {
-    let raf = 0;
-    const onScroll = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y < 1200) {
-          if (heroImgRef.current) heroImgRef.current.style.transform = `translate3d(0, ${y * 0.08}px, 0)`;
-          if (heroCopyRef.current) heroCopyRef.current.style.transform = `translate3d(0, ${y * 0.1}px, 0)`;
-          if (heroStampRef.current) heroStampRef.current.style.transform = `translate3d(0, ${y * 0.16}px, 0) rotate(${y * 0.04}deg)`;
-        }
-        raf = 0;
-      });
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
       <div className="ticker" aria-label="Announcement">
@@ -207,16 +218,14 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      <nav className="category-nav" aria-label="Shop categories">
+      <nav className="category-nav" aria-label="Cinema categories">
         <div className="category-nav__track">
-          {hierarchy.main.map(({ value, label }) => {
-            return (
-            <a className="category-nav__item" href={`/category/${value}`} key={value}>
-              <span className="category-nav__image"><img src={hierarchy.main.find((item) => item.value === value)?.image || "/products/front-white.png"} alt="" /></span>
+          {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
+            <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
+              <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
               <span className="category-nav__label">{label}</span>
             </a>
-            );
-          })}
+          ))}
         </div>
       </nav>
 
@@ -224,11 +233,11 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className="hero__images">
             <div className="hero__image">
-              <img ref={heroImgRef} src={brandAssets.hero} alt="Tribull collection" />
+              <img src={brandAssets.hero} alt="Tribull collection" />
             </div>
           </div>
           <div className="hero__wash" />
-          <div className="hero__copy" ref={heroCopyRef}>
+          <div className="hero__copy">
             <Reveal variant="blur" delay={0.1}>
               <p className="eyebrow" style={{ display: 'none' }}>The everyday uniform / 2026</p>
             </Reveal>
@@ -239,7 +248,7 @@ export default function Home() {
               <a className="button button--cream" href="#arrivals" style={{ display: 'none' }}>Shop now <ArrowUpRight size={17} /></a>
             </Reveal>
           </div>
-          <div className="hero__stamp float-fast" ref={heroStampRef}>TRIBULL<br /><span>EST. 2024</span></div>
+          <div className="hero__stamp float-fast">TRIBULL<br /><span>EST. 2024</span></div>
         </section>
 
         <div className="peach-wrapper">
@@ -250,7 +259,14 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid">
-              {newArrivals.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} />)}
+              {newArrivals.map((item, idx) => (
+                <ProductCard
+                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
+                  key={`${item[1]}-${idx}`}
+                  delay={0.08 * idx}
+                  href={`/product/hollywood-${idx}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
+                />
+              ))}
             </div>
             <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>
@@ -264,7 +280,14 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only">
-              {bestSelling.map((item, idx) => <ProductCard item={item} key={item[1]} delay={0.08 * idx} showMeta={false} />)}
+              {bestSelling.map((item, idx) => (
+                <ProductCard
+                  item={[getShowcaseProductImage(idx), item[1], item[2]]}
+                  key={`${item[1]}-${idx}`}
+                  delay={0.08 * idx}
+                  href={`/product/hollywood-${idx + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(idx))}`}
+                />
+              ))}
             </div>
             <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
           </div>
@@ -286,7 +309,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more with Dudeme!</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img src="/products/tshirt.jpg" alt="Custom graphic T-shirt" />
+              <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" />
             </Reveal>
           </div>
         </div>
@@ -297,20 +320,31 @@ export default function Home() {
               <div><p className="eyebrow">The foundation</p><h2>OUR ESSENTIALS</h2></div>
             </div>
           </Reveal>
-          <Reveal variant="scale" stagger className="essentials-grid">
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialMensShirt} alt="Round Neck" /><span>Round Neck</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialTshirts} alt="Oversized" /><span>Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialOversized} alt="Acid Wash Oversized" /><span>Acid Wash Oversized</span></a>
-            <a href="#footer" className="essential-card parallax-tilt"><img src={productImages.essentialHoodies} alt="Hoodie" /><span>Hoodie</span></a>
+          <Reveal variant="scale" stagger className="essentials-grid essentials-grid--compact">
+            {[
+              { label: "Oversized", alt: "Black oversized T-shirt front and back views", imageIndex: 0, theme: "oversized" },
+              { label: "Hoodie", alt: "Black hoodie front and back views", imageIndex: 2, theme: "hoodie" },
+            ].map((item) => {
+              const image = getShowcaseProductImage(item.imageIndex);
+              return (
+                <a key={item.label} href="#footer" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
+                  <div className="essential-card__visual">
+                    <div className="essential-card__backdrop" aria-hidden="true" />
+                    <img src={image} alt={item.alt} />
+                  </div>
+                  <span>{item.label}</span>
+                </a>
+              );
+            })}
           </Reveal>
         </div>
 
         <div className="bottom-visuals">
           <Reveal variant="scale" stagger>
             <div className="bottom-visuals__grid">
-              <div className="visual-block visual-block--green"><img src={productImages.flatWhite} alt="Graphic spider T-shirt" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(1)} alt="White T-shirt front and back views" /></div>
               <div className="visual-block visual-block--cream"><span className="float-slow">Made for<br /><em>every day.</em></span></div>
-              <div className="visual-block visual-block--green"><img src={productImages.backBlack} alt="Black oversized graphic T-shirt" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(0)} alt="Black T-shirt front and back views" /></div>
             </div>
           </Reveal>
         </div>

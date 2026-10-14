@@ -1,38 +1,20 @@
 import { ChevronRight, Menu, X } from "lucide-react";
-import { Link } from "wouter";
-import { useEffect, useState } from "react";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
-
-type MenuCategory = {
-  slug: string;
-  label: string;
-  subcategories: { slug: string; label: string }[];
-};
-
-const menuHierarchy: CategoryHierarchy = defaultCategoryHierarchy;
+import { useState } from "react";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy } from "../lib/categoryHierarchy";
 
 export default function MobileCategoryMenu() {
-  const hierarchy = useCategoryHierarchy(menuHierarchy);
   const [open, setOpen] = useState(false);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-
-  useEffect(() => {
-    document.body.classList.toggle("mobile-category-menu-open", open);
-    return () => document.body.classList.remove("mobile-category-menu-open");
-  }, [open]);
+  const [cinemaExpanded, setCinemaExpanded] = useState(false);
+  const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
+  const cinemaSubcategories = hierarchy.subcategories.cinema || [];
 
   const toggleMenu = () => {
     setOpen((current) => !current);
-    if (open) setExpandedCategory(null);
   };
 
   const closeMenu = () => {
     setOpen(false);
-    setExpandedCategory(null);
-  };
-
-  const toggleCategory = (slug: string) => {
-    setExpandedCategory((current) => (current === slug ? null : slug));
   };
 
   return (
@@ -61,44 +43,52 @@ export default function MobileCategoryMenu() {
           </button>
         </div>
         <div className="mobile-category-menu__content">
-          <nav aria-label="Mobile category navigation">
-          {hierarchy.main.map((category) => {
-            const subcategories = hierarchy.subcategories[category.value] || [];
-            const isExpanded = expandedCategory === category.value;
-            return (
-              <div className="mobile-category-menu__group" key={category.value}>
-                <button
-                  className="mobile-category-menu__trigger"
-                  type="button"
-                  aria-expanded={isExpanded}
-                  aria-controls={`mobile-${category.value}-subcategories`}
-                  onClick={() => toggleCategory(category.value)}
+          <div className="mobile-category-menu__group">
+            <button
+              className="mobile-category-menu__trigger"
+              type="button"
+              aria-expanded={cinemaExpanded}
+              aria-controls="mobile-cinema-subcategories"
+              onClick={() => setCinemaExpanded((current) => !current)}
+            >
+              <span className="mobile-category-menu__label">
+                <img className="mobile-category-menu__icon" src="/products/cinemamenu.png" alt="" />
+                Cinema
+              </span>
+              <ChevronRight
+                className={`mobile-category-menu__arrow ${cinemaExpanded ? "mobile-category-menu__arrow--open" : ""}`}
+                size={17}
+                aria-hidden="true"
+              />
+            </button>
+            <div
+              id="mobile-cinema-subcategories"
+              className={`mobile-category-menu__subcategories ${cinemaExpanded ? "mobile-category-menu__subcategories--open" : ""}`}
+              aria-hidden={!cinemaExpanded}
+            >
+              {cinemaSubcategories.map(({ value, label, image }) => (
+                <a
+                  key={value}
+                  className="mobile-category-menu__subcategory"
+                  href={`/category/cinema/${value}`}
+                  onClick={closeMenu}
+                  tabIndex={cinemaExpanded ? 0 : -1}
                 >
-                  <span>{category.label}</span>
-                  <ChevronRight className={isExpanded ? "mobile-category-menu__arrow mobile-category-menu__arrow--open" : "mobile-category-menu__arrow"} size={19} strokeWidth={1.6} />
-                </button>
-                <div
-                  id={`mobile-${category.value}-subcategories`}
-                  className={`mobile-category-menu__subcategories ${isExpanded ? "mobile-category-menu__subcategories--open" : ""}`}
-                >
-                  {subcategories.map((subcategory) => (
-                    <Link
-                      className="mobile-category-menu__subcategory"
-                      href={`/category/${category.value}/${subcategory.value}`}
-                      key={subcategory.value}
-                      onClick={closeMenu}
-                    >
-                      {subcategory.label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-          </nav>
+                  {image && <img className="mobile-category-menu__icon" src={image} alt="" />}
+                  {label}
+                </a>
+              ))}
+            </div>
+          </div>
           <div className="mobile-category-menu__links">
-            <a href="/#corporate" onClick={closeMenu}>Corporate</a>
-            <a href="/#customize" onClick={closeMenu}>Customize</a>
+            <a href="/#corporate" onClick={closeMenu}>
+              <img className="mobile-category-menu__icon" src="/products/corporate.png" alt="" />
+              Corporate
+            </a>
+            <a href="/#customize" onClick={closeMenu}>
+              <img className="mobile-category-menu__icon" src="/products/customize.png" alt="" />
+              Customize
+            </a>
           </div>
           <div className="mobile-category-menu__contact">
             <span>Get in touch</span>

@@ -6,21 +6,16 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { defaultProducts, type Product } from "../../../shared/products";
+import ProductPrice from "../components/ProductPrice";
+import { fetchProducts, refreshProducts } from "../lib/products";
+import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
 
-type ProductCategory = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
+export type { Product } from "../../../shared/products";
+
+type ProductCategory = Product["category"];
 type SortOption = "featured" | "newest" | "low" | "high" | "selling";
-
-export type Product = {
-  id: string;
-  name: string;
-  category: ProductCategory;
-  price: number;
-  image: string;
-  created: number;
-  sold: number;
-};
 
 const categories: { id: ProductCategory; label: string; icon: string }[] = [
   { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
@@ -29,24 +24,7 @@ const categories: { id: ProductCategory; label: string; icon: string }[] = [
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
 
-export const products: Product[] = [
-  { id: "mass", name: "Thalapathy Vijay - Mass", category: "round-neck", price: 599, image: "/products/front-white.png", created: 4, sold: 94 },
-  { id: "thala", name: "Ajith Kumar - Thala", category: "round-neck", price: 599, image: "/products/back-black.png", created: 3, sold: 88 },
-  { id: "naan", name: "Vikram - Naan Maatram Illai", category: "round-neck", price: 599, image: "/products/flat-white.png", created: 2, sold: 81 },
-  { id: "vazha", name: "Vazha Oru Dharamam", category: "round-neck", price: 599, image: "/products/hanger-white.png", created: 1, sold: 75 },
-  { id: "daily-oversized", name: "Daily Uniform Oversized Tee", category: "oversized", price: 799, image: "/products/back-black.png", created: 8, sold: 72 },
-  { id: "street-oversized", name: "Street Frame Oversized Tee", category: "oversized", price: 849, image: "/products/front-white.png", created: 7, sold: 65 },
-  { id: "heavy-oversized", name: "Heavyweight Essential Tee", category: "oversized", price: 899, image: "/products/flat-white.png", created: 6, sold: 59 },
-  { id: "graphic-oversized", name: "Graphic Motion Oversized Tee", category: "oversized", price: 949, image: "/products/tshirt.jpg", created: 5, sold: 52 },
-  { id: "acid-shadow", name: "Acid Shadow Washed Tee", category: "acid-oversized", price: 999, image: "/products/tomandjerry.jpg", created: 12, sold: 48 },
-  { id: "acid-signal", name: "Acid Signal Oversized Tee", category: "acid-oversized", price: 1_049, image: "/products/batman.jpg", created: 11, sold: 44 },
-  { id: "acid-drift", name: "Acid Drift Washed Tee", category: "acid-oversized", price: 1_099, image: "/products/front-white.png", created: 10, sold: 39 },
-  { id: "acid-core", name: "Acid Core Graphic Tee", category: "acid-oversized", price: 1_149, image: "/products/flat-white.png", created: 9, sold: 35 },
-  { id: "classic-hoodie", name: "Classic Tribull Hoodie", category: "hoodie", price: 1_299, image: "/products/hanger-white.png", created: 16, sold: 83 },
-  { id: "forest-hoodie", name: "Forest Logo Hoodie", category: "hoodie", price: 1_399, image: "/products/back-black.png", created: 15, sold: 74 },
-  { id: "graphic-hoodie", name: "Graphic Night Hoodie", category: "hoodie", price: 1_499, image: "/products/flat-white.png", created: 14, sold: 61 },
-  { id: "studio-hoodie", name: "Studio Heavy Hoodie", category: "hoodie", price: 1_599, image: "/products/front-white.png", created: 13, sold: 56 },
-];
+export const products: Product[] = defaultProducts;
 
 const formatPrice = (price: number) => `₹${price.toLocaleString("en-IN")}`;
 
@@ -61,6 +39,7 @@ function readStorage<T>(key: string, fallback: T): T {
 
 export default function ProductsPage() {
   const [, setLocation] = useLocation();
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
@@ -70,6 +49,25 @@ export default function ProductsPage() {
   useEffect(() => {
     window.localStorage.setItem("tribull-wishlist", JSON.stringify(wishlist));
   }, [wishlist]);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((nextProducts) => {
+        if (active) setCatalogProducts(nextProducts);
+      }).catch((error: unknown) => {
+        console.error("Failed to load products from the product API.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
 
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
@@ -86,15 +84,15 @@ export default function ProductsPage() {
   }, [cart]);
 
   const visibleProducts = useMemo(() => {
-    const filtered = products.filter((product) => product.category === selectedCategory);
+    const filtered = catalogProducts.filter((product) => product.category === selectedCategory);
     return [...filtered].sort((a, b) => {
       if (sort === "newest") return b.created - a.created;
       if (sort === "low") return a.price - b.price;
       if (sort === "high") return b.price - a.price;
       if (sort === "selling") return b.sold - a.sold;
-      return products.indexOf(a) - products.indexOf(b);
+      return catalogProducts.indexOf(a) - catalogProducts.indexOf(b);
     });
-  }, [selectedCategory, sort]);
+  }, [catalogProducts, selectedCategory, sort]);
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = categories.find((category) => category.id === selectedCategory)?.label;
@@ -115,9 +113,16 @@ export default function ProductsPage() {
     });
   };
 
-  const addToCart = (productId: string, source?: HTMLElement) => {
-    const product = products.find((item) => item.id === productId);
-    setCart((current) => ({ ...current, [productId]: (current[productId] || 0) + 1 }));
+  const addToCart = (productId: string) => {
+    if (addedProduct === productId) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
+
+    const product = catalogProducts.find((item) => item.id === productId);
+    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + 1 };
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    setCart(nextCart);
     if (product) {
       try {
         const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -127,9 +132,7 @@ export default function ProductsPage() {
       }
     }
     window.dispatchEvent(new Event("tribull-cart-updated"));
-    if (product && source) animateAddToCart(source, product.image);
     setAddedProduct(productId);
-    window.setTimeout(() => setAddedProduct((current) => current === productId ? null : current), 1200);
   };
 
   return (
@@ -187,22 +190,24 @@ export default function ProductsPage() {
           {visibleProducts.map((product) => {
             const isWishlisted = wishlist.includes(product.id);
             const isAdded = addedProduct === product.id;
+            const hoverImage = getShowcaseProductHoverImage(product.image);
             return (
               <article
                 className="catalog-product-card"
                 key={product.id}
                 role="link"
                 tabIndex={0}
-                onClick={() => setLocation(`/product/${product.category}-${products.findIndex((item) => item.id === product.id)}`)}
+                onClick={() => setLocation(`/product/${product.category}-${catalogProducts.findIndex((item) => item.id === product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setLocation(`/product/${product.category}-${products.findIndex((item) => item.id === product.id)}`);
+                    setLocation(`/product/${product.category}-${catalogProducts.findIndex((item) => item.id === product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`);
                   }
                 }}
               >
                 <div className="catalog-product-card__image">
-                  <img src={product.image} alt={product.name} loading="lazy" />
+                  <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -216,9 +221,9 @@ export default function ProductsPage() {
                 <div className="catalog-product-card__body">
                   <div>
                     <h2>{product.name}</h2>
-                    <p>{formatPrice(product.price)}</p>
+                    <ProductPrice sellingPrice={product.price} originalPrice={product.originalPrice} productName={product.name} />
                   </div>
-                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id, event.currentTarget); }} aria-label={isAdded ? `${product.name} added to cart` : `Add ${product.name} to cart`}>
+                  <button type="button" className={`catalog-product-card__cart ${isAdded ? "is-added" : ""}`} onClick={(event) => { event.stopPropagation(); addToCart(product.id); }} aria-label={isAdded ? `Go to cart with ${product.name}` : `Add ${product.name} to cart`}>
                     {isAdded ? <Check size={14} /> : <ShoppingCart size={14} />}
                   </button>
                 </div>

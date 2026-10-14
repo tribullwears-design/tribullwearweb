@@ -3,7 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -13,6 +13,7 @@ import Home from "./pages/Home";
 import AllProductsPage from "./pages/AllProductsPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import CheckoutPage from "./pages/CheckoutPage";
+import SearchResultsPage from "./pages/SearchResultsPage";
 
 
 function Router() {
@@ -49,6 +50,7 @@ function Router() {
       <Route path={"/admin26/settings/general"}>{() => <AdminDashboard initialScreen="general-settings" />}</Route>
       <Route path={"/admin26/settings/admin-users"}>{() => <AdminDashboard initialScreen="admin-users" />}</Route>
       <Route path={"/products"} component={AllProductsPage} />
+      <Route path={"/search"} component={SearchResultsPage} />
       <Route path={"/checkout"} component={CheckoutPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />
@@ -73,6 +75,34 @@ function LegacyCategoryRedirect() {
 
 function App() {
   const [location] = useLocation();
+
+  useLayoutEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!location.startsWith("/product/")) return;
+
+    const root = document.documentElement;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    window.scrollTo(0, 0);
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      root.style.scrollBehavior = previousScrollBehavior;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      root.style.scrollBehavior = previousScrollBehavior;
+    };
+  }, [location]);
 
   return (
     <ErrorBoundary>

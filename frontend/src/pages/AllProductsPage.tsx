@@ -1,27 +1,82 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, Heart, ShoppingCart } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import HeaderActions from "../components/HeaderActions";
+import ProductPrice from "../components/ProductPrice";
+import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { allProducts } from "../lib/allProducts";
+import { resolveOriginalPrice } from "../lib/productPrice";
+import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
 
-type AllProduct = {
-  name: string;
-  price: string;
-  image: string;
-};
-
-const products: AllProduct[] = [
-  { name: "Round Neck Classic", price: "₹599", image: "/products/front-white.png" },
-  { name: "Round Neck Graphic", price: "₹649", image: "/products/back-black.png" },
-  { name: "Daily Oversized Tee", price: "₹799", image: "/products/essential-tshirts.png" },
-  { name: "Heavyweight Essential", price: "₹899", image: "/products/flat-white.png" },
-  { name: "Men's Shirt", price: "₹699", image: "/products/essential-mens-shirt.png" },
-  { name: "Acid Wash Oversized", price: "₹1,049", image: "/products/essential-oversized.png" },
-  { name: "Street Oversized", price: "₹949", image: "/products/batman.jpg" },
-  { name: "Hoodie Essential", price: "₹1,299", image: "/products/essential-hoodies.png" },
-  { name: "Washed Tee", price: "₹999", image: "/products/tomandjerry.jpg" },
-  { name: "Premium Oversized", price: "₹1,099", image: "/products/hanger-white.png" },
-];
+function readStorage<T>(key: string, fallback: T): T {
+  try {
+    const saved = window.localStorage.getItem(key);
+    return saved ? (JSON.parse(saved) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
 
 export default function AllProductsPage() {
+  const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
+  const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
+  const [addedProduct, setAddedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
+    const syncCart = () => setCart(readStorage("tribull-cart", {}));
+    window.addEventListener("tribull-wishlist-updated", syncWishlist);
+    window.addEventListener("tribull-cart-updated", syncCart);
+    window.addEventListener("storage", syncWishlist);
+    window.addEventListener("storage", syncCart);
+    return () => {
+      window.removeEventListener("tribull-wishlist-updated", syncWishlist);
+      window.removeEventListener("tribull-cart-updated", syncCart);
+      window.removeEventListener("storage", syncWishlist);
+      window.removeEventListener("storage", syncCart);
+    };
+  }, []);
+
+  const toggleWishlist = (productId: string, source: HTMLElement) => {
+    const isAdding = !wishlist.includes(productId);
+    const nextWishlist = isAdding ? [...wishlist, productId] : wishlist.filter((id) => id !== productId);
+    if (isAdding) animateAddToWishlist(source);
+    window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
+    setWishlist(nextWishlist);
+    window.dispatchEvent(new Event("tribull-wishlist-updated"));
+  };
+
+  const addToCart = (productId: string) => {
+    if (addedProduct === productId) {
+      window.dispatchEvent(new Event("tribull-open-cart"));
+      return;
+    }
+
+    const product = allProducts.find((item) => item.id === productId);
+    if (!product) return;
+
+    try {
+      const cartItems = readStorage<Record<string, unknown>>("tribull-cart-items", {});
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify({
+        ...cartItems,
+        [productId]: {
+          name: product.name,
+          price: Number(product.price.replace(/[^0-9]/g, "")),
+          originalPrice: resolveOriginalPrice(product),
+          image: product.image,
+        },
+      }));
+    } catch (error) {
+      console.error("Could not save product details to the cart.", error);
+    }
+
+    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + 1 };
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    setCart(nextCart);
+    window.dispatchEvent(new Event("tribull-cart-updated"));
+    setAddedProduct(productId);
+  };
+
   const goBack = () => {
     if (window.history.length > 1) window.history.back();
   };
@@ -48,17 +103,41 @@ export default function AllProductsPage() {
         </div>
 
         <section className="all-products-grid" aria-label="All products grid">
-          {products.map((product) => (
-            <article className="all-products-card" key={product.name}>
-              <div className="all-products-card__image">
-                <img src={product.image} alt={product.name} loading="lazy" />
-              </div>
-              <div className="all-products-card__meta">
-                <h2>{product.name}</h2>
-                <p>{product.price}</p>
-              </div>
-            </article>
-          ))}
+          {allProducts.map((product) => {
+            const hoverImage = getShowcaseProductHoverImage(product.image);
+            const productHref = `/product/${product.id}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.image)}`;
+            return (
+              <article className="all-products-card" key={product.name}>
+                <div className="all-products-card__image">
+                  <Link href={productHref} className="all-products-card__product-link" aria-label={`View ${product.name}`}>
+                    <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                    {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                  </Link>
+                  <button
+                    className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}
+                    type="button"
+                    aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                    aria-pressed={wishlist.includes(product.id)}
+                    onClick={(event) => toggleWishlist(product.id, event.currentTarget)}
+                  >
+                    <Heart size={18} fill={wishlist.includes(product.id) ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    className={`all-products-card__cart ${addedProduct === product.id ? "is-added" : ""}`}
+                    type="button"
+                    aria-label={addedProduct === product.id ? `Go to cart with ${product.name}` : `Add ${product.name} to cart`}
+                    onClick={() => addToCart(product.id)}
+                  >
+                    {addedProduct === product.id ? <Check size={17} /> : <ShoppingCart size={17} />}
+                  </button>
+                </div>
+                <Link href={productHref} className="all-products-card__meta all-products-card__meta-link">
+                  <h2>{product.name}</h2>
+                  <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} />
+                </Link>
+              </article>
+            );
+          })}
         </section>
       </main>
     </div>
