@@ -7,8 +7,7 @@ import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
-import MobileCategoryMenu from "../components/MobileCategoryMenu";
-import HeaderActions from "../components/HeaderActions";
+import StorefrontHeader from "../components/StorefrontHeader";
 
 export type CategoryProduct = {
   id?: string;
@@ -334,28 +333,7 @@ type CatalogTab = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
 type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 
 function GlobalNavigation() {
-  return (
-    <div className="cinema-page-header">
-      <div className="cinema-marketbar" aria-label="Announcement">
-        <div className="cinema-marketbar__track">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <span key={i}>
-              <b>100% COTTON.</b> SHOP NOW
-              <i>✦</i>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <header className="site-header cinema-site-header">
-        <MobileCategoryMenu />
-        <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
-        </a>
-        <HeaderActions />
-      </header>
-    </div>
-  );
+  return <StorefrontHeader />;
 }
 
 function DynamicCategoryNav({ categorySlug }: { categorySlug: string }) {
