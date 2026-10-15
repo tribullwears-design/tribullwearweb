@@ -8,6 +8,7 @@ import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, 
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, findOrderByIdempotencyKey, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
 import { createProduct, getProduct, listProducts, updateProduct } from "./productStore.js";
+import { getDatabase } from "./database.js";
 import { rateLimit } from "express-rate-limit";
 import {
   consumePasswordReset,
@@ -71,10 +72,12 @@ async function startServer() {
     "http://192.168.31.155:3001",
   ]);
   if (process.env.FRONTEND_URL) {
-    try {
-      allowedOrigins.add(new URL(process.env.FRONTEND_URL).origin);
-    } catch {
-      console.error("FRONTEND_URL is invalid; configured-origin CORS is unavailable");
+    for (const frontendUrl of process.env.FRONTEND_URL.split(",")) {
+      try {
+        allowedOrigins.add(new URL(frontendUrl.trim()).origin);
+      } catch {
+        console.error("An entry in FRONTEND_URL is invalid and will not be allowed by CORS");
+      }
     }
   }
   app.use((req, res, next) => {
@@ -91,6 +94,9 @@ async function startServer() {
       return res.sendStatus(allowedOrigins.has(origin) ? 204 : 403);
     }
     next();
+  });
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
   });
 
   const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
@@ -675,6 +681,13 @@ async function startServer() {
     res.sendFile(path.join(staticPath, "index.html"));
   });
 
+  try {
+    await getDatabase();
+    console.log("MongoDB connection established");
+  } catch {
+    throw new Error("MongoDB connection failed; verify MONGODB_URI, Atlas network access, and the database user");
+  }
+
   const port = Number(process.env.PORT || 5001);
 
   server.listen(port, "0.0.0.0", () => {
@@ -682,4 +695,7 @@ async function startServer() {
   });
 }
 
-startServer().catch(console.error);
+startServer().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : "Backend startup failed");
+  process.exitCode = 1;
+});
