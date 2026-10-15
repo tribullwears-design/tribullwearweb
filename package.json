@@ -12,6 +12,7 @@
     "start": "node scripts/start.mjs",
     "preview": "vite preview --host",
     "check": "tsc --noEmit",
+    "migrate:products": "node --import tsx scripts/migrate-products.ts",
     "format": "prettier --write ."
   },
   "dependencies": {

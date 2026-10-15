@@ -7,10 +7,10 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { products as storeProducts, type Product } from "./ProductsPage";
+import type { Product } from "../../../shared/products";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
-import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateSubcategory, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import "./admin-dashboard.css";
 
@@ -28,11 +28,13 @@ type AdminProduct = Omit<Product, "category"> & {
 };
 type StoredProduct = {
   id: string;
+  _id?: string;
   name: string;
   description: string;
   price: number;
   compareAt: number | null;
   image: string;
+  productType?: string;
   stock: number;
   sizes: string[];
   colors: string[];
@@ -112,12 +114,18 @@ function SectionHeading({ title, action, onAction }: { title: string; action?: s
 function EmptyState({ title, message, action, onAction }: { title: string; message: string; action?: string; onAction?: () => void }) { return <div className="admin-empty-state"><div className="admin-empty-state__icon"><Box size={20} /></div><strong>{title}</strong><span>{message}</span>{action && <button type="button" className="admin-primary-button" onClick={onAction}>{action}</button>}</div>; }
 
 function ProductTable({ products, onSelect, onEdit, alignActionsRight = false }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void; onEdit?: (product: AdminProduct) => void; alignActionsRight?: boolean }) {
-  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button>{onEdit && product.databaseProduct && <button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit</button>}</div></td></tr>)}</tbody></table></div>;
+  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id} onClick={() => onSelect?.(product)}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div><button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect?.(product); }}>View</button>{onEdit && <button className="admin-small-button" type="button" onClick={(event) => { event.stopPropagation(); onEdit(product); }}>Edit</button>}</div></td></tr>)}</tbody></table></div>;
 }
 function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) { return orders.length ? <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id} onClick={() => onSelect(order)}><td><strong className="admin-order-id">{order.id}</strong></td><td><strong>{order.customer.name}</strong><br /><span>{order.customer.email}</span></td><td>{new Date(order.createdAt).toLocaleString("en-IN")}</td><td>{order.items.reduce((count, item) => count + item.quantity, 0)}</td><td><strong>₹{order.total.toLocaleString("en-IN")}</strong></td><td>{order.payment.status}</td><td><StatusPill status={order.status} /></td><td><button className="admin-more-button" type="button" onClick={(event) => { event.stopPropagation(); onSelect(order); }}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div> : <EmptyState title="No orders found." message="Orders will appear here when customers place an order." />; }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
 
-type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; image: string; stock: string; sizes: string; colors: string; status: string };
+type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string };
+const productTypeOptions = [
+  { value: "round-neck", label: "Round Neck" },
+  { value: "oversized", label: "Oversized" },
+  { value: "acid-oversized", label: "Acid Oversized" },
+  { value: "hoodie", label: "Hoodie" },
+];
 function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; submitLabel?: string }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
@@ -126,12 +134,13 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
     <label><span>Price</span><input required type="number" min="0" step="any" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
     <label><span>Compare-at price</span><input type="number" min="0" step="any" value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
+    <label><span>Product type</span><select required value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
-    <label><span>Main Category</span><select required disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
-    <label><span>Subcategory / Industry</span><select required disabled={hierarchyLoading || Boolean(hierarchyError) || !subcategories.length} value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}>{subcategories.length ? <><option value="">Select subcategory</option>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</> : <option value="">No subcategories available</option>}</select></label>
+    <label><span>Main Category</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category (optional)</option>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+    <label><span>Subcategory / Industry</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || !subcategories.length} value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">Select subcategory (optional)</option>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
     <label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label>
     {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError}</p>}
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={productSaving || hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0}>{productSaving ? "Saving..." : submitLabel}</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className={savedNotice.includes("saved") ? "admin-form-success" : "admin-image-error"} role="status">{savedNotice}</p>}
@@ -159,6 +168,10 @@ function CategoryImage({ image, onChange, onRemove, inputRef, showControls = tru
   return <div className={`admin-category-image-field ${showControls ? "admin-category-image-field--controls" : ""}`}>{image ? <img className="admin-category-thumb" src={image} alt="" onError={retryWithAvailablePublicImage} /> : <span className="admin-category-thumb admin-category-thumb--empty">No image</span>}{showControls && <><label className="admin-small-button">{image ? "Change" : "Upload"}<input ref={inputRef} className="admin-product-image-input" type="file" accept="image/*" onChange={onChange} /></label>{image && <button type="button" className="admin-small-button" onClick={onRemove}>Remove</button>}</>}</div>;
 }
 
+function CategoryVisibilityButton({ isVisible, label, saving, onClick }: { isVisible: boolean; label: string; saving: boolean; onClick: () => void }) {
+  return <button type="button" className="admin-small-button" disabled={saving} aria-label={`${isVisible ? "Hide" : "Show"} ${label}`} aria-pressed={isVisible} onClick={onClick}>{saving ? "Saving..." : isVisible ? "Visible" : "Hidden"}</button>;
+}
+
 function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
   const [parentCategory, setParentCategory] = useState(hierarchy.main[0]?.value || "");
   const [newMainCategory, setNewMainCategory] = useState("");
@@ -182,6 +195,8 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   const [editingProductTypeImage, setEditingProductTypeImage] = useState("");
   const [newProductTypeImage, setNewProductTypeImage] = useState("");
   const [categoryError, setCategoryError] = useState("");
+  const [savingVisibility, setSavingVisibility] = useState<string | null>(null);
+  const visibilityRequestRef = useRef(false);
   const refreshHierarchy = async () => {
     const next = await loadCategoryHierarchy();
     setHierarchy(next);
@@ -192,6 +207,57 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   const addMainCategory = async () => { setCategoryError(""); const label = newMainCategory.trim(); if (!label) { setCategoryError("Category name is required."); return; } if (hierarchy.main.some((item) => item.label.toLowerCase() === label.toLowerCase())) return; const value = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""); if (!value || hierarchy.main.some((item) => item.value === value)) return; try { await createCategory({ value, label, image: newMainImage }); await refreshHierarchy(); setNewMainCategory(""); setNewMainImage(""); if (newMainImageInputRef.current) newMainImageInputRef.current.value = ""; setParentCategory(value); } catch { setCategoryError("Could not add category. Please try again."); } };
   const deleteMainCategory = async (value: string) => { setCategoryError(""); try { await deleteCategory(value); const next = await refreshHierarchy(); if (parentCategory === value) setParentCategory(next.main[0]?.value || ""); } catch { setCategoryError("Could not delete category. Please try again."); } };
   const saveMainEdit = async () => { setCategoryError(""); if (!editingMain) return; const label = editingMainName.trim(); if (!label || hierarchy.main.some((item) => item.value !== editingMain && item.label.toLowerCase() === label.toLowerCase())) return; try { await updateCategory(editingMain, { label, image: editingMainImage }); await refreshHierarchy(); setEditingMain(null); } catch { setCategoryError("Could not update category. Please try again."); } };
+  const toggleMainVisibility = async (category: CategoryHierarchy["main"][number]) => {
+    if (visibilityRequestRef.current) return;
+    visibilityRequestRef.current = true;
+    setSavingVisibility(`main:${category.value}`);
+    setCategoryError("");
+    try {
+      const isVisible = category.isVisible === false;
+      await updateCategoryVisibility(category.value, isVisible);
+      const next = {
+        ...hierarchy,
+        main: hierarchy.main.map((item) => item.value === category.value ? { ...item, isVisible } : item),
+      };
+      setHierarchy(next);
+      publishCategoryHierarchy(next);
+      toast.success(`${category.label} visibility updated.`);
+    } catch (error) {
+      toast.error("Could not update category visibility. Please try again.", {
+        description: error instanceof Error ? error.message : "Unknown category update error",
+      });
+    } finally {
+      visibilityRequestRef.current = false;
+      setSavingVisibility(null);
+    }
+  };
+  const toggleSubcategoryVisibility = async (parent: string, subcategory: CategoryHierarchy["main"][number]) => {
+    if (visibilityRequestRef.current) return;
+    visibilityRequestRef.current = true;
+    setSavingVisibility(`subcategory:${parent}:${subcategory.value}`);
+    setCategoryError("");
+    try {
+      const isVisible = subcategory.isVisible === false;
+      await updateSubcategoryVisibility(parent, subcategory.value, isVisible);
+      const next = {
+        ...hierarchy,
+        subcategories: {
+          ...hierarchy.subcategories,
+          [parent]: (hierarchy.subcategories[parent] || []).map((item) => item.value === subcategory.value ? { ...item, isVisible } : item),
+        },
+      };
+      setHierarchy(next);
+      publishCategoryHierarchy(next);
+      toast.success(`${subcategory.label} visibility updated.`);
+    } catch (error) {
+      toast.error("Could not update subcategory visibility. Please try again.", {
+        description: error instanceof Error ? error.message : "Unknown subcategory update error",
+      });
+    } finally {
+      visibilityRequestRef.current = false;
+      setSavingVisibility(null);
+    }
+  };
   const addSubcategory = async (event: React.MouseEvent<HTMLButtonElement>) => {
     if (addingSubcategoryRef.current) return;
     setCategoryError("");
@@ -236,8 +302,75 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
   return <>
     {categoryError && <p className="admin-image-error">{categoryError}</p>}
     {mainCategoryForm}
-    <section className="admin-category-management"><SectionHeading title="Main Categories" /><div className="admin-category-list">{hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : hierarchy.main.map((category) => <div className="admin-management-row" key={category.value}><CategoryImage image={editingMain === category.value ? editingMainImage : category.image} onChange={(event) => readImage(event, editingMain === category.value ? setEditingMainImage : (image) => saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image } : item) }))} onRemove={() => editingMain === category.value ? setEditingMainImage("") : saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image: "" } : item) })} />{editingMain === category.value ? <input className="admin-subcategory-edit-input" value={editingMainName} onChange={(event) => setEditingMainName(event.target.value)} /> : <strong>{category.label}</strong>}{editingMain === category.value ? <><button type="button" className="admin-small-button" onClick={saveMainEdit}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingMain(null)}>Cancel</button></> : <><button type="button" className="admin-small-button" onClick={() => { setEditingMain(category.value); setEditingMainName(category.label); setEditingMainImage(category.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => deleteMainCategory(category.value)}>Delete</button></>}</div>)}</div></section>
-    <section className="admin-category-management"><SectionHeading title="Subcategories / Industries" /><div className="admin-inline-form admin-category-form"><select value={parentCategory} onChange={(event) => setParentCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input value={newSubcategory} placeholder="New subcategory name" onChange={(event) => setNewSubcategory(event.target.value)} /><CategoryImage image={newSubcategoryImage} inputRef={newSubcategoryImageInputRef} onChange={(event) => readImage(event, setNewSubcategoryImage)} onRemove={() => { setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; }} /><button className="admin-primary-button" type="button" onClick={addSubcategory}><Plus size={15} />Add subcategory</button></div><div className="admin-subcategory-list">{hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : (hierarchy.subcategories[parentCategory] || []).length === 0 ? <span className="admin-empty-state">No subcategories found.</span> : (hierarchy.subcategories[parentCategory] || []).map((subcategory) => { const parent = hierarchy.main.find((category) => category.value === parentCategory); const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value; return <div className={`admin-subcategory-row ${isEditing ? "admin-subcategory-row--editing" : ""}`} key={`${parentCategory}-${subcategory.value}`}>{isEditing ? <><CategoryImage image={editingSubcategoryImage} onChange={(event) => readImage(event, setEditingSubcategoryImage)} onRemove={() => setEditingSubcategoryImage("")} showControls={false} /><select className="admin-category-edit-select" value={editingSubcategoryParent} onChange={(event) => setEditingSubcategoryParent(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select><input className="admin-subcategory-edit-input" value={editingSubcategoryName} onChange={(event) => setEditingSubcategoryName(event.target.value)} /><label className="admin-small-button admin-subcategory-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingSubcategoryImage)} /></label><button type="button" className="admin-small-button" onClick={saveSubcategoryEdit}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingSubcategory(null)}>Cancel</button></> : <><strong>{parent?.label}</strong><CategoryImage image={subcategory.image} onChange={(event) => readImage(event, (image) => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image } : item) } }))} onRemove={() => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image: "" } : item) } })} /><span>{subcategory.label}</span><button type="button" className="admin-small-button" onClick={() => { setEditingSubcategory({ parent: parentCategory, value: subcategory.value }); setEditingSubcategoryParent(parentCategory); setEditingSubcategoryName(subcategory.label); setEditingSubcategoryImage(subcategory.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => deleteSubcategory(parentCategory, subcategory.value)}>Delete</button></>}</div>})}</div></section>
+    <section className="admin-category-management">
+      <SectionHeading title="Main Categories" />
+      <div className="admin-category-list">
+        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : hierarchy.main.map((category) => (
+          <div className="admin-management-row" key={category.value}>
+            <CategoryImage
+              image={editingMain === category.value ? editingMainImage : category.image}
+              onChange={(event) => readImage(event, editingMain === category.value ? setEditingMainImage : (image) => saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image } : item) }))}
+              onRemove={() => editingMain === category.value ? setEditingMainImage("") : saveHierarchy({ ...hierarchy, main: hierarchy.main.map((item) => item.value === category.value ? { ...item, image: "" } : item) })}
+            />
+            {editingMain === category.value ? <input className="admin-subcategory-edit-input" value={editingMainName} onChange={(event) => setEditingMainName(event.target.value)} /> : <strong>{category.label}</strong>}
+            {editingMain === category.value ? <>
+              <button type="button" className="admin-small-button" onClick={saveMainEdit}>Save</button>
+              <button type="button" className="admin-small-button" onClick={() => setEditingMain(null)}>Cancel</button>
+            </> : <>
+              <CategoryVisibilityButton
+                isVisible={category.isVisible !== false}
+                label={category.label}
+                saving={savingVisibility === `main:${category.value}`}
+                onClick={() => void toggleMainVisibility(category)}
+              />
+              <button type="button" className="admin-small-button" onClick={() => { setEditingMain(category.value); setEditingMainName(category.label); setEditingMainImage(category.image || ""); }}>Edit</button>
+              <button type="button" className="admin-small-button" onClick={() => deleteMainCategory(category.value)}>Delete</button>
+            </>}
+          </div>
+        ))}
+      </div>
+    </section>
+    <section className="admin-category-management">
+      <SectionHeading title="Subcategories / Industries" />
+      <div className="admin-inline-form admin-category-form">
+        <select value={parentCategory} onChange={(event) => setParentCategory(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select>
+        <input value={newSubcategory} placeholder="New subcategory name" onChange={(event) => setNewSubcategory(event.target.value)} />
+        <CategoryImage image={newSubcategoryImage} inputRef={newSubcategoryImageInputRef} onChange={(event) => readImage(event, setNewSubcategoryImage)} onRemove={() => { setNewSubcategoryImage(""); if (newSubcategoryImageInputRef.current) newSubcategoryImageInputRef.current.value = ""; }} />
+        <button className="admin-primary-button" type="button" onClick={addSubcategory}><Plus size={15} />Add subcategory</button>
+      </div>
+      <div className="admin-subcategory-list">
+        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : (hierarchy.subcategories[parentCategory] || []).length === 0 ? <span className="admin-empty-state">No subcategories found.</span> : (hierarchy.subcategories[parentCategory] || []).map((subcategory) => {
+          const parent = hierarchy.main.find((category) => category.value === parentCategory);
+          const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value;
+          return <div className={`admin-subcategory-row ${isEditing ? "admin-subcategory-row--editing" : ""}`} key={`${parentCategory}-${subcategory.value}`}>
+            {isEditing ? <>
+              <CategoryImage image={editingSubcategoryImage} onChange={(event) => readImage(event, setEditingSubcategoryImage)} onRemove={() => setEditingSubcategoryImage("")} showControls={false} />
+              <select className="admin-category-edit-select" value={editingSubcategoryParent} onChange={(event) => setEditingSubcategoryParent(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select>
+              <input className="admin-subcategory-edit-input" value={editingSubcategoryName} onChange={(event) => setEditingSubcategoryName(event.target.value)} />
+              <label className="admin-small-button admin-subcategory-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingSubcategoryImage)} /></label>
+              <button type="button" className="admin-small-button" onClick={saveSubcategoryEdit}>Save</button>
+              <button type="button" className="admin-small-button" onClick={() => setEditingSubcategory(null)}>Cancel</button>
+            </> : <>
+              <strong>{parent?.label}</strong>
+              <CategoryImage
+                image={subcategory.image}
+                onChange={(event) => readImage(event, (image) => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image } : item) } }))}
+                onRemove={() => saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [parentCategory]: (hierarchy.subcategories[parentCategory] || []).map((item) => item.value === subcategory.value ? { ...item, image: "" } : item) } })}
+              />
+              <span>{subcategory.label}</span>
+              <CategoryVisibilityButton
+                isVisible={subcategory.isVisible !== false}
+                label={subcategory.label}
+                saving={savingVisibility === `subcategory:${parentCategory}:${subcategory.value}`}
+                onClick={() => void toggleSubcategoryVisibility(parentCategory, subcategory)}
+              />
+              <button type="button" className="admin-small-button" onClick={() => { setEditingSubcategory({ parent: parentCategory, value: subcategory.value }); setEditingSubcategoryParent(parentCategory); setEditingSubcategoryName(subcategory.label); setEditingSubcategoryImage(subcategory.image || ""); }}>Edit</button>
+              <button type="button" className="admin-small-button" onClick={() => deleteSubcategory(parentCategory, subcategory.value)}>Delete</button>
+            </>}
+          </div>;
+        })}
+      </div>
+    </section>
     <section className="admin-category-management"><SectionHeading title="Product Type Categories" /><div className="admin-inline-form"><input value={newCategory} placeholder="New product type" onChange={(event) => setNewCategory(event.target.value)} /><CategoryImage image={newProductTypeImage} onChange={(event) => readImage(event, setNewProductTypeImage)} onRemove={() => setNewProductTypeImage("")} /><button className="admin-primary-button" type="button" onClick={() => { addCategory(newProductTypeImage); setNewProductTypeImage(""); }}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{productCategories.map((category) => { const isEditing = editingProductType === category.label; return <div className={`admin-management-row admin-product-type-row ${isEditing ? "admin-product-type-row--editing" : ""}`} key={category.label}>{isEditing ? <><CategoryImage image={editingProductTypeImage} onChange={(event) => readImage(event, setEditingProductTypeImage)} onRemove={() => setEditingProductTypeImage("")} showControls={false} /><input className="admin-subcategory-edit-input" value={category.label} readOnly /><label className="admin-small-button admin-product-type-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingProductTypeImage)} /></label><button type="button" className="admin-small-button" onClick={() => { saveProductTypeImage(category.label, editingProductTypeImage); setEditingProductType(null); }}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingProductType(null)}>Cancel</button></> : <><CategoryImage image={category.image} onChange={(event) => readImage(event, (image) => saveProductTypeImage(category.label, image))} onRemove={() => saveProductTypeImage(category.label, "")} /><strong>{category.label}</strong><div className="admin-product-type-actions"><button type="button" className="admin-small-button" onClick={() => { setEditingProductType(category.label); setEditingProductTypeImage(category.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => setProductCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div></>}</div>; })}</div></section>
   </>;
 }
@@ -393,7 +526,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [isProductEditorOpen, setIsProductEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<StoredProduct | null>(null);
   const [editingProductTarget, setEditingProductTarget] = useState<AdminProduct | null>(null);
-  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", image: "", stock: "", sizes: "", colors: "", status: "Active" });
+  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft" });
   const [editingProductCategory, setEditingProductCategory] = useState("");
   const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
   const [productUpdateError, setProductUpdateError] = useState("");
@@ -412,7 +545,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [categoryHierarchyError, setCategoryHierarchyError] = useState("");
   const [featured, setFeatured] = useState<string[]>(() => readStorage("tribull-admin-featured", []));
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
+  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
   const [editProductLoading, setEditProductLoading] = useState(initialScreen === "edit-product");
   const [editProductError, setEditProductError] = useState("");
   const editProductRequest = useRef<AbortController | null>(null);
@@ -443,6 +576,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           stock: String(product.stock),
           sizes: product.sizes.join(", "),
           colors: product.colors.join(", "),
+          productType: product.productType || "",
           status: product.status,
         });
       })
@@ -514,12 +648,10 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [permissionDraft, setPermissionDraft] = useState<AdminPermissions>(rolePermissions("Admin"));
   const [socialLinks, setSocialLinks] = useState(() => readStorage("tribull-social-links", { facebook: "", instagram: "", youtube: "", x: "", reddit: "" }));
   const [socialNotice, setSocialNotice] = useState("");
-  const adminProducts = useMemo<AdminProduct[]>(() => [
-    ...storeProducts.map((product, index) => ({ ...product, stock: [42, 18, 7, 0][index % 4], status: "Active" as const, sku: `TRB-${String(index + 1).padStart(3, "0")}` })),
-    ...databaseProducts.map((product) => ({
+  const adminProducts = useMemo<AdminProduct[]>(() => databaseProducts.map((product) => ({
       id: product.id,
       name: product.name,
-      category: `${product.mainCategory} / ${product.subcategory}`,
+      category: product.productType || `${product.mainCategory} / ${product.subcategory}`,
       price: product.price,
       image: product.image,
       created: Date.parse(product.createdAt) || Date.now(),
@@ -532,25 +664,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       subcategoryId: product.subcategoryId,
       mainCategory: product.mainCategory,
       subcategory: product.subcategory,
-    })),
-  ], [databaseProducts]);
-  const databaseAdminProducts = useMemo<AdminProduct[]>(() => databaseProducts.map((product) => ({
-    id: product.id,
-    name: product.name,
-    category: `${product.mainCategory} / ${product.subcategory}`,
-    price: product.price,
-    image: product.image,
-    created: Date.parse(product.createdAt) || 0,
-    sold: 0,
-    stock: product.stock,
-    status: product.status,
-    sku: product.id.slice(0, 8).toUpperCase(),
-    databaseProduct: true,
-    mainCategoryId: product.mainCategoryId,
-    subcategoryId: product.subcategoryId,
-    mainCategory: product.mainCategory,
-    subcategory: product.subcategory,
-  })), [databaseProducts]);
+    })), [databaseProducts]);
   const customers = [{ name: "Aarav Mehta", email: "aarav.m@example.com", phone: "Not available", orders: 8, spent: "₹7,192", status: "Returning" }, { name: "Nisha Kapoor", email: "nisha.k@example.com", phone: "Not available", orders: 3, spent: "₹2,697", status: "Returning" }, { name: "Rohan Shah", email: "rohan.s@example.com", phone: "Not available", orders: 1, spent: "₹899", status: "New" }];
   const activeNav = navigation.flatMap((section) => section.items).find((item) => item.screen === screen) || (screen === "edit-product" ? navigation.flatMap((section) => section.items).find((item) => item.screen === "products") : undefined);
   const filteredOrders = screen.startsWith("orders-") ? orders.filter((order) => order.status.toLowerCase() === screen.replace("orders-", "")) : orders;
@@ -586,6 +700,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           price,
           compareAt: productForm.compareAt ? Number(productForm.compareAt) : null,
           image: productForm.image,
+          productType: productForm.productType,
           stock: productForm.stock ? Number(productForm.stock) : 0,
           sizes: productForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
           colors: productForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
@@ -607,12 +722,14 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       } else {
         await refreshProducts();
         setSavedNotice("Product saved successfully.");
-        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }));
+        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }));
+        toast.success("Product added successfully!");
         window.setTimeout(() => setSavedNotice(""), 2500);
       }
       setImageError("");
     } catch (error) {
       setSavedNotice(error instanceof Error ? error.message : "Unable to save product. Please try again.");
+      toast.error("Failed to save product. Please try again.");
     } finally {
       setProductSaving(false);
     }
@@ -624,6 +741,14 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setProductUpdateError("");
   };
   const editProduct = async (product: AdminProduct) => {
+    const storedProduct = product.databaseProduct
+      ? databaseProducts.find((item) => (item.id || item._id) === product.id)
+      : undefined;
+    const productId = storedProduct?.id || storedProduct?._id;
+    if (!storedProduct || !productId) {
+      toast.error("This catalog product is not saved in the database and cannot be edited.");
+      return;
+    }
     editProductRequest.current?.abort();
     const request = new AbortController();
     editProductRequest.current = request;
@@ -633,12 +758,6 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setEditingProduct(null);
     setEditProductLoading(true);
     setEditProductError("");
-    const productId = product.id;
-    if (!product.databaseProduct || !productId.trim()) {
-      setEditProductError("Unable to load product details. Please try again.");
-      setEditProductLoading(false);
-      return;
-    }
     const url = `/api/products/${encodeURIComponent(productId)}`;
     try {
       let response: Response;
@@ -703,6 +822,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         compareAt: savedProduct.compareAt === null ? "" : String(savedProduct.compareAt),
         category: savedProduct.mainCategoryId,
         subcategory: savedProduct.subcategoryId,
+        productType: savedProduct.productType || "",
         image: savedProduct.image,
         stock: String(savedProduct.stock),
         sizes: savedProduct.sizes.join(", "),
@@ -727,6 +847,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       || editingProductForm.compareAt !== (editingProduct.compareAt === null ? "" : String(editingProduct.compareAt))
       || editingProductForm.category !== editingProduct.mainCategoryId
       || editingProductForm.subcategory !== editingProduct.subcategoryId
+      || editingProductForm.productType !== (editingProduct.productType || "")
       || editingProductForm.image !== editingProduct.image
       || editingProductForm.stock !== String(editingProduct.stock)
       || editingProductForm.sizes !== editingProduct.sizes.join(", ")
@@ -765,6 +886,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       return;
     }
     setProductSaving(true);
+    productUpdateInFlight.current = true;
     setEditProductError("");
     try {
       const response = await apiFetch(`/api/products/${encodeURIComponent(editingProduct.id)}`, {
@@ -776,6 +898,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           price,
           compareAt,
           image: editingProductForm.image,
+          productType: editingProductForm.productType,
           stock,
           sizes: editingProductForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
           colors: editingProductForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
@@ -795,6 +918,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       }
       const updatedProduct = responseBody as StoredProduct;
       setDatabaseProducts((current) => current.map((item) => item.id === updatedProduct.id ? updatedProduct : item));
+      await refreshProducts();
       window.dispatchEvent(new Event("tribull-products-updated"));
       toast.success("Product updated successfully!");
       closeProductEditor(true);

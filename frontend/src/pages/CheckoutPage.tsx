@@ -1,15 +1,15 @@
-import { ArrowLeft, CheckCircle2, Download, ShieldCheck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, CheckCircle2, Download, Minus, Plus, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
-import { products, type Product } from "./ProductsPage";
-import StorefrontHeader from "../components/StorefrontHeader";
+import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 
 type CartEntry = {
   id: string;
+  productId: string;
   name: string;
   price: number;
   originalPrice?: number;
@@ -17,10 +17,12 @@ type CartEntry = {
   quantity: number;
   variant?: string;
   lineTotal: number;
+  available: boolean;
 };
 
 type CartState = Record<string, number>;
-type CartItemMeta = Partial<Product> & { variant?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
+type CartItemMeta = Partial<Product> & { productId?: string; variant?: string; size?: string; color?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
+type CheckoutSelection = { productId: string; quantity: number; metadata: CartItemMeta };
 
 type CheckoutForm = {
   fullName: string;
@@ -37,6 +39,7 @@ type CheckoutForm = {
 type OrderSummary = {
   entries: CartEntry[];
   subtotal: number;
+  discount: number;
   shipping: number;
   total: number;
 };
@@ -49,6 +52,18 @@ function readStorage<T>(key: string, fallback: T): T {
     return saved ? (JSON.parse(saved) as T) : fallback;
   } catch {
     return fallback;
+  }
+}
+
+function readCheckoutSelection(): CheckoutSelection | null {
+  try {
+    const saved = window.sessionStorage.getItem("tribull-checkout-selection");
+    if (!saved) return null;
+    const selection = JSON.parse(saved) as CheckoutSelection;
+    if (typeof selection.productId !== "string" || !Number.isInteger(selection.quantity) || selection.quantity < 1) return null;
+    return selection;
+  } catch {
+    return null;
   }
 }
 
@@ -195,16 +210,85 @@ export default function CheckoutPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
   const [placedOrderSummary, setPlacedOrderSummary] = useState<OrderSummary | null>(null);
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [catalogLoadError, setCatalogLoadError] = useState("");
+  const [isDirectCheckout, setIsDirectCheckout] = useState(() => Boolean(readCheckoutSelection()));
+  const [cart, setCart] = useState<CartState>(() => {
+    const selection = readCheckoutSelection();
+    return selection ? { [selection.productId]: selection.quantity } : readStorage("tribull-cart", {});
+  });
+  const [cartItems, setCartItems] = useState<Record<string, CartItemMeta>>(() => {
+    const selection = readCheckoutSelection();
+    return selection ? { [selection.productId]: selection.metadata } : readStorage("tribull-cart-items", {});
+  });
+  const [reviewMode, setReviewMode] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const idempotencyKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    const syncCart = () => {
+      if (isDirectCheckout) return;
+      setCart(readStorage("tribull-cart", {}));
+      setCartItems(readStorage("tribull-cart-items", {}));
+    };
+    window.addEventListener("tribull-cart-updated", syncCart);
+    window.addEventListener("storage", syncCart);
+    return () => {
+      window.removeEventListener("tribull-cart-updated", syncCart);
+      window.removeEventListener("storage", syncCart);
+    };
+  }, [isDirectCheckout]);
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch("/api/auth/me")
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return await response.json() as { user?: { name?: string; username?: string; email?: string; mobile?: string } };
+      })
+      .then((result) => {
+        if (!active || !result?.user) return;
+        const user = result.user;
+        setForm((current) => ({
+          ...current,
+          fullName: current.fullName || user.name || user.username || "",
+          email: current.email || user.email || "",
+          phone: current.phone || user.mobile || "",
+        }));
+      })
+      .catch((error: unknown) => console.error("Could not load the saved checkout profile.", error));
+    const addresses = readStorage<Array<{ fullName?: string; phone?: string; address?: string; apartment?: string; city?: string; state?: string; pinCode?: string }>>("tribull-addresses", []);
+    const savedAddress = addresses.find((address) => address.fullName && address.phone && address.address && address.city && address.state && address.pinCode);
+    if (savedAddress) {
+      setForm((current) => ({
+        ...current,
+        fullName: current.fullName || savedAddress.fullName || "",
+        phone: current.phone || savedAddress.phone || "",
+        address: current.address || savedAddress.address || "",
+        apartment: current.apartment || savedAddress.apartment || "",
+        city: current.city || savedAddress.city || "",
+        state: current.state || savedAddress.state || "",
+        pinCode: current.pinCode || savedAddress.pinCode || "",
+      }));
+    }
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
     const syncProducts = (refresh = false) => {
       const request = refresh ? refreshProducts() : fetchProducts();
       void request.then((nextProducts) => {
-        if (active) setCatalogProducts(nextProducts);
+        if (active) {
+          setCatalogProducts(nextProducts);
+          setCatalogLoaded(true);
+          setCatalogLoadError("");
+        }
       }).catch((error: unknown) => {
         console.error("Failed to load checkout product prices.", error);
+        if (active) setCatalogLoadError("We could not load current product prices. Please refresh and try again.");
       });
     };
     syncProducts();
@@ -217,41 +301,69 @@ export default function CheckoutPage() {
   }, []);
 
   const cartDetails = useMemo(() => {
-    const cart = readStorage<CartState>("tribull-cart", {});
-    const cartItems = readStorage<Record<string, CartItemMeta>>("tribull-cart-items", {});
-
     const entries: CartEntry[] = [];
 
     for (const [id, quantity] of Object.entries(cart)) {
       if (quantity <= 0) continue;
 
-      const product = catalogProducts.find((item) => item.id === id)
-        ?? catalogProducts.find((item) => item.name.trim().toLowerCase() === cartItems[id]?.name?.trim().toLowerCase());
-      const item = cartItems[id] || product;
-      if (!item) continue;
+      const metadata = cartItems[id];
+      const productId = metadata?.productId || id;
+      const product = catalogProducts.find((item) => item.id === productId);
+      const item = metadata || product || {};
 
-      const price = Number(product?.price ?? item.price ?? 0);
-      const image = item.image ?? product?.image ?? "/products/logo.png";
+      const price = Number(product?.price ?? 0);
+      const image = product?.image ?? item.image ?? "/products/logo.png";
       const lineTotal = price * quantity;
 
       entries.push({
         id,
-        name: item.name ?? product?.name ?? "Tribull Product",
+        productId,
+        name: product?.name ?? item.name ?? "Unavailable product",
         price,
-        originalPrice: product?.originalPrice ?? resolveOriginalPrice(item),
+        originalPrice: product?.originalPrice ?? (product ? resolveOriginalPrice(item) : undefined),
         image,
         quantity,
         variant: item.variant,
         lineTotal,
+        available: Boolean(product),
       });
     }
 
     const subtotal = entries.reduce((total, entry) => total + entry.lineTotal, 0);
-    const shipping = subtotal > 0 ? 0 : 0;
+    const shipping = 0;
+    const discount = 0;
     const total = subtotal + shipping;
 
-    return { entries, subtotal, shipping, total };
-  }, [catalogProducts, orderPlaced]);
+    return { entries, subtotal, discount, shipping, total };
+  }, [catalogProducts, cart, cartItems, orderPlaced]);
+
+  const updateCartQuantity = (id: string, quantity: number) => {
+    const nextCart = { ...cart };
+    const nextCartItems = { ...cartItems };
+    if (quantity <= 0) {
+      delete nextCart[id];
+      delete nextCartItems[id];
+    } else {
+      nextCart[id] = quantity;
+    }
+    setCart(nextCart);
+    setCartItems(nextCartItems);
+    if (isDirectCheckout) {
+      const productId = Object.keys(nextCart)[0];
+      const metadata = productId ? nextCartItems[productId] : null;
+      if (metadata) window.sessionStorage.setItem("tribull-checkout-selection", JSON.stringify({ productId, quantity: nextCart[productId], metadata }));
+      else {
+        window.sessionStorage.removeItem("tribull-checkout-selection");
+        setIsDirectCheckout(false);
+      }
+    } else {
+      window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify(nextCartItems));
+    }
+    window.dispatchEvent(new Event("tribull-cart-updated"));
+    setCheckoutError("");
+    idempotencyKey.current = null;
+  };
 
   const handleFieldChange = (field: keyof CheckoutForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -260,61 +372,134 @@ export default function CheckoutPage() {
 
   const validateForm = () => {
     const nextErrors: Partial<Record<keyof CheckoutForm | "paymentMethod", string>> = {};
-    if (!form.fullName.trim()) nextErrors.fullName = "Full name is required.";
+    if (form.fullName.trim().length < 2 || form.fullName.trim().length > 80) nextErrors.fullName = "Enter your full name (2–80 characters).";
     if (!form.email.trim()) nextErrors.email = "Email address is required.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) nextErrors.email = "Enter a valid email address.";
     if (!form.phone.trim()) nextErrors.phone = "Phone number is required.";
-    else if (form.phone.replace(/\D/g, "").length < 10) nextErrors.phone = "Enter a valid 10-digit phone number.";
-    if (!form.address.trim()) nextErrors.address = "Street address is required.";
+    else if (!/^\+?\d{10,15}$/.test(form.phone.trim().replace(/[()\s-]/g, ""))) nextErrors.phone = "Enter a valid mobile number.";
+    if (form.address.trim().length < 5) nextErrors.address = "Enter a complete street address.";
     if (!form.city.trim()) nextErrors.city = "City is required.";
     if (!form.state.trim()) nextErrors.state = "State is required.";
-    if (!form.pinCode.trim()) nextErrors.pinCode = "PIN code is required.";
-    if (!form.country.trim()) nextErrors.country = "Country is required.";
+    if (!/^\d{6}$/.test(form.pinCode.trim())) nextErrors.pinCode = "Enter a valid 6-digit Indian PIN code.";
     if (!paymentMethod) nextErrors.paymentMethod = "Please select a payment method.";
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handlePlaceOrder = async () => {
+  const handleReviewOrder = () => {
     if (!validateForm()) return;
     if (cartDetails.entries.length === 0) return;
+    setCheckoutError("");
+    setReviewMode(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
-    const generatedOrderNumber = `TW-${Math.floor(100000 + Math.random() * 900000)}`;
-    const summary: OrderSummary = {
-      entries: cartDetails.entries,
-      subtotal: cartDetails.subtotal,
-      shipping: cartDetails.shipping,
-      total: cartDetails.total,
-    };
-
-    const response = await apiFetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: generatedOrderNumber,
-        customer: { name: form.fullName, email: form.email, phone: form.phone },
-        shippingAddress: { address: form.address, apartment: form.apartment, city: form.city, state: form.state, pinCode: form.pinCode, country: form.country },
-        items: summary.entries,
-        subtotal: summary.subtotal,
-        shipping: summary.shipping,
-        discount: 0,
-        total: summary.total,
-        payment: { method: paymentMethod, status: paymentMethod === "cod" ? "Pending" : "Paid" },
-      }),
-    });
-    if (!response.ok) {
-      setErrors((current) => ({ ...current, paymentMethod: "Unable to place order. Please try again." }));
-      return;
+  const handlePlaceOrder = async () => {
+    if (isSubmitting || orderPlaced || !reviewMode) return;
+    setIsSubmitting(true);
+    setCheckoutError("");
+    try {
+      const key = idempotencyKey.current || (window.crypto?.randomUUID
+        ? window.crypto.randomUUID()
+        : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      idempotencyKey.current = key;
+      const response = await apiFetch("/api/checkout/test-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotencyKey: key,
+          customer: { name: form.fullName, email: form.email, phone: form.phone },
+          shippingAddress: {
+            address: form.address,
+            apartment: form.apartment,
+            city: form.city,
+            state: form.state,
+            pinCode: form.pinCode,
+            country: "India",
+          },
+          paymentMethod,
+          items: cartDetails.entries.map((entry) => {
+            const metadata = cartItems[entry.id];
+            const size = metadata?.size || metadata?.variant?.match(/Size:\s*([^/]+)/i)?.[1]?.trim();
+            const color = metadata?.color || metadata?.variant?.match(/Colour:\s*([^/]+)/i)?.[1]?.trim();
+            return {
+              id: entry.productId,
+              quantity: entry.quantity,
+              variant: {
+                ...(size ? { size } : {}),
+                ...(color ? { color } : {}),
+              },
+            };
+          }),
+        }),
+      });
+      const result = await response.json() as {
+        error?: string;
+        id?: string;
+        items?: Array<{ id: string; name: string; price: number; originalPrice?: number; image: string; quantity: number; variant?: string; lineTotal: number }>;
+        subtotal?: number;
+        discount?: number;
+        shipping?: number;
+        total?: number;
+        payment?: { method: string; status: string };
+        paymentMode?: string;
+        status?: string;
+        shippingAddress?: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string };
+      };
+      if (!response.ok) throw new Error(result.error || "Unable to place the test order. Please try again.");
+      if (!result.id || !result.items || typeof result.total !== "number"
+        || result.paymentMode !== "test" || result.status !== "Pending" || result.payment?.status !== "Simulated") {
+        throw new Error("The checkout server returned an incomplete order confirmation.");
+      }
+      const summary: OrderSummary = {
+        entries: result.items.map((item) => ({
+          id: item.id,
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          originalPrice: item.originalPrice,
+          image: item.image,
+          quantity: item.quantity,
+          variant: item.variant,
+          lineTotal: item.lineTotal,
+          available: true,
+        })),
+        subtotal: result.subtotal || 0,
+        discount: result.discount || 0,
+        shipping: result.shipping || 0,
+        total: result.total,
+      };
+      if (result.shippingAddress) {
+        const savedAddress = result.shippingAddress;
+        setForm((current) => ({
+          ...current,
+          address: savedAddress.address,
+          apartment: savedAddress.apartment,
+          city: savedAddress.city,
+          state: savedAddress.state,
+          pinCode: savedAddress.pinCode,
+          country: savedAddress.country,
+        }));
+      }
+      setPlacedOrderSummary(summary);
+      setOrderNumber(result.id);
+      setOrderPlaced(true);
+      if (!isDirectCheckout) {
+        window.localStorage.setItem("tribull-cart", JSON.stringify({}));
+        window.localStorage.setItem("tribull-cart-items", JSON.stringify({}));
+      }
+      setCart({});
+      setCartItems({});
+      if (isDirectCheckout) window.sessionStorage.removeItem("tribull-checkout-selection");
+      window.dispatchEvent(new Event("tribull-cart-updated"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to place the test order. Please try again.";
+      setCheckoutError(message);
+      console.error("Test checkout could not create an order.", error);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    setPlacedOrderSummary(summary);
-    setOrderNumber(generatedOrderNumber);
-    setOrderPlaced(true);
-
-    window.localStorage.setItem("tribull-cart", JSON.stringify({}));
-    window.localStorage.setItem("tribull-cart-items", JSON.stringify({}));
-    window.dispatchEvent(new Event("tribull-cart-updated"));
   };
 
   const continueShopping = () => setLocation("/");
@@ -391,10 +576,10 @@ export default function CheckoutPage() {
         <main className="checkout-success">
           <div className="checkout-success__panel">
             <div className="checkout-success__icon"><CheckCircle2 size={58} /></div>
-            <p className="checkout-success__eyebrow">Order Placed Successfully</p>
+            <p className="checkout-success__eyebrow">TEST ORDER — NO REAL PAYMENT</p>
             <h2>Thank you for your order!</h2>
             <p className="checkout-success__meta">Order #{orderNumber}</p>
-            <p className="checkout-success__message">Your order has been successfully placed.</p>
+            <p className="checkout-success__message">Test order recorded as pending. No payment was collected and no real payment gateway was used.</p>
 
             <div className="checkout-success__items">
               {visibleOrder.entries.map((item) => (
@@ -409,8 +594,12 @@ export default function CheckoutPage() {
             </div>
 
             <div className="checkout-summary__totals checkout-summary__totals--success">
+              <div><span>Payment method</span><strong>{paymentMethod === "upi" ? "UPI (simulated)" : paymentMethod === "card" ? "Debit / credit card (simulated)" : "Net banking (simulated)"}</strong></div>
               <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
             </div>
+            <p className="checkout-success__message">
+              Delivery to: {form.address}{form.apartment ? `, ${form.apartment}` : ""}, {form.city}, {form.state} {form.pinCode}, India.
+            </p>
 
             <div className="checkout-success__actions">
               <button
@@ -492,6 +681,34 @@ export default function CheckoutPage() {
 
       <main className="checkout-layout">
         <section className="checkout-form-area">
+          <div className="checkout-test-notice" role="note">
+            <strong>TEST CHECKOUT — NO REAL PAYMENT</strong>
+            <span>Payment choices are simulated for development. Do not enter payment credentials; no money will be transferred.</span>
+          </div>
+          {catalogLoadError && <p className="checkout-inline-error" role="alert">{catalogLoadError}</p>}
+          {!catalogLoaded && !catalogLoadError && <p className="checkout-inline-note" role="status">Loading current product prices…</p>}
+          {reviewMode ? (
+            <div className="checkout-section checkout-review">
+              <h3>Review Order</h3>
+              <p><strong>Deliver to</strong><br />{form.fullName}<br />{form.address}{form.apartment ? `, ${form.apartment}` : ""}<br />{form.city}, {form.state} {form.pinCode}, India<br />{form.phone} · {form.email}</p>
+              <p><strong>Simulated payment</strong><br />{paymentMethod === "upi" ? "UPI" : paymentMethod === "card" ? "Debit / credit card" : "Net banking"} — no payment will be made.</p>
+              <div className="checkout-summary__totals">
+                <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
+                <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
+                <div><span>Standard delivery (estimated 3–7 business days)</span><strong>{cartDetails.shipping === 0 ? "Free" : formatPrice(cartDetails.shipping)}</strong></div>
+                <div><span>Tax</span><strong>Included in product prices</strong></div>
+                <div className="checkout-summary__total-row"><span>Total payable</span><strong>{formatPrice(cartDetails.total)}</strong></div>
+              </div>
+              <div className="checkout-review__actions">
+                <button type="button" className="checkout-secondary-button" onClick={() => setReviewMode(false)}>Edit details</button>
+                <button type="button" className="checkout-primary-button" onClick={() => void handlePlaceOrder()} disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
+                  {isSubmitting ? "PLACING TEST ORDER…" : "CONFIRM TEST ORDER"}
+                </button>
+              </div>
+              {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
+            </div>
+          ) : (
+          <>
           <div className="checkout-section">
             <h3>Contact Information</h3>
             <div className="checkout-grid checkout-grid--two">
@@ -551,8 +768,7 @@ export default function CheckoutPage() {
               </label>
               <label className="checkout-field">
                 <span>Country</span>
-                <input value={form.country} onChange={(event) => handleFieldChange("country", event.target.value)} placeholder="Country" />
-                {errors.country && <small>{errors.country}</small>}
+                <input value="India" readOnly />
               </label>
             </div>
           </div>
@@ -562,20 +778,26 @@ export default function CheckoutPage() {
             <div className="checkout-payment-options">
               {[
                 { id: "upi", label: "UPI" },
-                { id: "card", label: "Credit / Debit Card" },
+                { id: "card", label: "Debit / credit card" },
+                { id: "netbanking", label: "Net banking" },
               ].map((option) => (
                 <label key={option.id} className={`checkout-payment-option ${paymentMethod === option.id ? "is-selected" : ""}`}>
                   <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => setPaymentMethod(option.id)} />
-                  <span>{option.label}</span>
+                  <span>{option.label} <small>Test simulation only</small></span>
                 </label>
               ))}
             </div>
             {errors.paymentMethod && <small className="checkout-payment-error">{errors.paymentMethod}</small>}
           </div>
 
-          <button type="button" className="checkout-primary-button checkout-primary-button--full" onClick={handlePlaceOrder}>
-            PLACE ORDER
+          <p className="checkout-delivery-note">Standard delivery estimate: 3–7 business days. PIN code serviceability is not verified by a courier.</p>
+          <button type="button" className="checkout-primary-button checkout-primary-button--full" onClick={handleReviewOrder} disabled={!catalogLoaded || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
+            REVIEW ORDER
           </button>
+          {!cartDetails.entries.every((item) => item.available) && catalogLoaded && <p className="checkout-inline-error" role="alert">One or more products are unavailable or no longer listed. Remove them before continuing.</p>}
+          {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
+          </>
+          )}
         </section>
 
         <aside className="checkout-summary">
@@ -587,9 +809,14 @@ export default function CheckoutPage() {
                 <img src={item.image} alt={item.name} />
                 <div className="checkout-summary__details">
                   <strong>{item.name}</strong>
-                  <span>{item.variant ? `${item.variant}` : "Premium tee"}</span>
-                  <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
-                  <span>Quantity: {item.quantity}</span>
+                  {item.variant && <span>{item.variant}</span>}
+                  {item.available ? <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} /> : <span>Product unavailable</span>}
+                  <div className="checkout-item-controls">
+                    <button type="button" onClick={() => updateCartQuantity(item.id, item.quantity - 1)} aria-label={`Decrease ${item.name} quantity`}><Minus size={13} /></button>
+                    <span>{item.quantity}</span>
+                    <button type="button" onClick={() => updateCartQuantity(item.id, item.quantity + 1)} aria-label={`Increase ${item.name} quantity`}><Plus size={13} /></button>
+                    <button type="button" className="checkout-item-remove" onClick={() => updateCartQuantity(item.id, 0)} aria-label={`Remove ${item.name}`}><Trash2 size={14} /></button>
+                  </div>
                   <strong className="checkout-summary__line-total">{formatPrice(item.lineTotal)}</strong>
                 </div>
               </div>
@@ -597,10 +824,13 @@ export default function CheckoutPage() {
           </div>
 
           <div className="checkout-summary__totals">
-            <div><span>Subtotal</span><strong>{formatPrice(visibleOrder.subtotal)}</strong></div>
-            <div><span>Shipping</span><strong>{formatPrice(visibleOrder.shipping)}</strong></div>
+            <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
+            <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
+            <div><span>Delivery</span><strong>{cartDetails.shipping === 0 ? "Free" : formatPrice(cartDetails.shipping)}</strong></div>
+            <div><span>Tax</span><strong>Included</strong></div>
             <div className="checkout-summary__total-row"><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
           </div>
+          <p className="checkout-summary__price-note">Prices are current catalog prices. Tax is included; free standard delivery.</p>
 
           <div className="checkout-summary__trust">
             <ShieldCheck size={16} /> Secure checkout protected

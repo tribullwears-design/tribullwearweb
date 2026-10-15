@@ -4,19 +4,20 @@ import { apiFetch } from "../lib/api";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
-import { defaultCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 
 export type CategoryProduct = {
-  id?: string;
+  id: string;
   name: string;
   category?: string;
   price: string;
   image: string;
   originalPrice?: number | null;
+  productType?: string;
 };
 
 type CategoryDefinition = {
@@ -53,152 +54,6 @@ function liveCategoryDefinition(targetSlug: string, hierarchy: CategoryHierarchy
     })),
   };
 }
-
-const rotationImages = [
-  "/products/back-black.png",
-  "/products/flat-white.png",
-  "/products/front-white.png",
-  "/products/hanger-white.png",
-];
-
-export const categoryProducts: Record<string, Record<string, CategoryProduct[]>> = {
-  cinema: {
-    kollywood: [
-      { name: "Kollywood Hero Tee", price: "₹1,699", image: rotationImages[2] },
-      { name: "Kollywood Legend", price: "₹1,899", image: rotationImages[3] },
-      { name: "Kollywood Power Tee", price: "₹2,099", image: rotationImages[1] },
-      { name: "Kollywood Crown", price: "₹1,599", image: rotationImages[0] },      { name: "Kollywood Royale Tee", price: "₹1,749", image: rotationImages[0] },
-      { name: "Kollywood Star Print", price: "₹1,999", image: rotationImages[2] },
-      { name: "Kollywood Glory Tee", price: "₹1,849", image: rotationImages[3] },
-      { name: "Kollywood Charm Tee", price: "₹1,679", image: rotationImages[1] },    ],
-    tollywood: [
-      { name: "Tollywood Charm Tee", price: "₹1,649", image: rotationImages[1] },
-      { name: "Tollywood Spotlight", price: "₹1,829", image: rotationImages[0] },
-      { name: "Tollywood Mass Print", price: "₹1,949", image: rotationImages[3] },
-      { name: "Tollywood Cinematic", price: "₹1,579", image: rotationImages[2] },
-      { name: "Tollywood Drama Queen", price: "₹1,729", image: rotationImages[2] },
-      { name: "Tollywood Prestige", price: "₹1,999", image: rotationImages[0] },
-      { name: "Tollywood Heritage", price: "₹1,879", image: rotationImages[1] },
-      { name: "Tollywood Pulse", price: "₹1,699", image: rotationImages[3] },
-    ],
-    mollywood: [
-      { name: "Mollywood Motion Tee", price: "₹1,739", image: rotationImages[0] },
-      { name: "Mollywood Storyline", price: "₹1,899", image: rotationImages[2] },
-      { name: "Mollywood Sunset Print", price: "₹2,049", image: rotationImages[1] },
-      { name: "Mollywood Classic", price: "₹1,629", image: rotationImages[3] },
-      { name: "Mollywood Waves Tee", price: "₹1,799", image: rotationImages[1] },
-      { name: "Mollywood Breeze", price: "₹1,969", image: rotationImages[2] },
-      { name: "Mollywood Vision Tee", price: "₹1,869", image: rotationImages[0] },
-      { name: "Mollywood Soul Tee", price: "₹1,699", image: rotationImages[3] },
-    ],
-    sandalwood: [
-      { name: "Sandalwood Star Tee", price: "₹1,749", image: rotationImages[3] },
-      { name: "Sandalwood Reel", price: "₹1,869", image: rotationImages[1] },
-      { name: "Sandalwood Heritage", price: "₹1,979", image: rotationImages[2] },
-      { name: "Sandalwood Gold", price: "₹1,599", image: rotationImages[0] },
-      { name: "Sandalwood Essence Tee", price: "₹1,819", image: rotationImages[2] },
-      { name: "Sandalwood Pride", price: "₹1,999", image: rotationImages[3] },
-      { name: "Sandalwood Breeze Tee", price: "₹1,899", image: rotationImages[0] },
-      { name: "Sandalwood Spirit", price: "₹1,729", image: rotationImages[1] },
-    ],
-    bollywood: [
-      { name: "Bollywood Dazzle Tee", price: "₹1,649", image: rotationImages[1] },
-      { name: "Bollywood Shimmer", price: "₹1,849", image: rotationImages[2] },
-      { name: "Bollywood Drama Tee", price: "₹1,949", image: rotationImages[3] },
-      { name: "Bollywood Gold", price: "₹1,549", image: rotationImages[0] },
-      { name: "Bollywood Sparkle Tee", price: "₹1,749", image: rotationImages[0] },
-      { name: "Bollywood Glam", price: "₹1,999", image: rotationImages[1] },
-      { name: "Bollywood Elegance Tee", price: "₹1,899", image: rotationImages[2] },
-      { name: "Bollywood Charm", price: "₹1,699", image: rotationImages[3] },
-    ],
-    hollywood: [
-      { name: "Hollywood Icon Tee", price: "₹1,599", image: rotationImages[0] },
-      { name: "Hollywood Star Print", price: "₹1,799", image: rotationImages[1] },
-      { name: "Hollywood Blockbuster", price: "₹1,999", image: rotationImages[2] },
-      { name: "Hollywood Classic", price: "₹1,499", image: rotationImages[3] },
-      { name: "Hollywood Legend Tee", price: "₹1,699", image: rotationImages[3] },
-      { name: "Hollywood Prestige", price: "₹1,999", image: rotationImages[0] },
-      { name: "Hollywood Premium Tee", price: "₹1,899", image: rotationImages[1] },
-      { name: "Hollywood Crown", price: "₹1,699", image: rotationImages[2] },
-    ],
-  },
-  sports: {
-    cricket: [
-      { name: "Cricket Power Tee", price: "₹1,699", image: rotationImages[0] },
-      { name: "Cricket Captain Print", price: "₹1,899", image: rotationImages[2] },
-      { name: "Cricket Match Tee", price: "₹1,979", image: rotationImages[1] },
-      { name: "Cricket Pace Tee", price: "₹1,599", image: rotationImages[3] },
-      { name: "Cricket Victory Tee", price: "₹1,749", image: rotationImages[1] },
-      { name: "Cricket Champion", price: "₹1,999", image: rotationImages[0] },
-      { name: "Cricket Glory Tee", price: "₹1,899", image: rotationImages[3] },
-      { name: "Cricket Legacy", price: "₹1,729", image: rotationImages[2] },
-    ],
-    football: [
-      { name: "Football Flow Tee", price: "₹1,729", image: rotationImages[1] },
-      { name: "Football League Print", price: "₹1,949", image: rotationImages[0] },
-      { name: "Football Hustle Tee", price: "₹2,099", image: rotationImages[3] },
-      { name: "Football Matchday", price: "₹1,649", image: rotationImages[2] },
-      { name: "Football Strike Tee", price: "₹1,799", image: rotationImages[2] },
-      { name: "Football Goal Print", price: "₹1,999", image: rotationImages[1] },
-      { name: "Football Elite Tee", price: "₹1,879", image: rotationImages[0] },
-      { name: "Football Momentum", price: "₹1,759", image: rotationImages[3] },
-    ],
-    gym: [
-      { name: "Gym Lift Tee", price: "₹1,579", image: rotationImages[3] },
-      { name: "Gym Drive Tee", price: "₹1,799", image: rotationImages[2] },
-      { name: "Gym Motion Print", price: "₹1,989", image: rotationImages[0] },
-      { name: "Gym Strong Tee", price: "₹1,679", image: rotationImages[1] },
-      { name: "Gym Beast Tee", price: "₹1,749", image: rotationImages[0] },
-      { name: "Gym Grind Print", price: "₹1,999", image: rotationImages[3] },
-      { name: "Gym Shred Tee", price: "₹1,899", image: rotationImages[2] },
-      { name: "Gym Flow", price: "₹1,729", image: rotationImages[1] },
-    ],
-  },
-  motorsports: {
-    car: [
-      { name: "Car Drift Tee", price: "₹1,749", image: rotationImages[0] },
-      { name: "Car Racing Print", price: "₹1,999", image: rotationImages[1] },
-      { name: "Car Speed Tee", price: "₹2,149", image: rotationImages[2] },
-      { name: "Car Apex Tee", price: "₹1,799", image: rotationImages[3] },
-      { name: "Car Turbo Tee", price: "₹1,849", image: rotationImages[3] },
-      { name: "Car Nitro Print", price: "₹2,099", image: rotationImages[0] },
-      { name: "Car Track Tee", price: "₹1,999", image: rotationImages[1] },
-      { name: "Car Power", price: "₹1,829", image: rotationImages[2] },
-    ],
-    bike: [
-      { name: "Bike Rush Tee", price: "₹1,699", image: rotationImages[3] },
-      { name: "Bike Sprint Print", price: "₹1,949", image: rotationImages[2] },
-      { name: "Bike Track Tee", price: "₹2,099", image: rotationImages[0] },
-      { name: "Bike Torque Tee", price: "₹1,649", image: rotationImages[1] },
-      { name: "Bike Racer Tee", price: "₹1,799", image: rotationImages[1] },
-      { name: "Bike Velocity Print", price: "₹2,049", image: rotationImages[3] },
-      { name: "Bike Striker Tee", price: "₹1,949", image: rotationImages[2] },
-      { name: "Bike Ace", price: "₹1,729", image: rotationImages[0] },
-    ],
-  },
-  games: {
-    "pc-games": [
-      { name: "PC Games Arena Tee", price: "₹1,699", image: rotationImages[0] },
-      { name: "PC Games Pro Print", price: "₹1,899", image: rotationImages[2] },
-      { name: "PC Games Hero Tee", price: "₹2,099", image: rotationImages[1] },
-      { name: "PC Games Charge Tee", price: "₹1,599", image: rotationImages[3] },
-      { name: "PC Games Quest Tee", price: "₹1,749", image: rotationImages[1] },
-      { name: "PC Games Master Print", price: "₹1,999", image: rotationImages[0] },
-      { name: "PC Games Legend Tee", price: "₹1,899", image: rotationImages[3] },
-      { name: "PC Games Victory", price: "₹1,729", image: rotationImages[2] },
-    ],
-    "mobile-games": [
-      { name: "Mobile Games Boost Tee", price: "₹1,579", image: rotationImages[1] },
-      { name: "Mobile Games Quest Print", price: "₹1,849", image: rotationImages[3] },
-      { name: "Mobile Games Arcade Tee", price: "₹2,049", image: rotationImages[0] },
-      { name: "Mobile Games Mode Tee", price: "₹1,699", image: rotationImages[2] },
-      { name: "Mobile Games Tap Tee", price: "₹1,749", image: rotationImages[2] },
-      { name: "Mobile Games Swipe Print", price: "₹1,999", image: rotationImages[1] },
-      { name: "Mobile Games Pulse Tee", price: "₹1,899", image: rotationImages[0] },
-      { name: "Mobile Games Rush", price: "₹1,729", image: rotationImages[3] },
-    ],
-  },
-};
 
 function Reveal({
   children,
@@ -290,9 +145,9 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, delay = 0, category = "", index = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; category?: string; index?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
+function ProductCard({ item, delay = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
-  const productLink = `/product/${item.id || `${category}-${index}`}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(item.originalPrice ?? "")}&image=${encodeURIComponent(item.image)}`;
+  const productLink = `/product/${encodeURIComponent(item.id)}`;
 
   return (
     <Link href={productLink} className="block h-full">
@@ -339,8 +194,7 @@ function GlobalNavigation() {
   return <StorefrontHeader />;
 }
 
-function DynamicCategoryNav({ categorySlug, selectedSubcategory }: { categorySlug: string; selectedSubcategory?: string }) {
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string; hierarchy: CategoryHierarchy }) {
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
   const visibleSubcategories = definition.subcategories
@@ -377,8 +231,10 @@ const hoodieColorVariants: CategoryProduct[] = hoodieProducts.slice(0, 4).map((p
 }));
 
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
+  const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
   const [sort, setSort] = useState<CatalogSort>("featured");
-  const [filter, setFilter] = useState<CatalogFilter>("oversized");
+  const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -395,7 +251,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     const loadProducts = () => apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string }[];
+        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string; productType?: string }[];
       })
       .then((products) => {
         if (active) {
@@ -405,6 +261,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
             price: `₹${product.price.toLocaleString("en-IN")}`,
             image: product.image,
             originalPrice: product.compareAt,
+            productType: product.productType,
           })));
           setProductsLoading(false);
         }
@@ -438,34 +295,14 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
   }, []);
 
   const visibleCatalog = useMemo(() => {
-    const baseProducts = defaultProducts.filter((product) => filter === "hoodie"
-      ? product.category === "hoodie"
-      : product.category !== "hoodie");
-    const filtered: CategoryProduct[] = filter === "hoodie"
-      ? [
-        ...baseProducts.map((product) => ({
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          price: `₹${product.price.toLocaleString("en-IN")}`,
-          image: getShowcaseProductImage(2 + (baseProducts.indexOf(product) % 2)),
-        })),
-        ...hoodieColorVariants,
-      ]
-      : baseProducts.map((product, index) => ({
-        id: product.id,
-        name: product.name,
-        category: product.category,
-        price: `₹${product.price.toLocaleString("en-IN")}`,
-        image: getShowcaseProductImage(index % 2),
-      }));
+    const items = storedCatalog.filter((product) => product.productType === selectedTab);
     const price = (value: string) => Number(value.replace(/[^0-9]/g, ""));
-    if (sort === "low") filtered.sort((a, b) => price(a.price) - price(b.price));
-    if (sort === "high") filtered.sort((a, b) => price(b.price) - price(a.price));
-    if (sort === "newest") filtered.reverse();
-    if (sort === "selling") filtered.sort((a, b) => b.name.length - a.name.length);
-    return filtered;
-  }, [filter, sort]);
+    if (sort === "low") items.sort((a, b) => price(a.price) - price(b.price));
+    if (sort === "high") items.sort((a, b) => price(b.price) - price(a.price));
+    if (sort === "newest") items.reverse();
+    if (sort === "selling") items.sort((a, b) => b.name.length - a.name.length);
+    return items;
+  }, [storedCatalog, selectedTab, sort]);
 
   const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
@@ -514,9 +351,9 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
         </label>
       </div>
       <div className="category-page__grid category-page__grid--products">
-        {visibleCatalog.map((item, index) => {
+        {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={`${entrySlug}-${item.name}`} item={item} delay={0.06 * index} category={entrySlug} index={index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
+          return <ProductCard key={item.id} item={item} delay={0.04 * index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
@@ -576,8 +413,8 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
 
   return (
     <div className="category-best-selling-grid">
-      {products.map((item, index) => (
-        <Link key={item.id || `${categorySlug}-${item.name}`} href={`/product/${item.id || `${categorySlug}-${index}`}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&originalPrice=${encodeURIComponent(item.originalPrice ?? "")}&image=${encodeURIComponent(item.image)}`} className="product-card">
+      {products.map((item) => (
+        <Link key={item.id} href={`/product/${encodeURIComponent(item.id)}`} className="product-card">
           <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
         </Link>
       ))}
@@ -587,7 +424,8 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
 
 export default function CategoryPage() {
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
-  const hierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const routeSlug = normalizeCategorySlug(slug || "cinema");
   const categorySlug = normalizeCategorySlug(hierarchy.main.find((category) =>
     normalizeCategorySlug(category.value) === routeSlug || normalizeCategorySlug(category.label) === routeSlug,
@@ -609,18 +447,18 @@ export default function CategoryPage() {
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
 
+  if (!hierarchy.loaded) return <div className="p-8">Loading category...</div>;
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
   if (categorySlug === "cinema" && !lang) {
     const definition = activeDefinitions.cinema!;
     const defaultSubcat = definition.subcategories[0];
     const entrySlug = defaultSubcat?.slug || "";
-    const catalog = entrySlug ? categoryProducts.cinema[entrySlug] || [] : [];
 
     return (
       <div className="subcategory-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug="cinema" />
+        <DynamicCategoryNav categorySlug="cinema" hierarchy={hierarchy} />
 
         <CategoryHero
           title={definition.title}
@@ -633,11 +471,7 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          <DynamicBestSelling categorySlug={categorySlug} entrySlugs={[entrySlug]} />
         </div>
       </div>
     );
@@ -646,13 +480,12 @@ export default function CategoryPage() {
   if (categorySlug === "sports" && !lang) {
     const definition = activeDefinitions.sports!;
     const defaultSubcat = definition.subcategories[0];
-    const catalog = categoryProducts.sports[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug="sports" />
+        <DynamicCategoryNav categorySlug="sports" hierarchy={hierarchy} />
 
         <CategoryHero
           title={definition.title}
@@ -665,11 +498,7 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          <DynamicBestSelling categorySlug={categorySlug} entrySlugs={[entrySlug]} />
         </div>
       </div>
     );
@@ -678,13 +507,12 @@ export default function CategoryPage() {
   if (categorySlug === "motorsports" && !lang) {
     const definition = activeDefinitions.motorsports!;
     const defaultSubcat = definition.subcategories[0];
-    const catalog = categoryProducts.motorsports[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug="motorsports" />
+        <DynamicCategoryNav categorySlug="motorsports" hierarchy={hierarchy} />
 
         <CategoryHero
           title={definition.title}
@@ -697,11 +525,7 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          <DynamicBestSelling categorySlug={categorySlug} entrySlugs={[entrySlug]} />
         </div>
       </div>
     );
@@ -710,13 +534,12 @@ export default function CategoryPage() {
   if (categorySlug === "games" && !lang) {
     const definition = activeDefinitions.games!;
     const defaultSubcat = definition.subcategories[0];
-    const catalog = categoryProducts.games[defaultSubcat.slug] || [];
     const entrySlug = defaultSubcat.slug;
 
     return (
       <div className="subcategory-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug="games" />
+        <DynamicCategoryNav categorySlug="games" hierarchy={hierarchy} />
 
         <CategoryHero
           title={definition.title}
@@ -729,11 +552,7 @@ export default function CategoryPage() {
         </div>
 
         <div className="category-best-selling-grid">
-          {catalog.map((item, index) => (
-            <Link key={`${entrySlug}-${item.name}`} href={`/product/${categorySlug}-${index}?name=${encodeURIComponent(item.name)}&price=${encodeURIComponent(item.price)}&image=${encodeURIComponent(item.image)}`} className="product-card">
-              <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
-            </Link>
-          ))}
+          <DynamicBestSelling categorySlug={categorySlug} entrySlugs={[entrySlug]} />
         </div>
       </div>
     );
@@ -746,10 +565,11 @@ export default function CategoryPage() {
     const entry = category.subcategories.find((item) => item.slug === selectedSlug || normalizeCategorySlug(item.label) === selectedSlug);
     if (!entry) return <div className="p-8">Category not found.</div>;
     const entrySlug = entry.slug;
+
     return (
       <div className="category-products-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug={categorySlug} selectedSubcategory={entrySlug} />
+        <DynamicCategoryNav categorySlug={categorySlug} hierarchy={hierarchy} />
 
         <div className="category-hero" aria-label={`${entry.label} featured collection`}>
           <div className="category-hero__visual">
@@ -772,7 +592,7 @@ export default function CategoryPage() {
   return (
     <div className="subcategory-page">
       <GlobalNavigation />
-      <DynamicCategoryNav categorySlug={categorySlug} />
+      <DynamicCategoryNav categorySlug={categorySlug} hierarchy={hierarchy} />
 
       <CategoryHero
         title={fallback.title}

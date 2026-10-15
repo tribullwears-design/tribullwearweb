@@ -3,14 +3,14 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
-import { products, type Product } from "../pages/ProductsPage";
-import { categoryProducts } from "../pages/CategoryPage";
+import type { Product } from "../../../shared/products";
+import { fetchProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
 
 type SearchCategory = "oversized" | "hoodie";
 
 type Cart = Record<string, number>;
-type CartItem = { name: string; price: number; image: string; variant?: string };
+type CartItem = { productId?: string; name: string; price: number; image: string; variant?: string };
 type CartItems = Record<string, CartItem>;
 
 type Overlay = "search" | "account" | "wishlist" | "cart" | null;
@@ -110,6 +110,7 @@ export default function HeaderActions() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
+  const [products, setProducts] = useState<Product[]>([]);
   const [authUser, setAuthUser] = useState<AuthUser>(() => ({
     ...readStorage<AuthUser>("tribull-user", { username: "", isAuthenticated: false }),
     isAuthenticated: false,
@@ -144,6 +145,25 @@ export default function HeaderActions() {
   const resetRedirectTimerRef = useRef<number | undefined>(undefined);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
   const isLoginPanelOpen = overlay === "account" && (loginStep !== "profile" || !authUser.isAuthenticated);
+
+  useEffect(() => {
+    let active = true;
+    const syncProducts = (refresh = false) => {
+      const request = refresh ? refreshProducts() : fetchProducts();
+      void request.then((items) => {
+        if (active) setProducts(items);
+      }).catch((error: unknown) => {
+        console.error("Could not load products for account actions.", error);
+      });
+    };
+    syncProducts();
+    const refreshCatalog = () => syncProducts(true);
+    window.addEventListener("tribull-products-updated", refreshCatalog);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -203,20 +223,17 @@ export default function HeaderActions() {
     return () => window.clearTimeout(timer);
   }, [loginStep, recoveryResendSeconds]);
 
-  const categoryWishlistProducts = Object.entries(categoryProducts).flatMap(([category, entries]) =>
-    Object.entries(entries).flatMap(([entry, items]) => items.map((item) => ({
-      id: `${category}-${entry}-${item.name}`,
-      name: item.name,
-      price: Number(item.price.replace(/[^0-9]/g, "")),
-      image: item.image,
-    }))),
-  );
-  const wishlistProducts = [...products, ...categoryWishlistProducts].filter((product) => wishlist.includes(product.id));
+  const searchResults = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return products.slice(0, 6);
+    return products.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery));
+  }, [query]);
+
+  const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
   const cartEntries = Object.entries(cart).filter(([, quantity]) => quantity > 0);
   const cartTotal = cartEntries.reduce((total, [id, quantity]) => {
-    const product = products.find((item) => item.id === id);
-    const item = cartItems[id] || product;
-    return total + (item?.price || 0) * quantity;
+    const product = products.find((item) => item.id === (cartItems[id]?.productId || id));
+    return total + (product?.price || 0) * quantity;
   }, 0);
   const cartCount = cartEntries.reduce((total, [, quantity]) => total + quantity, 0);
 
@@ -1260,7 +1277,7 @@ export default function HeaderActions() {
       {overlay === "cart" && (
         <section className="header-panel header-side-panel" aria-label="Shopping cart">
           <div className="header-panel__heading"><h2>Cart</h2><button type="button" aria-label="Close cart" onClick={closeOverlay}><X size={20} /></button></div>
-          {cartEntries.length ? <><div className="header-cart-list">{cartEntries.map(([id, quantity]) => { const product = products.find((item) => item.id === id); const item = cartItems[id] || product; if (!item) return null; return <div className="header-list-item header-cart-item" key={id}><img src={item.image} alt={item.name} /><div><strong>{item.name}</strong>{item.variant && <span className="header-cart-variant">{item.variant}</span>}<span>{formatPrice(item.price)} · <strong>{formatPrice(item.price * quantity)}</strong></span><div className="header-quantity"><button type="button" onClick={() => updateCart(id, quantity - 1)} aria-label={`Decrease quantity of ${item.name}`}><Minus size={13} /></button><span>{quantity}</span><button type="button" onClick={() => updateCart(id, quantity + 1)} aria-label={`Increase quantity of ${item.name}`}><Plus size={13} /></button></div></div><button type="button" aria-label={`Remove ${item.name} from cart`} onClick={() => updateCart(id, 0)}><Trash2 size={15} /></button></div>; })}</div><div className="header-cart-total"><span>Total</span><strong>{formatPrice(cartTotal)}</strong></div><button className="header-checkout" type="button" onClick={() => { closeOverlay(); setLocation("/checkout"); }}>Checkout</button></> : <p className="header-empty-state">Your Cart is Empty</p>}
+          {cartEntries.length ? <><div className="header-cart-list">{cartEntries.map(([id, quantity]) => { const metadata = cartItems[id]; const product = products.find((item) => item.id === (metadata?.productId || id)); const item = product || metadata; if (!item) return null; const currentPrice = product?.price; const variant = metadata?.variant; return <div className="header-list-item header-cart-item" key={id}><img src={product?.image || item.image} alt={product?.name || item.name} /><div><strong>{product?.name || item.name}</strong>{variant && <span className="header-cart-variant">{variant}</span>}{typeof currentPrice === "number" ? <span>{formatPrice(currentPrice)} · <strong>{formatPrice(currentPrice * quantity)}</strong></span> : <span>Product unavailable</span>}<div className="header-quantity"><button type="button" onClick={() => updateCart(id, quantity - 1)} aria-label={`Decrease quantity of ${item.name}`}><Minus size={13} /></button><span>{quantity}</span><button type="button" onClick={() => updateCart(id, quantity + 1)} aria-label={`Increase quantity of ${item.name}`}><Plus size={13} /></button></div></div><button type="button" aria-label={`Remove ${item.name} from cart`} onClick={() => updateCart(id, 0)}><Trash2 size={15} /></button></div>; })}</div><div className="header-cart-total"><span>Total</span><strong>{formatPrice(cartTotal)}</strong></div><button className="header-checkout" type="button" onClick={() => { closeOverlay(); setLocation("/checkout"); }}>Checkout</button></> : <p className="header-empty-state">Your Cart is Empty</p>}
         </section>
       )}
         </>,

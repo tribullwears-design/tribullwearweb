@@ -12,6 +12,7 @@ export type OrderItem = {
   quantity: number;
   variant?: string;
   lineTotal: number;
+  originalPrice?: number;
 };
 
 export type OrderDocument = {
@@ -24,6 +25,8 @@ export type OrderDocument = {
   discount: number;
   total: number;
   payment: { method: string; status: string };
+  paymentMode?: "test";
+  idempotencyKey?: string;
   status: OrderStatus;
   createdAt: string;
 };
@@ -32,6 +35,7 @@ async function getCollection(): Promise<Collection<OrderDocument>> {
   const db = await getDatabase();
   const collection = db.collection<OrderDocument>("orders");
   await collection.createIndex({ id: 1 }, { unique: true });
+  await collection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true });
   await collection.createIndex({ status: 1, createdAt: -1 });
   return collection;
 }
@@ -48,6 +52,10 @@ export async function createOrder(order: Omit<OrderDocument, "createdAt" | "stat
   const document: OrderDocument = { ...order, status: order.status || "Pending", createdAt: new Date().toISOString() };
   await collection.insertOne(document);
   return document;
+}
+
+export async function findOrderByIdempotencyKey(idempotencyKey: string) {
+  return (await getCollection()).findOne({ idempotencyKey }, { projection: { _id: 0 } });
 }
 
 export async function updateOrderStatus(id: string, status: OrderStatus) {

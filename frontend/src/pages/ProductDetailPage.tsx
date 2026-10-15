@@ -1,11 +1,13 @@
-import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Star, Truck } from "lucide-react";
-import StorefrontHeader from "../components/StorefrontHeader";
+import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heart, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import HeaderActions from "../components/HeaderActions";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { fetchProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
-import { Link, useParams } from "wouter";
+import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
+import "./ProductDetailPage.css";
 
 interface ProductData extends OriginalPriceFields {
   id?: string;
@@ -16,131 +18,9 @@ interface ProductData extends OriginalPriceFields {
   description?: string;
   sizes?: string[];
   colors?: string[];
+  stock?: number;
 }
 
-const allCategoryProducts: Record<string, ProductData[]> = {
-  hollywood: [
-    { name: "Hollywood Icon Tee", price: "₹1,599", image: "/products/back-black.png", category: "Hollywood" },
-    { name: "Hollywood Star Print", price: "₹1,799", image: "/products/batman.png", category: "Hollywood" },
-    { name: "Hollywood Blockbuster", price: "₹1,999", image: "/products/bollywood.jpg", category: "Hollywood" },
-    { name: "Hollywood Classic", price: "₹1,499", image: "/products/flat-white.png", category: "Hollywood" },
-  ],
-  bollywood: [
-    { name: "Bollywood Dazzle Tee", price: "₹1,649", image: "/products/batman.png", category: "Bollywood" },
-    { name: "Bollywood Shimmer", price: "₹1,849", image: "/products/bollywood.jpg", category: "Bollywood" },
-    { name: "Bollywood Drama Tee", price: "₹1,949", image: "/products/flat-white.png", category: "Bollywood" },
-    { name: "Bollywood Gold", price: "₹1,549", image: "/products/front-white.png", category: "Bollywood" },
-  ],
-  kollywood: [
-    { name: "Kollywood Hero Tee", price: "₹1,699", image: "/products/bollywood.jpg", category: "Kollywood" },
-    { name: "Kollywood Legend", price: "₹1,899", image: "/products/flat-white.png", category: "Kollywood" },
-    { name: "Kollywood Power Tee", price: "₹2,099", image: "/products/front-white.png", category: "Kollywood" },
-    { name: "Kollywood Crown", price: "₹1,599", image: "/products/hanger-white.png", category: "Kollywood" },
-  ],
-  tollywood: [
-    { name: "Tollywood Charm Tee", price: "₹1,649", image: "/products/back-black.png", category: "Tollywood" },
-    { name: "Tollywood Spotlight", price: "₹1,829", image: "/products/flat-white.png", category: "Tollywood" },
-    { name: "Tollywood Mass Print", price: "₹1,949", image: "/products/hanger-white.png", category: "Tollywood" },
-    { name: "Tollywood Cinematic", price: "₹1,579", image: "/products/front-white.png", category: "Tollywood" },
-  ],
-  mollywood: [
-    { name: "Mollywood Motion Tee", price: "₹1,739", image: "/products/front-white.png", category: "Mollywood" },
-    { name: "Mollywood Storyline", price: "₹1,899", image: "/products/back-black.png", category: "Mollywood" },
-    { name: "Mollywood Sunset Print", price: "₹2,049", image: "/products/flat-white.png", category: "Mollywood" },
-    { name: "Mollywood Classic", price: "₹1,629", image: "/products/hanger-white.png", category: "Mollywood" },
-  ],
-  sandalwood: [
-    { name: "Sandalwood Star Tee", price: "₹1,749", image: "/products/hanger-white.png", category: "Sandalwood" },
-    { name: "Sandalwood Reel", price: "₹1,869", image: "/products/flat-white.png", category: "Sandalwood" },
-    { name: "Sandalwood Heritage", price: "₹1,979", image: "/products/front-white.png", category: "Sandalwood" },
-    { name: "Sandalwood Gold", price: "₹1,599", image: "/products/back-black.png", category: "Sandalwood" },
-  ],
-  cricket: [
-    { name: "Cricket Power Tee", price: "₹1,699", image: "/products/back-black.png", category: "Cricket" },
-    { name: "Cricket Captain Print", price: "₹1,899", image: "/products/flat-white.png", category: "Cricket" },
-    { name: "Cricket Match Tee", price: "₹1,979", image: "/products/front-white.png", category: "Cricket" },
-    { name: "Cricket Pace Tee", price: "₹1,599", image: "/products/hanger-white.png", category: "Cricket" },
-  ],
-  football: [
-    { name: "Football Flow Tee", price: "₹1,729", image: "/products/flat-white.png", category: "Football" },
-    { name: "Football League Print", price: "₹1,949", image: "/products/back-black.png", category: "Football" },
-    { name: "Football Hustle Tee", price: "₹2,099", image: "/products/hanger-white.png", category: "Football" },
-    { name: "Football Matchday", price: "₹1,649", image: "/products/front-white.png", category: "Football" },
-  ],
-  gym: [
-    { name: "Gym Lift Tee", price: "₹1,579", image: "/products/hanger-white.png", category: "Gym" },
-    { name: "Gym Drive Tee", price: "₹1,799", image: "/products/front-white.png", category: "Gym" },
-    { name: "Gym Motion Print", price: "₹1,989", image: "/products/back-black.png", category: "Gym" },
-    { name: "Gym Strong Tee", price: "₹1,679", image: "/products/flat-white.png", category: "Gym" },
-  ],
-  car: [
-    { name: "Car Drift Tee", price: "₹1,749", image: "/products/back-black.png", category: "Car" },
-    { name: "Car Racing Print", price: "₹1,999", image: "/products/flat-white.png", category: "Car" },
-    { name: "Car Speed Tee", price: "₹2,149", image: "/products/front-white.png", category: "Car" },
-    { name: "Car Apex Tee", price: "₹1,799", image: "/products/hanger-white.png", category: "Car" },
-  ],
-  bike: [
-    { name: "Bike Rush Tee", price: "₹1,699", image: "/products/hanger-white.png", category: "Bike" },
-    { name: "Bike Sprint Print", price: "₹1,949", image: "/products/front-white.png", category: "Bike" },
-    { name: "Bike Track Tee", price: "₹2,099", image: "/products/back-black.png", category: "Bike" },
-    { name: "Bike Torque Tee", price: "₹1,649", image: "/products/flat-white.png", category: "Bike" },
-  ],
-  "pc-games": [
-    { name: "PC Games Arena Tee", price: "₹1,699", image: "/products/back-black.png", category: "PC Games" },
-    { name: "PC Games Pro Print", price: "₹1,899", image: "/products/front-white.png", category: "PC Games" },
-    { name: "PC Games Hero Tee", price: "₹2,099", image: "/products/flat-white.png", category: "PC Games" },
-    { name: "PC Games Charge Tee", price: "₹1,599", image: "/products/hanger-white.png", category: "PC Games" },
-  ],
-  "mobile-games": [
-    { name: "Mobile Games Boost Tee", price: "₹1,579", image: "/products/flat-white.png", category: "Mobile Games" },
-    { name: "Mobile Games Quest Print", price: "₹1,849", image: "/products/hanger-white.png", category: "Mobile Games" },
-    { name: "Mobile Games Arcade Tee", price: "₹2,049", image: "/products/back-black.png", category: "Mobile Games" },
-    { name: "Mobile Games Mode Tee", price: "₹1,699", image: "/products/front-white.png", category: "Mobile Games" },
-  ],
-};
-
-const sizeOptions = ["M", "L", "XL"];
-const sampleCustomerReviews = [
-  {
-    name: "Sample customer 01",
-    title: "Comfortable everyday tee",
-    comment: "The fabric feels soft and comfortable for everyday wear.",
-  },
-  {
-    name: "Sample customer 02",
-    title: "Looks great",
-    comment: "The print looks neat and the fit feels just right.",
-  },
-  {
-    name: "Sample customer 03",
-    title: "Happy with the quality",
-    comment: "A comfortable T-shirt with a clean finish.",
-  },
-];
-const croppedProductImageViews = [
-  { label: "Full view", position: "50% 50%", zoom: 1 },
-  { label: "Upper detail", position: "50% 22%", zoom: 1.2 },
-  { label: "Fabric detail", position: "50% 43%", zoom: 1.55 },
-  { label: "Side detail", position: "24% 50%", zoom: 1.3 },
-  { label: "Sleeve detail", position: "76% 48%", zoom: 1.3 },
-  { label: "Lower detail", position: "50% 78%", zoom: 1.2 },
-];
-const blackTShirtImageViews = [
-  { label: "Front view", image: "/products/B1.jpg.jpeg" },
-  { label: "Back view", image: "/products/B2.jpg.jpeg" },
-  { label: "Back detail", image: "/products/B3.jpg.jpeg" },
-  { label: "Collar detail", image: "/products/B4.jpg.jpeg" },
-  { label: "Label detail", image: "/products/B5.jpg.jpeg" },
-  { label: "Size chart", image: "/products/B6.jpg.jpeg" },
-];
-const whiteTShirtImageViews = [
-  { label: "Front view", image: "/products/W1.jpg.jpeg" },
-  { label: "Back view", image: "/products/W2.jpg.jpeg" },
-  { label: "Back detail", image: "/products/W3.jpg.jpeg" },
-  { label: "Collar detail", image: "/products/W4.jpg.jpeg" },
-  { label: "Label detail", image: "/products/W5.jpg" },
-  { label: "Size chart", image: "/products/W6.jpg.jpeg" },
-];
 const tShirtColors = [
   { name: "Black", value: "#171717" },
   { name: "White", value: "#ffffff" },
@@ -148,11 +28,22 @@ const tShirtColors = [
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
+  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [isWishlisted, setIsWishlisted] = useState(() => {
+    try {
+      return (JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]).includes(id || "");
+    } catch {
+      return false;
+    }
+  });
+  const [isProductLoading, setIsProductLoading] = useState(true);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [isInfoOpen, setIsInfoOpen] = useState(true);
   const [headerCartCount, setHeaderCartCount] = useState(0);
@@ -187,23 +78,15 @@ export default function ProductDetailPage() {
     return () => window.removeEventListener("tribull-cart-updated", syncHeaderCart);
   }, []);
 
-  const separatorIndex = id?.lastIndexOf("-") ?? -1;
-  const category = separatorIndex > 0 ? id?.slice(0, separatorIndex) || "" : "";
-  const index = Number.parseInt(separatorIndex > 0 ? id?.slice(separatorIndex + 1) || "0" : "0", 10);
-  const categoryProducts = allCategoryProducts[category] || [];
-  const query = new URLSearchParams(window.location.search);
-  const linkedProduct: ProductData | undefined = query.get("name") && query.get("image") ? {
-    name: query.get("name") || "Selected product",
-    price: query.get("price") || "₹0",
-    originalPrice: query.get("originalPrice") ? Number(query.get("originalPrice")) : undefined,
-    image: query.get("image") || "",
-    category: category || "Tribull",
-  } : undefined;
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
       setStoredProduct(null);
-      if (!id || !/^(?:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}|[0-9a-f]{24})$/i.test(id)) return;
+      setIsProductLoading(true);
+      if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+        setIsProductLoading(false);
+        return;
+      }
       void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store" })
         .then(async (response) => {
           if (!response.ok) {
@@ -220,10 +103,15 @@ export default function ProductDetailPage() {
             mainCategory: string;
             sizes: string[];
             colors: string[];
+            stock: number;
           };
         })
         .then((product) => {
-          if (!active || !product) return;
+          if (!active) return;
+          if (!product) {
+            setIsProductLoading(false);
+            return;
+          }
           setStoredProduct({
             id: product.id,
             name: product.name,
@@ -234,10 +122,13 @@ export default function ProductDetailPage() {
             category: product.mainCategory,
             sizes: product.sizes,
             colors: product.colors,
+            stock: product.stock,
           });
+          setIsProductLoading(false);
         })
         .catch((error: unknown) => {
           console.error("Product detail request failed.", error);
+          if (active) setIsProductLoading(false);
         });
     };
     loadStoredProduct();
@@ -247,23 +138,62 @@ export default function ProductDetailPage() {
       window.removeEventListener("tribull-products-updated", loadStoredProduct);
     };
   }, [id]);
-  const product = storedProduct ?? linkedProduct ?? categoryProducts[index];
-  const isTShirtColorVariant = product?.image === getShowcaseProductImage(0) || product?.image === getShowcaseProductImage(1);
+
+  useEffect(() => {
+    const syncWishlist = () => {
+      try {
+        setIsWishlisted((JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]).includes(id || ""));
+      } catch {
+        setIsWishlisted(false);
+      }
+    };
+    syncWishlist();
+    window.addEventListener("tribull-wishlist-updated", syncWishlist);
+    return () => window.removeEventListener("tribull-wishlist-updated", syncWishlist);
+  }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    const loadRecommendations = () => {
+      void fetchProducts()
+        .then((products) => {
+          if (active) setRecommendationProducts(products
+            .filter((product) => product.id !== id)
+            .slice(0, 4)
+            .map((product) => ({
+              id: product.id,
+              name: product.name,
+              price: `₹${product.price.toLocaleString("en-IN")}`,
+              originalPrice: product.originalPrice,
+              image: product.image,
+              category: product.category,
+            })));
+        })
+        .catch((error: unknown) => console.error("Product recommendations request failed.", error));
+    };
+    loadRecommendations();
+    window.addEventListener("tribull-products-updated", loadRecommendations);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-products-updated", loadRecommendations);
+    };
+  }, [id]);
+  const product = storedProduct;
+  const isTShirtColorVariant = Boolean(storedProduct?.colors?.length);
   const productColorOptions = storedProduct?.colors?.length
     ? storedProduct.colors.map((name) => ({
       name,
       value: tShirtColors.find((color) => color.name.toLowerCase() === name.toLowerCase())?.value || name.toLowerCase(),
     }))
-    : tShirtColors;
+    : [];
   const hasProductColors = isTShirtColorVariant || Boolean(storedProduct?.colors?.length);
-  const availableSizes = storedProduct?.sizes?.length ? storedProduct.sizes : sizeOptions;
-  const initialColor = storedProduct?.colors?.[0] || (product?.image === getShowcaseProductImage(1) ? "White" : "Black");
+  const availableSizes = storedProduct?.sizes || [];
+  const initialColor = storedProduct?.colors?.[0] || "";
   const activeColor = selectedColor ?? initialColor;
-  const productImageViews = isTShirtColorVariant
-    ? activeColor === "Black" ? blackTShirtImageViews : whiteTShirtImageViews
-    : croppedProductImageViews;
+  const productImageViews = storedProduct?.image ? [storedProduct.image] : [];
 
   const navigateGallery = (direction: "next" | "prev") => {
+    if (productImageViews.length < 2) return;
     const nextIndex = direction === "next"
       ? (selectedImageIndex + 1) % productImageViews.length
       : (selectedImageIndex - 1 + productImageViews.length) % productImageViews.length;
@@ -273,23 +203,27 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor(storedProduct?.colors?.[0] || (product.image === getShowcaseProductImage(1) ? "White" : "Black"));
+      setSelectedColor(storedProduct?.colors?.[0] || "");
+      setImageFailed(false);
     }
   }, [product?.image]);
 
-  if (!product) return <div className="p-8">Product not found.</div>;
+  if (!product) {
+    return (
+      <div className="product-detail-page">
+        <main className="product-detail-page__state" role="status">
+          {isProductLoading ? "Loading product…" : "Product not found."}
+        </main>
+      </div>
+    );
+  }
 
   const priceValue = Number(product.price.replace(/[^0-9]/g, ""));
+  const isOutOfStock = typeof product.stock === "number" && product.stock <= 0;
   const originalPriceValue = resolveOriginalPrice(product);
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
-  const recommendationPool = [
-    ...categoryProducts.filter((_, productIndex) => productIndex !== index),
-    ...Object.entries(allCategoryProducts)
-      .filter(([productCategory]) => productCategory !== category)
-      .flatMap(([, items]) => items),
-  ].slice(0, 4);
-
-  const productDescription = product.description || `${product.name} is a premium ${product.category.toLowerCase()} staple designed for elevated daily wear. Built with a soft cotton blend, durable print finish, and an easy, relaxed silhouette for all-day comfort.`;
+  const memberPrice = Math.floor(priceValue * 0.95);
+  const productDescription = product.description || "Product details have not been added yet.";
 
   const benefitItems = [
     { title: "Fit", detail: "Relaxed" },
@@ -315,33 +249,33 @@ export default function ProductDetailPage() {
   } as const;
 
   const addCurrentProductToCart = () => {
+    if (isOutOfStock) return;
     if (isAdded) {
       window.dispatchEvent(new Event("tribull-open-cart"));
       return;
     }
 
-    if (!selectedSize) {
+    if (availableSizes.length > 0 && !selectedSize) {
       setSizeError("Please select a size before adding to cart.");
       return;
     }
 
-    const productId = `${category}-${index}`;
+    const productId = product.id || id || "";
+    const metadata = {
+      productId,
+      name: product.name,
+      price: priceValue,
+      originalPrice: originalPriceNumber,
+      image: product.image,
+      size: selectedSize,
+      color: isTShirtColorVariant ? activeColor : "",
+      variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
+    };
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
-      window.localStorage.setItem("tribull-cart-items", JSON.stringify({
-        ...cartItems,
-        [productId]: {
-          name: product.name,
-          price: priceValue,
-          originalPrice: originalPriceNumber,
-          image: isTShirtColorVariant
-            ? activeColor === "Black" ? blackTShirtImageViews[0].image : whiteTShirtImageViews[0].image
-            : product.image,
-          variant: `Size: ${selectedSize}${isTShirtColorVariant ? ` / Colour: ${activeColor}` : ""}`,
-        },
-      }));
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify({ ...cartItems, [productId]: metadata }));
     } catch {
-      // Keep the cart usable if metadata storage is unavailable.
+      console.error("Could not save product details with the cart item.");
     }
 
     const nextCart = { ...cart, [productId]: (cart[productId] || 0) + quantity };
@@ -352,9 +286,51 @@ export default function ProductDetailPage() {
     setIsAdded(true);
   };
 
-  const handleBuyNow = () => {
-    if (!selectedSize) {
-      setSizeError("Please select a size before adding to cart.");
+  const checkoutCurrentProduct = () => {
+    if (isOutOfStock) return;
+    if (availableSizes.length > 0 && !selectedSize) {
+      setSizeError("Please select a size before checking out.");
+      return;
+    }
+    const productId = product.id || id || "";
+    const metadata = {
+      productId,
+      name: product.name,
+      price: priceValue,
+      originalPrice: originalPriceNumber,
+      image: product.image,
+      size: selectedSize,
+      color: isTShirtColorVariant ? activeColor : "",
+      variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
+    };
+    window.sessionStorage.setItem("tribull-checkout-selection", JSON.stringify({ productId, quantity, metadata }));
+    setLocation("/checkout");
+  };
+
+  const toggleWishlist = () => {
+    const productId = product.id || id || "";
+    let wishlist: string[] = [];
+    try {
+      wishlist = JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[];
+    } catch {
+      wishlist = [];
+    }
+    const nextWishlist = isWishlisted
+      ? wishlist.filter((item) => item !== productId)
+      : wishlist.includes(productId) ? wishlist : [...wishlist, productId];
+    window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
+    setIsWishlisted(!isWishlisted);
+    window.dispatchEvent(new Event("tribull-wishlist-updated"));
+  };
+
+  const handlePincodeSubmit = () => {
+    const numericPin = pincode.replace(/\D/g, "");
+
+    if (!/^\d{6}$/.test(numericPin)) {
+      setPincodeFeedback({
+        kind: "error",
+        message: "Please enter a valid 6-digit PIN code.",
+      });
       return;
     }
 
@@ -376,45 +352,31 @@ export default function ProductDetailPage() {
 
             <div className="product-detail-gallery__body">
               <div className="product-detail-gallery__thumbs" aria-label="Product image views">
-                {productImageViews.map((view, viewIndex) => (
+                {productImageViews.map((image, viewIndex) => (
                 <button
-                  key={view.label}
+                  key={image}
                   type="button"
                   className={selectedImageIndex === viewIndex ? "is-active" : ""}
                   onClick={() => setSelectedImageIndex(viewIndex)}
-                  aria-label={`View ${view.label.toLowerCase()}`}
+                  aria-label={`View product image ${viewIndex + 1}`}
                   aria-pressed={selectedImageIndex === viewIndex}
                 >
-                  <img
-                    src={"image" in view ? view.image : product.image}
-                    alt=""
-                    aria-hidden="true"
-                    style={"image" in view
-                      ? view.label === "Size chart" ? { objectFit: "contain" } : undefined
-                      : { objectPosition: view.position, transform: `scale(${view.zoom})` }}
-                  />
+                  {imageFailed ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setImageFailed(true)} />}
                 </button>
               ))}
               </div>
 
               <div className="product-detail-gallery__media">
                 <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
-                  <img
-                    src={"image" in productImageViews[selectedImageIndex] ? productImageViews[selectedImageIndex].image : product.image}
-                    alt={`${product.name} — ${productImageViews[selectedImageIndex].label}`}
-                    style={"image" in productImageViews[selectedImageIndex]
-                      ? productImageViews[selectedImageIndex].label === "Size chart" ? { objectFit: "contain" } : undefined
-                      : {
-                      objectPosition: productImageViews[selectedImageIndex].position,
-                      transform: `scale(${productImageViews[selectedImageIndex].zoom})`,
-                    }}
-                  />
+                  {imageFailed
+                    ? <span className="product-detail-gallery__fallback">Image unavailable</span>
+                    : <img src={product.image} alt={product.name} onError={() => setImageFailed(true)} />}
                 </div>
                 <div className="product-detail-gallery__nav">
-                  <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view">
+                  <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view" disabled={productImageViews.length < 2}>
                     <ChevronLeft size={18} />
                   </button>
-                  <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image view">
+                  <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image view" disabled={productImageViews.length < 2}>
                     <ChevronRight size={18} />
                   </button>
                 </div>
@@ -423,17 +385,8 @@ export default function ProductDetailPage() {
           </section>
 
           <section className="product-detail-panel" aria-label="Product information">
-            <div className="product-detail-panel__eyebrow">{product.category} <span>·</span> SKU: {category.toUpperCase()}-{String(index + 1).padStart(3, "0")}</div>
+            <div className="product-detail-panel__eyebrow">{product.category} <span>·</span> SKU: {product.id}</div>
             <h1 className="product-detail-panel__heading">{product.name}</h1>
-
-            <div className="product-detail-panel__rating">
-              <div className="product-detail-panel__stars" aria-label="Rated 4.8 out of 5">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star key={star} size={16} fill="currentColor" />
-                ))}
-              </div>
-              <span>4.8 <a className="product-detail-panel__review-link" href="#product-reviews"><small>· 41 reviews</small></a></span>
-            </div>
 
             <ProductPrice
               sellingPrice={product.price}
@@ -442,6 +395,11 @@ export default function ProductDetailPage() {
               className="product-price--detail"
             />
             <p className="product-detail-tax-note">Tax included.</p>
+            {typeof product.stock === "number" && (
+              <p className="product-detail-stock" aria-live="polite">
+                {product.stock > 0 ? `${product.stock} available` : "Currently out of stock"}
+              </p>
+            )}
 
             {isTShirtColorVariant ? (
               <div className="product-detail-color-option">
@@ -472,7 +430,7 @@ export default function ProductDetailPage() {
               </div>
             ) : null}
 
-            <div className="product-detail-option">
+            {availableSizes.length > 0 && <div className="product-detail-option">
               <div className="product-detail-option__header">
                 <span>Size</span>
                 <button type="button" className="product-detail-option__guide" onClick={() => setIsSizeGuideOpen(true)}>Size guide</button>
@@ -497,7 +455,7 @@ export default function ProductDetailPage() {
                 ))}
               </div>
               {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
-            </div>
+            </div>}
 
             <section className="product-detail-offers" aria-label="Offers">
               <h2>Best offers for you</h2>
@@ -513,50 +471,73 @@ export default function ProductDetailPage() {
               </div>
             </section>
 
+            <div className="product-detail-return-note">
+              <ShieldCheck size={17} />
+              <span>Easy 10-day return and exchange on this product. No questions asked.</span>
+            </div>
+
+            {hasProductColors ? (
+              <div className="product-detail-color-option">
+                <span>Colour: {activeColor}</span>
+                <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
+                  {productColorOptions.map((option) => (
+                    <button
+                      key={option.name}
+                      data-color={option.name}
+                      className={activeColor === option.name ? "is-selected" : ""}
+                      type="button"
+                      onClick={() => {
+                        setSelectedColor(option.name);
+                        setSelectedImageIndex(0);
+                      }}
+                      aria-label={`Select ${option.name} T-shirt`}
+                      aria-pressed={activeColor === option.name}
+                      title={option.name}
+                      style={{
+                        background: option.value,
+                        ...(option.name === "White"
+                          ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
+                          : {}),
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             <div className="product-detail-cta-row">
               <div className="product-detail-qty" aria-label="Quantity selector">
                 <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
                   <Minus size={16} />
                 </button>
                 <span>{quantity}</span>
-                <button type="button" onClick={() => setQuantity((current) => current + 1)} aria-label="Increase quantity">
+                <button
+                  type="button"
+                  onClick={() => setQuantity((current) => Math.min(product.stock ?? Number.MAX_SAFE_INTEGER, current + 1))}
+                  aria-label="Increase quantity"
+                  disabled={isOutOfStock || (typeof product.stock === "number" && quantity >= product.stock)}
+                >
                   <Plus size={16} />
                 </button>
               </div>
 
-              {hasProductColors ? (
-                <div className="product-detail-color-option">
-                  <span>Colour: {activeColor}</span>
-                  <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
-                    {productColorOptions.map((option) => (
-                      <button
-                        key={option.name}
-                        data-color={option.name}
-                        className={activeColor === option.name ? "is-selected" : ""}
-                        type="button"
-                        onClick={() => {
-                          setSelectedColor(option.name);
-                          setSelectedImageIndex(0);
-                        }}
-                        aria-label={`Select ${option.name} T-shirt`}
-                        aria-pressed={activeColor === option.name}
-                        title={option.name}
-                        style={{
-                          background: option.value,
-                          ...(option.name === "White"
-                            ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
-                            : {}),
-                        }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart}>
-                {isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
-                {isAdded ? "Go to cart" : "Add to cart"}
-                {!isAdded && <ArrowRight size={18} />}
+              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart} disabled={isOutOfStock}>
+                {isOutOfStock ? null : isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
+                {isOutOfStock ? "Out of stock" : isAdded ? "Go to cart" : "Add to cart"}
+                {!isOutOfStock && !isAdded && <ArrowRight size={18} />}
+              </button>
+              <button type="button" className="product-detail-checkout" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
+                Checkout
+              </button>
+              <button
+                type="button"
+                className={`product-detail-wishlist${isWishlisted ? " is-active" : ""}`}
+                aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                aria-pressed={isWishlisted}
+                onClick={toggleWishlist}
+              >
+                <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
+                <span>{isWishlisted ? "Saved" : "Wishlist"}</span>
               </button>
             </div>
 
@@ -621,18 +602,14 @@ export default function ProductDetailPage() {
           </div>
 
           <div className="product-detail-recommendations__grid">
-            {recommendationPool.map((recommendation, recommendationIndex) => {
-              const recommendationImage = getShowcaseProductImage(recommendationIndex);
-              const recommendationHoverImage = getShowcaseProductHoverImage(recommendationImage);
-              return (
+            {recommendationProducts.map((recommendation) => (
               <Link
-                key={`${id}-${recommendation.name}-${recommendationIndex}`}
-                href={`/product/${category}-${recommendationIndex}?name=${encodeURIComponent(recommendation.name)}&price=${encodeURIComponent(recommendation.price)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(recommendation) ?? "")}&image=${encodeURIComponent(recommendationImage)}`}
+                key={recommendation.id}
+                href={`/product/${encodeURIComponent(recommendation.id || "")}`}
                 className="product-detail-recommendation-card"
               >
                 <div className="product-detail-recommendation-card__image">
-                  <img src={recommendationImage} alt={recommendation.name} className="product-image-primary" loading="lazy" />
-                  {recommendationHoverImage ? <img src={recommendationHoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
+                  <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" loading="lazy" />
                 </div>
                 <div>
                   <h3>{recommendation.name}</h3>
@@ -643,8 +620,7 @@ export default function ProductDetailPage() {
                   />
                 </div>
               </Link>
-              );
-            })}
+            ))}
           </div>
         </section>
       </main>
@@ -707,8 +683,8 @@ export default function ProductDetailPage() {
           />
           <small>Tax included.</small>
         </div>
-        <button type="button" onClick={handleBuyNow}>
-          Buy Now
+        <button type="button" onClick={addCurrentProductToCart} disabled={isOutOfStock}>
+          {isOutOfStock ? "Out of stock" : isAdded ? <><Check size={18} /> Go to cart</> : "Add to cart"}
         </button>
       </div>
     </div>

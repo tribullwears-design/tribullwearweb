@@ -1,11 +1,12 @@
 import express from "express";
 import { createServer } from "http";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import path from "path";
 import { fileURLToPath } from "url";
-import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, updateCategory } from "./categoryStore.js";
+import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
-import { createOrder, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
+import { createOrder, findOrderByIdempotencyKey, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
 import { createProduct, getProduct, listProducts, updateProduct } from "./productStore.js";
 import { rateLimit } from "express-rate-limit";
 import {
@@ -408,6 +409,16 @@ async function startServer() {
   app.patch("/api/categories/:value", async (req, res) => {
     try { const category = await updateCategory(req.params.value, req.body); if (!category) return res.status(404).json({ error: "Category not found" }); res.json(category); } catch (error) { sendError(res, error); }
   });
+  app.patch("/api/categories/:value/visibility", async (req, res) => {
+    if (!req.body || typeof req.body.isVisible !== "boolean" || Object.keys(req.body).length !== 1) {
+      return res.status(400).json({ error: "isVisible must be a boolean" });
+    }
+    try {
+      const category = await setCategoryVisibility(req.params.value, req.body.isVisible);
+      if (!category) return res.status(404).json({ error: "Category not found" });
+      res.json(category);
+    } catch (error) { sendError(res, error); }
+  });
   app.delete("/api/categories/:value", async (req, res) => {
     try { res.json({ deleted: await deleteCategory(req.params.value) }); } catch (error) { sendError(res, error); }
   });
@@ -416,6 +427,18 @@ async function startServer() {
   });
   app.patch("/api/categories/:parent/subcategories/:value", async (req, res) => {
     try { const category = await editSubcategory(req.params.parent, req.params.value, req.body); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
+  });
+  app.patch("/api/categories/:parent/subcategories/:value/visibility", async (req, res) => {
+    if (!req.body || typeof req.body.isVisible !== "boolean" || Object.keys(req.body).length !== 1) {
+      return res.status(400).json({ error: "isVisible must be a boolean" });
+    }
+    try {
+      const category = await setSubcategoryVisibility(req.params.parent, req.params.value, req.body.isVisible);
+      if (!category) return res.status(404).json({ error: "Subcategory not found" });
+      const subcategory = category.subcategories.find((item) => item.value === req.params.value);
+      if (!subcategory) return res.status(404).json({ error: "Subcategory not found" });
+      res.json(subcategory);
+    } catch (error) { sendError(res, error); }
   });
   app.delete("/api/categories/:parent/subcategories/:value", async (req, res) => {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
@@ -442,10 +465,11 @@ async function startServer() {
     try {
       const mainCategory = typeof req.query.mainCategory === "string" ? req.query.mainCategory : undefined;
       const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory : undefined;
-      res.json(await listProducts(mainCategory, subcategory));
+      const productType = typeof req.query.productType === "string" ? req.query.productType : undefined;
+      res.json(await listProducts(mainCategory, subcategory, productType));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      const status = message.includes("not found") ? 404 : message.includes("required") ? 400 : 500;
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("Invalid") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
@@ -456,7 +480,7 @@ async function startServer() {
       res.json(product);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      res.status(500).json({ error: message });
+      res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
     }
   });
   app.post("/api/products", async (req, res) => {
@@ -473,15 +497,136 @@ async function startServer() {
       res.json(product);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") ? 400 : 500;
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") || message.includes("unsupported") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
   app.get("/api/orders", async (req, res) => {
     try { res.json(await listOrders(typeof req.query.status === "string" ? req.query.status : undefined)); } catch (error) { sendError(res, error); }
   });
-  app.post("/api/orders", async (req, res) => {
-    try { res.status(201).json(await createOrder(req.body)); } catch (error) { sendError(res, error); }
+  app.post("/api/orders", (_req, res) => {
+    return res.status(410).json({ error: "Client-priced order creation is disabled. Use the validated checkout endpoint." });
+  });
+  app.post("/api/checkout/test-orders", async (req, res) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ error: "Test checkout is available only in development" });
+    }
+    const { idempotencyKey, customer, shippingAddress, items, paymentMethod } = req.body ?? {};
+    if (typeof idempotencyKey !== "string" || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) {
+      return res.status(400).json({ error: "A valid checkout request key is required" });
+    }
+    try {
+      const existingOrder = await findOrderByIdempotencyKey(idempotencyKey);
+      if (existingOrder) return res.json(existingOrder);
+
+      if (!customer || typeof customer.name !== "string" || customer.name.trim().length < 2 || customer.name.trim().length > 80
+        || typeof customer.email !== "string" || !isValidCustomerEmail(normalizeCustomerEmail(customer.email))
+        || typeof customer.phone !== "string" || !isValidCustomerMobile(customer.phone)) {
+        return res.status(400).json({ error: "Enter a valid name, email address, and mobile number" });
+      }
+      if (!shippingAddress || typeof shippingAddress.address !== "string" || shippingAddress.address.trim().length < 5
+        || typeof shippingAddress.apartment !== "string" || typeof shippingAddress.city !== "string" || !shippingAddress.city.trim()
+        || typeof shippingAddress.state !== "string" || !shippingAddress.state.trim()
+        || typeof shippingAddress.pinCode !== "string" || !/^\d{6}$/.test(shippingAddress.pinCode)
+        || typeof shippingAddress.country !== "string" || shippingAddress.country !== "India") {
+        return res.status(400).json({ error: "Enter a complete Indian delivery address with a valid 6-digit PIN code" });
+      }
+      if (!["upi", "card", "netbanking"].includes(paymentMethod)) {
+        return res.status(400).json({ error: "Choose one of the simulated test payment methods" });
+      }
+      if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
+        return res.status(400).json({ error: "The cart must contain between 1 and 50 items" });
+      }
+
+      const categories = await listCategories();
+      const orderItems = [];
+      const requestedByProduct = new Map<string, number>();
+      for (const item of items) {
+        if (!item || typeof item.id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(item.id)
+          || !Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 99
+          || (item.variant !== undefined && (!item.variant || typeof item.variant !== "object" || Array.isArray(item.variant)))) {
+          return res.status(400).json({ error: "Cart contains an invalid product or quantity" });
+        }
+        const product = await getProduct(item.id);
+        if (!product) return res.status(404).json({ error: `Product ${item.id} was not found` });
+        if (product.status !== "Active") return res.status(409).json({ error: `${product.name} is not currently available` });
+        const category = categories.find((entry) => entry.value === product.mainCategoryId);
+        const subcategory = category?.subcategories.find((entry) => entry.value === product.subcategoryId);
+        if (!category || category.isVisible === false || !subcategory || subcategory.isVisible === false) {
+          return res.status(409).json({ error: `${product.name} is no longer available` });
+        }
+        const size = item.variant?.size;
+        const color = item.variant?.color;
+        if (size !== undefined && (typeof size !== "string" || !product.sizes.includes(size))) {
+          return res.status(400).json({ error: `The selected size for ${product.name} is not available` });
+        }
+        if (product.sizes.length > 0 && !size) {
+          return res.status(400).json({ error: `Select a size for ${product.name}` });
+        }
+        if (color !== undefined && (typeof color !== "string" || !product.colors.some((entry) => entry.toLowerCase() === color.toLowerCase()))) {
+          return res.status(400).json({ error: `The selected colour for ${product.name} is not available` });
+        }
+        if (product.colors.length > 0 && !color) {
+          return res.status(400).json({ error: `Select a colour for ${product.name}` });
+        }
+        const requestedQuantity = (requestedByProduct.get(product.id) || 0) + item.quantity;
+        requestedByProduct.set(product.id, requestedQuantity);
+        if (requestedQuantity > product.stock) {
+          return res.status(409).json({ error: `Only ${product.stock} units of ${product.name} are available` });
+        }
+        const variantLabel = [size ? `Size: ${size}` : "", color ? `Colour: ${color}` : ""].filter(Boolean).join(" / ");
+        orderItems.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          originalPrice: product.compareAt ?? undefined,
+          image: product.image,
+          quantity: item.quantity,
+          ...(variantLabel ? { variant: variantLabel } : {}),
+          lineTotal: product.price * item.quantity,
+        });
+      }
+
+      const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const orderId = `TB-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${randomUUID().slice(0, 8).toUpperCase()}`;
+      const order = {
+        id: orderId,
+        idempotencyKey,
+        customer: {
+          name: customer.name.trim(),
+          email: normalizeCustomerEmail(customer.email),
+          phone: customer.phone.trim(),
+        },
+        shippingAddress: {
+          address: shippingAddress.address.trim(),
+          apartment: shippingAddress.apartment.trim(),
+          city: shippingAddress.city.trim(),
+          state: shippingAddress.state.trim(),
+          pinCode: shippingAddress.pinCode,
+          country: "India",
+        },
+        items: orderItems,
+        subtotal,
+        shipping: 0,
+        discount: 0,
+        total: subtotal,
+        payment: { method: paymentMethod, status: "Simulated" },
+        paymentMode: "test" as const,
+        status: "Pending" as const,
+      };
+      try {
+        return res.status(201).json(await createOrder(order));
+      } catch (error) {
+        if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+          const duplicate = await findOrderByIdempotencyKey(idempotencyKey);
+          if (duplicate) return res.json(duplicate);
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error("Test checkout order creation failed", error);
+      return res.status(500).json({ error: "Unable to place the test order right now" });
+    }
   });
   app.patch("/api/orders/:id", async (req, res) => {
     try {

@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "./api";
 
-export type CategoryChoice = { value: string; label: string; image?: string };
-export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<string, CategoryChoice[]> };
+export type CategoryChoice = { value: string; label: string; image?: string; isVisible?: boolean };
+export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<string, CategoryChoice[]>; loaded?: boolean };
+type LoadedCategoryHierarchy = CategoryHierarchy & { loaded: boolean };
 
 export const defaultCategoryHierarchy: CategoryHierarchy = {
   main: [
     { value: "cinema", label: "Cinema", image: "/products/cinema.png" },
-    // Temporarily hidden from the storefront; category data remains available for later.
-    // { value: "sports", label: "Sports", image: "/products/sports.png" },
-    // { value: "games", label: "Games", image: "/products/games.png" },
-    // { value: "motorsports", label: "MotoSports", image: "/products/motosports.jpg" },
   ],
   subcategories: {
     cinema: [
@@ -38,10 +35,14 @@ export const defaultCategoryHierarchy: CategoryHierarchy = {
 };
 
 export function getStorefrontCategoryHierarchy(hierarchy: CategoryHierarchy): CategoryHierarchy {
-  const main = hierarchy.main.filter((category) => category.value === "cinema");
+  const main = hierarchy.main.filter((category) => category.isVisible !== false);
   return {
+    ...hierarchy,
     main,
-    subcategories: Object.fromEntries(main.map(({ value }) => [value, hierarchy.subcategories[value] || []])),
+    subcategories: Object.fromEntries(main.map(({ value }) => [
+      value,
+      (hierarchy.subcategories[value] || []).filter((subcategory) => subcategory.isVisible !== false),
+    ])),
   };
 }
 
@@ -74,8 +75,19 @@ function fromApiDocuments(responseBody: ApiCategoryResponse): CategoryHierarchy 
   }
 
   return {
-    main: documents.map(({ value, label, image }) => ({ value, label, image })),
-    subcategories: Object.fromEntries(documents.map((category) => [category.value, category.subcategories || []])),
+    main: documents.map(({ value, label, image, isVisible }) => ({
+      value,
+      label,
+      image,
+      isVisible: isVisible !== false,
+    })),
+    subcategories: Object.fromEntries(documents.map((category) => [
+      category.value,
+      (category.subcategories || []).map((subcategory) => ({
+        ...subcategory,
+        isVisible: subcategory.isVisible !== false,
+      })),
+    ])),
   } satisfies CategoryHierarchy;
 }
 
@@ -91,8 +103,17 @@ async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE"
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) {
-    const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
-    throw new Error(details?.error || "Category request failed");
+    const responseText = await response.text();
+    let details: { error?: string } | undefined;
+    try {
+      details = JSON.parse(responseText) as { error?: string };
+    } catch {
+      details = undefined;
+    }
+    const serverMessage = response.headers.get("content-type")?.includes("text/plain")
+      ? responseText.trim()
+      : "";
+    throw new Error(details?.error || serverMessage || `Category request failed (HTTP ${response.status})`);
   }
   return response.json();
 }
@@ -100,6 +121,10 @@ async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE"
 function cacheHierarchy(hierarchy: CategoryHierarchy, notify = true) {
   window.localStorage.setItem(CATEGORY_HIERARCHY_KEY, JSON.stringify(hierarchy));
   if (notify) window.dispatchEvent(new Event("tribull-category-hierarchy-updated"));
+}
+
+export function publishCategoryHierarchy(hierarchy: CategoryHierarchy) {
+  cacheHierarchy(hierarchy);
 }
 
 export function readCategoryHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
@@ -195,6 +220,10 @@ export function updateCategory(value: string, changes: Partial<CategoryChoice>) 
   return requestCategory(`/api/categories/${encodeURIComponent(value)}`, "PATCH", changes);
 }
 
+export function updateCategoryVisibility(value: string, isVisible: boolean) {
+  return requestCategory(`/api/categories/${encodeURIComponent(value)}/visibility`, "PATCH", { isVisible });
+}
+
 export function deleteCategory(value: string) {
   return requestCategory(`/api/categories/${encodeURIComponent(value)}`, "DELETE");
 }
@@ -207,23 +236,39 @@ export function updateSubcategory(parent: string, value: string, changes: Partia
   return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}`, "PATCH", changes);
 }
 
+export function updateSubcategoryVisibility(parent: string, value: string, isVisible: boolean) {
+  return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}/visibility`, "PATCH", { isVisible });
+}
+
 export function deleteSubcategory(parent: string, value: string) {
   return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}`, "DELETE");
 }
 
 export function useCategoryHierarchy(fallback: CategoryHierarchy) {
   const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => fallback);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const syncHierarchy = () => setHierarchy(readCachedHierarchy(fallback));
-    void fetchCategoryHierarchy(fallback).then(setHierarchy);
+    const syncHierarchy = () => {
+      setHierarchy(readCachedHierarchy(fallback));
+      setLoaded(true);
+    };
+    const syncStoredHierarchy = (event: StorageEvent) => {
+      if (event.key === CATEGORY_HIERARCHY_KEY) syncHierarchy();
+    };
+    void loadCategoryHierarchy().then((next) => {
+      setHierarchy(next);
+      setLoaded(true);
+    }).catch(() => {
+      setLoaded(false);
+    });
     window.addEventListener("tribull-category-hierarchy-updated", syncHierarchy);
-    window.addEventListener("storage", syncHierarchy);
+    window.addEventListener("storage", syncStoredHierarchy);
     return () => {
       window.removeEventListener("tribull-category-hierarchy-updated", syncHierarchy);
-      window.removeEventListener("storage", syncHierarchy);
+      window.removeEventListener("storage", syncStoredHierarchy);
     };
   }, []);
 
-  return hierarchy;
+  return { ...hierarchy, loaded } satisfies LoadedCategoryHierarchy;
 }

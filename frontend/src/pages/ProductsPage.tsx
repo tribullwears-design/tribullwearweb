@@ -7,10 +7,9 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
-import { defaultProducts, type Product } from "../../../shared/products";
+import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
-import { getShowcaseProductHoverImage } from "../lib/storefrontProductImage";
 
 export type { Product } from "../../../shared/products";
 
@@ -23,8 +22,6 @@ const categories: { id: ProductCategory; label: string; icon: string }[] = [
   { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
-
-export const products: Product[] = defaultProducts;
 
 const formatPrice = (price: number) => `₹${price.toLocaleString("en-IN")}`;
 
@@ -39,7 +36,7 @@ function readStorage<T>(key: string, fallback: T): T {
 
 export default function ProductsPage() {
   const [, setLocation] = useLocation();
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(products);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
@@ -190,24 +187,22 @@ export default function ProductsPage() {
           {visibleProducts.map((product) => {
             const isWishlisted = wishlist.includes(product.id);
             const isAdded = addedProduct === product.id;
-            const hoverImage = getShowcaseProductHoverImage(product.image);
             return (
               <article
                 className="catalog-product-card"
                 key={product.id}
                 role="link"
                 tabIndex={0}
-                onClick={() => setLocation(`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`)}
+                onClick={() => setLocation(`/product/${encodeURIComponent(product.id)}`)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setLocation(`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(product.price)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`);
+                    setLocation(`/product/${encodeURIComponent(product.id)}`);
                   }
                 }}
               >
                 <div className="catalog-product-card__image">
                   <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
-                  {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" /> : null}
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}

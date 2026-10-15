@@ -14,10 +14,11 @@ describe("product search", () => {
     expect(matchesProductSearch(product("classic-hoodie"), "tshirt")).toBe(false);
   });
 
-  it("provides 8 Oversized and 8 Hoodie products for search", () => {
+  it("keeps every catalog product searchable without supplementing static records", () => {
     const searchableProducts = getSearchableProducts(defaultProducts);
 
-    expect(searchableProducts).toHaveLength(16);
+    expect(searchableProducts).toHaveLength(defaultProducts.length);
+    expect(searchableProducts.filter((product) => getProductSearchCategory(product) === "round-neck")).toHaveLength(4);
     expect(searchableProducts.filter((product) => getProductSearchCategory(product) === "oversized")).toHaveLength(8);
     expect(searchableProducts.filter((product) => getProductSearchCategory(product) === "hoodie")).toHaveLength(8);
   });
@@ -41,10 +42,11 @@ describe("product search", () => {
     expect(hoodieProducts.every((product) => getProductSearchCategory(product) === "hoodie")).toBe(true);
   });
 
-  it("fills existing catalogs with missing default hoodie products up to eight", () => {
+  it("does not fill database-backed search results with static hoodie defaults", () => {
     const existingProducts = defaultProducts.filter((product) => getProductSearchCategory(product) === "hoodie").slice(0, 4);
     const searchProducts = getSearchableProducts(existingProducts);
 
-    expect(searchProducts.filter((product) => getProductSearchCategory(product) === "hoodie")).toHaveLength(8);
+    expect(searchProducts.filter((product) => getProductSearchCategory(product) === "hoodie")).toHaveLength(4);
+    expect(searchProducts.map((product) => product.id)).toEqual(existingProducts.map((product) => product.id));
   });
 });

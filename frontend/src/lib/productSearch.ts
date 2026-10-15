@@ -1,4 +1,4 @@
-import { defaultProducts, type Product } from "../../../shared/products";
+import type { Product } from "../../../shared/products";
 
 const categoryLabels: Record<string, string> = {
   "round-neck": "Round Neck",
@@ -15,23 +15,16 @@ function normalizeCategory(value: string) {
   return normalizeSearchText(value);
 }
 
-export function getProductSearchCategory(product: Product): "oversized" | "hoodie" | null {
+export function getProductSearchCategory(product: Product): string {
   const category = normalizeCategory(product.category);
+  if (category.includes("roundneck")) return "round-neck";
   if (category.includes("oversized") || category.includes("acidwash")) return "oversized";
   if (category.includes("hoodie")) return "hoodie";
-  return null;
+  return product.category;
 }
 
 export function getSearchableProducts(catalogProducts: Product[]) {
-  const products = catalogProducts.filter((product) => getProductSearchCategory(product) !== null);
-  const hoodieCount = products.filter((product) => getProductSearchCategory(product) === "hoodie").length;
-  if (hoodieCount >= 8) return products;
-
-  const productIds = new Set(products.map((product) => product.id));
-  const supplementalHoodies = defaultProducts.filter(
-    (product) => getProductSearchCategory(product) === "hoodie" && !productIds.has(product.id),
-  );
-  return [...products, ...supplementalHoodies.slice(0, 8 - hoodieCount)];
+  return catalogProducts;
 }
 
 export function matchesProductSearch(product: Product, query: string) {
@@ -41,7 +34,7 @@ export function matchesProductSearch(product: Product, query: string) {
     category,
     categoryLabels[category] || "",
     category === "acid-oversized" ? "acid wash acidwash washed" : "",
-    searchableCategory === "oversized" || category === "round-neck"
+    searchableCategory === "oversized" || searchableCategory === "round-neck"
       ? "tshirt t shirt tee"
       : "",
     searchableCategory === "oversized" ? "oversized acid wash acidwash" : "",

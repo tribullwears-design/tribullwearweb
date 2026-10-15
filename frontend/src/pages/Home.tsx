@@ -6,9 +6,10 @@ import { Link, useLocation } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
-import { getShowcaseProductHoverImage, getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, refreshProducts } from "../lib/products";
-import type { Product } from "../../../shared/products";
+import { getShowcaseProductImage } from "../lib/storefrontProductImage";
+import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
+import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
+import type { StorefrontProduct } from "../lib/products";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -18,31 +19,6 @@ const brandAssets = {
   games: "/products/games.png",
   motorsports: "/products/motosports.jpg",
 };
-
-const productImages = {
-  backBlack: "/products/back-black.png",
-  frontWhite: "/products/front-white.png",
-  hangerWhite: "/products/hanger-white.png",
-  flatWhite: "/products/flat-white.png",
-};
-
-const newArrivals = [
-  [productImages.frontWhite, "Spider Web Tee", "₹1,519"],
-  [productImages.hangerWhite, "Classic Spider Tee", "₹1,739"],
-  [productImages.flatWhite, "Graphic Cotton Tee", "₹1,599"],
-  [productImages.backBlack, "Oversized Spider Tee", "₹2,499"],
-  [productImages.frontWhite, "Premium Spider Tee", "₹1,899"],
-  [productImages.hangerWhite, "Vintage Spider Print", "₹1,649"],
-];
-
-const bestSelling = [
-  [productImages.backBlack, "Spider Back Print Tee", "₹1,449"],
-  [productImages.frontWhite, "Spider Web Front Tee", "₹1,559"],
-  [productImages.flatWhite, "Swinging Legends Tee", "₹1,369"],
-  [productImages.hangerWhite, "Spider Graphic Tee", "₹1,669"],
-  [productImages.flatWhite, "Dark Spider Collection", "₹1,799"],
-  [productImages.backBlack, "Classic Spider Heritage", "₹1,929"],
-];
 
 const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${encodeURIComponent(message)}`;
 
@@ -90,7 +66,6 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
   const [, setLocation] = useLocation();
   const [isOpening, setIsOpening] = useState(false);
   const openingTimer = useRef<number | null>(null);
-  const hoverImage = getShowcaseProductHoverImage(item[0]);
 
   useEffect(() => () => {
     if (openingTimer.current !== null) window.clearTimeout(openingTimer.current);
@@ -119,12 +94,11 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
     <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
       <article
         ref={ref}
-        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null, hoverImage ? "has-tap-preview" : null)}
+        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null)}
         style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
       >
         <div className="product-card__image">
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
-          {hoverImage ? <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="eager" /> : null}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -135,7 +109,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
 export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -215,44 +189,45 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  const productLink = (product: Product) => `/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(`₹${product.price.toLocaleString("en-IN")}`)}&originalPrice=${encodeURIComponent(product.originalPrice ?? "")}&image=${encodeURIComponent(product.image)}`;
-  const arrivalCards = catalogProducts.length
-    ? catalogProducts.slice(0, 6).map((product) => ({
+  const productLink = (product: StorefrontProduct) => `/product/${encodeURIComponent(product.id)}`;
+  const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : [];
+  const arrivalCards = getNewArrivals(eligibleProducts, hierarchy).map((product) => ({
+    item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
+    href: productLink(product),
+    originalPrice: product.originalPrice,
+  }));
+  const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
       href: productLink(product),
       originalPrice: product.originalPrice,
-    }))
-    : newArrivals.map((item, index) => ({
-      item: [getShowcaseProductImage(index), item[1], item[2]],
-      href: `/product/hollywood-${index}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(index))}`,
-      originalPrice: undefined,
-    }));
-  const bestSellingCards = catalogProducts.length
-    ? [...catalogProducts].sort((first, second) => second.sold - first.sold).slice(0, 6).map((product) => ({
-      item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-      href: productLink(product),
-      originalPrice: product.originalPrice,
-    }))
-    : bestSelling.map((item, index) => ({
-      item: [getShowcaseProductImage(index), item[1], item[2]],
-      href: `/product/hollywood-${index + 10}?name=${encodeURIComponent(item[1])}&price=${encodeURIComponent(item[2])}&image=${encodeURIComponent(getShowcaseProductImage(index))}`,
-      originalPrice: undefined,
     }));
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      <StorefrontHeader>
-        <nav className="category-nav" aria-label="Cinema categories">
-          <div className="category-nav__track">
-            {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
-              <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
-                <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
-                <span className="category-nav__label">{label}</span>
-              </a>
-            ))}
-          </div>
-        </nav>
-      </StorefrontHeader>
+      <div className="ticker" aria-label="Announcement">
+        <div className="ticker__track">
+          {Array.from({ length: 8 }).map((_, index) => (
+            <span key={index}>100% COTTON.<b>SHOP NOW</b><i>✦</i></span>
+          ))}
+        </div>
+      </div>
+
+      <header className="site-header">
+        <MobileCategoryMenu />
+        <Wordmark />
+        <HeaderActions />
+      </header>
+
+      {hierarchy.loaded && hierarchy.main.some((category) => category.value === "cinema") && <nav className="category-nav" aria-label="Cinema categories">
+        <div className="category-nav__track">
+          {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
+            <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
+              <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
+              <span className="category-nav__label">{label}</span>
+            </a>
+          ))}
+        </div>
+      </nav>}
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
@@ -283,7 +258,7 @@ export default function Home() {
                 <Reveal variant="left"><div><p className="eyebrow"></p><h2>New Arrivals</h2></div></Reveal>
               </div>
             </Reveal>
-            <div className="product-grid">
+            <div className="product-grid product-grid--featured">
               {arrivalCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
                   item={item}
@@ -305,7 +280,7 @@ export default function Home() {
                 <Reveal variant="left"><div><p className="eyebrow"></p><h2>Best Selling</h2></div></Reveal>
               </div>
             </Reveal>
-            <div className="product-grid product-grid--image-only">
+            <div className="product-grid product-grid--image-only product-grid--featured">
               {bestSellingCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
                   item={item}

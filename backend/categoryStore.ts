@@ -5,7 +5,8 @@ export type CategoryDocument = {
   value: string;
   label: string;
   image?: string;
-  subcategories: { value: string; label: string; image?: string }[];
+  isVisible?: boolean;
+  subcategories: { value: string; label: string; image?: string; isVisible?: boolean }[];
   position: number;
 };
 
@@ -49,10 +50,39 @@ async function ensureCategoryValueIndex(collection: Collection<CategoryDocument>
   await collection.createIndex({ value: 1 }, { unique: true });
 }
 
+let visibilityDefaultsPromise: Promise<void> | undefined;
+
+function ensureVisibilityDefaults(collection: Collection<CategoryDocument>) {
+  if (!visibilityDefaultsPromise) {
+    const migration = (async () => {
+      await collection.updateMany({ isVisible: { $exists: false } }, { $set: { isVisible: true } });
+      await collection.updateMany(
+        { "subcategories.isVisible": { $exists: false } },
+        { $set: { "subcategories.$[subcategory].isVisible": true } },
+        { arrayFilters: [{ "subcategory.isVisible": { $exists: false } }] },
+      );
+    })();
+    visibilityDefaultsPromise = migration.catch((error: unknown) => {
+      visibilityDefaultsPromise = undefined;
+      throw error;
+    });
+  }
+  return visibilityDefaultsPromise;
+}
+
 export async function listCategories() {
   const collection = await getCollection();
   if (await collection.countDocuments() === 0) await collection.insertMany(defaultCategories);
-  return collection.find({}, { projection: { _id: 0 } }).sort({ position: 1, label: 1 }).toArray();
+  await ensureVisibilityDefaults(collection);
+  const categories = await collection.find({}, { projection: { _id: 0 } }).sort({ position: 1, label: 1 }).toArray();
+  return categories.map((category) => ({
+    ...category,
+    isVisible: category.isVisible !== false,
+    subcategories: (category.subcategories || []).map((subcategory) => ({
+      ...subcategory,
+      isVisible: subcategory.isVisible !== false,
+    })),
+  }));
 }
 
 export async function replaceCategories(categories: CategoryDocument[]) {
@@ -66,7 +96,15 @@ export async function replaceCategories(categories: CategoryDocument[]) {
   await collection.deleteMany({ value: { $nin: categories.map((category) => category.value) } });
   for (let position = 0; position < categories.length; position += 1) {
     const category = categories[position];
-    await collection.replaceOne({ value: category.value }, { ...category, position }, { upsert: true });
+    await collection.replaceOne({ value: category.value }, {
+      ...category,
+      isVisible: category.isVisible !== false,
+      subcategories: (category.subcategories || []).map((subcategory) => ({
+        ...subcategory,
+        isVisible: subcategory.isVisible !== false,
+      })),
+      position,
+    }, { upsert: true });
   }
   return listCategories();
 }
@@ -77,7 +115,15 @@ export async function createCategory(category: Omit<CategoryDocument, "position"
   if (!category.value?.trim() || !category.label?.trim()) throw new Error("Category name is required");
   if (await collection.findOne({ value: category.value })) throw new CategoryConflictError("Duplicate category");
   const position = await collection.countDocuments();
-  const document = { ...category, subcategories: category.subcategories || [], position };
+  const document = {
+    ...category,
+    isVisible: category.isVisible !== false,
+    subcategories: (category.subcategories || []).map((subcategory) => ({
+      ...subcategory,
+      isVisible: subcategory.isVisible !== false,
+    })),
+    position,
+  };
   await collection.insertOne(document);
   return document;
 }
@@ -86,6 +132,24 @@ export async function updateCategory(value: string, changes: Partial<Pick<Catego
   const collection = await getCollection();
   const result = await collection.findOneAndUpdate({ value }, { $set: changes }, { returnDocument: "after", projection: { _id: 0 } });
   return result;
+}
+
+export async function setCategoryVisibility(value: string, isVisible: boolean) {
+  const collection = await getCollection();
+  return collection.findOneAndUpdate(
+    { value },
+    { $set: { isVisible } },
+    { returnDocument: "after", projection: { _id: 0 } },
+  );
+}
+
+export async function setSubcategoryVisibility(parent: string, value: string, isVisible: boolean) {
+  const collection = await getCollection();
+  return collection.findOneAndUpdate(
+    { value: parent, "subcategories.value": value },
+    { $set: { "subcategories.$.isVisible": isVisible } },
+    { returnDocument: "after", projection: { _id: 0 } },
+  );
 }
 
 export async function deleteCategory(value: string) {
@@ -111,7 +175,7 @@ export async function addSubcategory(parent: string, item: CategoryDocument["sub
   if (!value || !label) throw new Error("Subcategory name is required");
 
   const collection = await getCollection();
-  const subcategory = { ...item, value, label };
+  const subcategory = { ...item, value, label, isVisible: item.isVisible !== false };
   const result = await collection.findOneAndUpdate(
     {
       value: parent,

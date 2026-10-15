@@ -4,7 +4,7 @@ import { Search } from "lucide-react";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { useScrollReveal } from "../hooks/useScrollReveal";
-import { defaultProducts, type Product } from "../../../shared/products";
+import type { Product } from "../../../shared/products";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
@@ -12,29 +12,19 @@ import { getProductSearchCategory, getSearchableProducts, matchesProductSearch }
 type SortOrder = "relevance" | "price-low" | "price-high" | "newest";
 type SearchCategory = "oversized" | "hoodie";
 
-const searchProductImages = {
-  oversized: [
-    { primary: "/products/Black T-Shirt Front and Back Mockup.png", hover: "/products/B1.jpg.jpeg" },
-    { primary: "/products/Blank White T-Shirt Front and Back Views.png", hover: "/products/W1.jpg.jpeg" },
-  ],
-  hoodie: [
-    { primary: "/products/Plain White Hoodies, Front and Back.png", hover: "/products/Black Hoodie Front and Back Mockup.png" },
-    { primary: "/products/Black Hoodie Front and Back Mockup.png", hover: "/products/Plain White Hoodies, Front and Back.png" },
-  ],
-} as const;
-
 function SearchResultCard({
   product,
   index,
 }: {
-  product: Product & { displayImage: string; hoverImage: string };
+  product: Product;
   index: number;
 }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
+  const category = getProductSearchCategory(product);
 
   return (
     <Link
-      href={`/product/${encodeURIComponent(product.id)}?name=${encodeURIComponent(product.name)}&price=${encodeURIComponent(`₹${product.price}`)}&originalPrice=${encodeURIComponent(resolveOriginalPrice(product) ?? "")}&image=${encodeURIComponent(product.displayImage)}`}
+      href={`/product/${encodeURIComponent(product.id)}`}
       className="search-page__card-link"
     >
       <article
@@ -43,11 +33,10 @@ function SearchResultCard({
         style={{ transitionDelay: `${0.08 * index}s` }}
       >
         <div className="search-page__image">
-          <img src={product.displayImage} alt={product.name} className="product-image-primary" loading="lazy" />
-          <img src={product.hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" />
+          <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
         </div>
         <div className="search-page__card-info">
-          <span>{getProductSearchCategory(product) === "oversized" ? "Oversized" : "Hoodie"}</span>
+          <span>{category.replace(/-/g, " ")}</span>
           <h2>{product.name}</h2>
           <ProductPrice
             sellingPrice={product.price}
@@ -61,15 +50,8 @@ function SearchResultCard({
 }
 
 export default function SearchResultsPage() {
-  const [, setLocation] = useLocation();
-  const initialSearchParams = new URLSearchParams(window.location.search);
-  const [query, setQuery] = useState(() => initialSearchParams.get("q")?.trim() || "");
-  const [searchInput, setSearchInput] = useState(query);
-  const [selectedCategory, setSelectedCategory] = useState<SearchCategory | null>(() => {
-    const category = initialSearchParams.get("category");
-    return category === "oversized" || category === "hoodie" ? category : null;
-  });
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(defaultProducts);
+  const query = new URLSearchParams(window.location.search).get("q")?.trim() || "";
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOrder>("relevance");
 
   useEffect(() => {
@@ -146,24 +128,11 @@ export default function SearchResultsPage() {
       if (sortOrder === "newest") return second.created - first.created;
       return second.sold - first.sold;
     });
-  }, [supportedProducts, query, selectedCategory, sortOrder]);
-  const productsWithImages = matchingProducts.map((product, index) => {
-    const category = getProductSearchCategory(product);
-    const variantIndex = matchingProducts
-      .slice(0, index)
-      .filter((previousProduct) => getProductSearchCategory(previousProduct) === category)
-      .length % 2;
-
-    return {
-      ...product,
-      displayImage: category ? searchProductImages[category][variantIndex].primary : product.image,
-      hoverImage: category ? searchProductImages[category][variantIndex].hover : product.image,
-    };
-  });
-  const productsByCategory = (["oversized", "hoodie"] as const).map((category) => ({
+  }, [supportedProducts, query, sortOrder]);
+  const productsByCategory = Array.from(new Set(matchingProducts.map(getProductSearchCategory)), (category) => ({
     category,
-    products: productsWithImages.filter((product) => getProductSearchCategory(product) === category),
-  })).filter(({ category, products }) => products.length > 0 && (!selectedCategory || category === selectedCategory));
+    products: matchingProducts.filter((product) => getProductSearchCategory(product) === category),
+  }));
 
   return (
     <div className="search-page">
@@ -202,8 +171,8 @@ export default function SearchResultsPage() {
           {matchingProducts.length ? (
             <div className="search-page__groups">
               {productsByCategory.map(({ category, products }) => (
-                <section className="search-page__group" key={category} aria-label={`${category === "oversized" ? "Oversized" : "Hoodie"} products`}>
-                  <h2>{category === "oversized" ? "Oversized" : "Hoodie"}</h2>
+                <section className="search-page__group" key={category} aria-label={`${category.replace(/-/g, " ")} products`}>
+                  <h2>{category.replace(/-/g, " ")}</h2>
                   <div className="search-page__grid">
                     {products.map((product, index) => (
                       <SearchResultCard key={product.id} product={product} index={index} />

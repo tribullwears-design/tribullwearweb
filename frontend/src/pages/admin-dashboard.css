@@ -195,9 +195,9 @@
 .admin-category-thumb--empty { display: grid; place-items: center; color: #9aa6a9; font-size: 8px; text-align: center; }
 .admin-category-image-field .admin-small-button { position: relative; overflow: hidden; cursor: pointer; }
 .admin-category-list { display: flex; flex-direction: column; max-width: 760px; }
-.admin-category-list .admin-management-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 58px; }
+.admin-category-list .admin-management-row { display: grid; grid-template-columns: 48px minmax(0, 1fr) auto auto auto; align-items: center; gap: 12px; min-height: 58px; }
 .admin-category-list .admin-management-row:not(:has(.admin-subcategory-edit-input)) .admin-category-image-field--controls > :not(.admin-category-thumb), .admin-subcategory-list .admin-subcategory-row:not(:has(.admin-subcategory-edit-input)) .admin-category-image-field--controls > :not(.admin-category-thumb), .admin-chip-list .admin-management-row:not(:has(.admin-subcategory-edit-input)) .admin-category-image-field--controls > :not(.admin-category-thumb) { display: none; }
-.admin-subcategory-row { display: grid; grid-template-columns: 100px 48px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; min-height: 58px; }
+.admin-subcategory-row { display: grid; grid-template-columns: 100px 48px minmax(0, 1fr) auto auto auto; align-items: center; gap: 10px; min-height: 58px; }
 .admin-subcategory-row .admin-small-button { margin-left: 0; }
 .admin-subcategory-row--editing { grid-template-columns: 48px minmax(120px, 160px) minmax(180px, 1fr) auto auto auto; min-height: 72px; gap: 12px; }
 .admin-subcategory-row--editing .admin-category-image-field { width: 48px; }

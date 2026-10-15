@@ -10,14 +10,17 @@ describe("defaultCategoryHierarchy", () => {
     expect(defaultCategoryHierarchy.subcategories.motorsports).toHaveLength(2);
   });
 
-  it("hides non-Cinema categories from storefront hierarchies without deleting their data", () => {
+  it("filters hidden categories and subcategories without deleting their data", () => {
     const hierarchy = getStorefrontCategoryHierarchy({
       main: [
         { value: "cinema", label: "Cinema" },
-        { value: "sports", label: "Sports" },
+        { value: "sports", label: "Sports", isVisible: false },
       ],
       subcategories: {
-        cinema: [{ value: "kollywood", label: "Kollywood" }],
+        cinema: [
+          { value: "kollywood", label: "Kollywood" },
+          { value: "tollywood", label: "Tollywood", isVisible: false },
+        ],
         sports: [{ value: "cricket", label: "Cricket" }],
       },
     });
@@ -26,5 +29,17 @@ describe("defaultCategoryHierarchy", () => {
     expect(hierarchy.subcategories).toEqual({
       cinema: [{ value: "kollywood", label: "Kollywood" }],
     });
+  });
+
+  it("treats visibility fields missing from legacy records as visible", () => {
+    const hierarchy = getStorefrontCategoryHierarchy({
+      main: [{ value: "sports", label: "Sports" }],
+      subcategories: {
+        sports: [{ value: "cricket", label: "Cricket" }],
+      },
+    });
+
+    expect(hierarchy.main.map((category) => category.value)).toEqual(["sports"]);
+    expect(hierarchy.subcategories.sports).toEqual([{ value: "cricket", label: "Cricket" }]);
   });
 });
