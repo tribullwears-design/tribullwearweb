@@ -4,6 +4,10 @@
 
 The backend and its dependencies are part of this repository-root pnpm project; do not set Render's root directory to `backend/`.
 
+Render serves the backend API only. `GET /health` is the health-check endpoint, `/api/*` serves the backend routes, and other paths return a JSON 404. The Vite storefront remains deployed separately on Vercel; the backend does not serve `dist/public`.
+
+After pushing this change, deploy the latest commit to Render and set its health-check path to `/health`. No Vercel frontend or rewrite changes are needed; keep `CATEGORY_API_URL` pointed at the Render service and rebuild Vercel only when that value changes.
+
 - **Root Directory:** repository root (`.`; leave the field blank if Render uses the repository root by default)
 - **Build Command:** `pnpm install --frozen-lockfile && pnpm run build`
 - **Start Command:** `pnpm run start`

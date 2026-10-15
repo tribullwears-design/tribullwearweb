@@ -3,7 +3,6 @@ import { createServer } from "http";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "path";
-import { fileURLToPath } from "url";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, findOrderByIdempotencyKey, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
@@ -47,9 +46,6 @@ import {
   validateCustomerAuthConfiguration,
   verifyGoogleCredential,
 } from "./authService.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const envPaths = [
@@ -668,17 +664,8 @@ async function startServer() {
     res.status(status).json({ error: message });
   });
 
-  // Serve the storefront from `/`; registered API routes and API errors take precedence.
-  const staticPath =
-    process.env.NODE_ENV === "production"
-      ? path.resolve(__dirname, "public")
-      : path.resolve(__dirname, "..", "dist", "public");
-
-  app.use(express.static(staticPath));
-
-  // Handle client-side routing - serve index.html for all routes
-  app.get("*", (_req, res) => {
-    res.sendFile(path.join(staticPath, "index.html"));
+  app.use((_req, res) => {
+    res.status(404).json({ error: "Route not found" });
   });
 
   try {
