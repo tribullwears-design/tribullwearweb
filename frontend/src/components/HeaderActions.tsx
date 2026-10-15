@@ -1,13 +1,10 @@
 import { ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import type { Product } from "../../../shared/products";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
-
-type SearchCategory = "oversized" | "hoodie";
 
 type Cart = Record<string, number>;
 type CartItem = { productId?: string; name: string; price: number; image: string; variant?: string };
@@ -106,7 +103,7 @@ function saveCartItems(items: CartItems) {
 export default function HeaderActions() {
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [query, setQuery] = useState("");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
@@ -212,6 +209,24 @@ export default function HeaderActions() {
     };
   }, []);
 
+  useEffect(() => {
+    document.body.classList.toggle("header-overlay-open", overlay !== null);
+    return () => document.body.classList.remove("header-overlay-open");
+  }, [overlay]);
+
+  useEffect(() => {
+    const body = document.body;
+    body.classList.toggle("header-login-overlay-open", isLoginPanelOpen);
+    if (isLoginPanelOpen) {
+      body.style.setProperty("--header-scrollbar-compensation", `${window.innerWidth - document.documentElement.clientWidth}px`);
+    } else {
+      body.style.removeProperty("--header-scrollbar-compensation");
+    }
+    return () => {
+      body.classList.remove("header-login-overlay-open");
+      body.style.removeProperty("--header-scrollbar-compensation");
+    };
+  }, [isLoginPanelOpen]);
   useEffect(() => () => {
     if (loginCloseTimerRef.current !== undefined) window.clearTimeout(loginCloseTimerRef.current);
     if (resetRedirectTimerRef.current !== undefined) window.clearTimeout(resetRedirectTimerRef.current);
@@ -290,16 +305,6 @@ export default function HeaderActions() {
     setLoginSuccess("");
     setOverlay("account");
   };
-
-  useEffect(() => {
-    const openFooterAccount = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: AccountSection }>).detail?.section;
-      openAccount();
-      if (section && authUser.isAuthenticated && authUser.username) setAccountSection(section);
-    };
-    window.addEventListener("tribull-open-account", openFooterAccount);
-    return () => window.removeEventListener("tribull-open-account", openFooterAccount);
-  }, [authUser]);
 
   const beginProfileEdit = () => {
     setProfileDraft({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
@@ -900,31 +905,12 @@ export default function HeaderActions() {
     window.dispatchEvent(new Event("tribull-wishlist-updated"));
   };
 
-  const openSearch = () => {
-    setSearchQuery("");
-    setOverlay("search");
-  };
-
-  const submitHeaderSearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const query = searchQuery.trim();
-    setOverlay(null);
-    setLocation(query ? `/search?q=${encodeURIComponent(query)}` : "/search");
-  };
-
-  const openCategorySearch = (category: SearchCategory) => {
-    const query = searchQuery.trim();
-    const searchParams = new URLSearchParams({ category });
-    if (query) searchParams.set("q", query);
-    setOverlay(null);
-    setLocation(`/search?${searchParams.toString()}`);
-    window.dispatchEvent(new CustomEvent("tribull-search-category-selected", { detail: { category, query } }));
-  };
+  const addSearchProductToCart = (product: Product, source?: HTMLElement) => updateCart(product.id, (cart[product.id] || 0) + 1, product, source);
 
   return (
     <>
       <div className="header-actions">
-        <button className="icon-button" type="button" aria-label="Search" onClick={openSearch}><Search size={19} strokeWidth={1.5} /></button>
+        <button className="icon-button" type="button" aria-label="Search" onClick={() => setOverlay("search")}><Search size={19} strokeWidth={1.5} /></button>
         <button className="icon-button" type="button" aria-label={authUser.isAuthenticated ? `Account for ${authUser.username}` : "Account"} onClick={openAccount}>
           {authUser.isAuthenticated && authUser.username ? <span className="header-user-avatar">{authUser.profileImage ? <img src={authUser.profileImage} alt="" /> : authUser.username.charAt(0).toUpperCase()}</span> : <User size={19} strokeWidth={1.5} />}
         </button>
@@ -932,38 +918,12 @@ export default function HeaderActions() {
         <button className="icon-button header-cart-button" type="button" aria-label={`${cartCount} items in cart`} onClick={() => setOverlay("cart")}><ShoppingBag size={19} strokeWidth={1.5} />{cartCount > 0 && <span>{cartCount}</span>}</button>
       </div>
 
-      {overlay && typeof document !== "undefined" && createPortal(
-        <>
-      <button className={`header-overlay${isLoginPanelOpen ? " header-overlay--login" : ""}${loginClosing ? " is-closing" : ""}`} type="button" aria-label="Close panel" onClick={closeOverlay} />
+      {overlay && <button className={`header-overlay${isLoginPanelOpen ? " header-overlay--login" : ""}${loginClosing ? " is-closing" : ""}`} type="button" aria-label="Close panel" onClick={closeOverlay} />}
       {overlay === "search" && (
-        <section className="header-panel header-search-category-panel" role="dialog" aria-modal="true" aria-label="Choose a search category">
-          <div className="header-search-category-panel__heading">
-            <h2>Search</h2>
-            <button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button>
-          </div>
-          <form className="header-search-category-panel__form" onSubmit={submitHeaderSearch} role="search">
-            <Search size={18} aria-hidden="true" />
-            <input
-              aria-label="Search products or categories"
-              autoFocus
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search products or categories"
-            />
-            <button type="submit">Search</button>
-          </form>
-          <div className="header-search-category-panel__options">
-            {(["oversized", "hoodie"] as const).map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => openCategorySearch(category)}
-              >
-                <span>{category === "oversized" ? "Oversized" : "Hoodie"}</span>
-                <ArrowRight size={18} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
+        <section className="header-panel header-search-panel" aria-label="Search products">
+          <div className="header-panel__heading"><h2>Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
+          <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" /></label>
+          <div className="header-search-results">{searchResults.length ? searchResults.map((product) => <div className="header-search-result" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.category} · {formatPrice(product.price)}</span></div><button type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button></div>) : <p className="header-empty-state">No products found.</p>}</div>
         </section>
       )}
       {overlay === "account" && (
@@ -1279,9 +1239,6 @@ export default function HeaderActions() {
           <div className="header-panel__heading"><h2>Cart</h2><button type="button" aria-label="Close cart" onClick={closeOverlay}><X size={20} /></button></div>
           {cartEntries.length ? <><div className="header-cart-list">{cartEntries.map(([id, quantity]) => { const metadata = cartItems[id]; const product = products.find((item) => item.id === (metadata?.productId || id)); const item = product || metadata; if (!item) return null; const currentPrice = product?.price; const variant = metadata?.variant; return <div className="header-list-item header-cart-item" key={id}><img src={product?.image || item.image} alt={product?.name || item.name} /><div><strong>{product?.name || item.name}</strong>{variant && <span className="header-cart-variant">{variant}</span>}{typeof currentPrice === "number" ? <span>{formatPrice(currentPrice)} · <strong>{formatPrice(currentPrice * quantity)}</strong></span> : <span>Product unavailable</span>}<div className="header-quantity"><button type="button" onClick={() => updateCart(id, quantity - 1)} aria-label={`Decrease quantity of ${item.name}`}><Minus size={13} /></button><span>{quantity}</span><button type="button" onClick={() => updateCart(id, quantity + 1)} aria-label={`Increase quantity of ${item.name}`}><Plus size={13} /></button></div></div><button type="button" aria-label={`Remove ${item.name} from cart`} onClick={() => updateCart(id, 0)}><Trash2 size={15} /></button></div>; })}</div><div className="header-cart-total"><span>Total</span><strong>{formatPrice(cartTotal)}</strong></div><button className="header-checkout" type="button" onClick={() => { closeOverlay(); setLocation("/checkout"); }}>Checkout</button></> : <p className="header-empty-state">Your Cart is Empty</p>}
         </section>
-      )}
-        </>,
-        document.body,
       )}
     </>
   );

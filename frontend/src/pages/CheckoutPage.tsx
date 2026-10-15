@@ -2,6 +2,7 @@ import { ArrowLeft, CheckCircle2, Download, Minus, Plus, ShieldCheck, Trash2 } f
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
+import StorefrontHeader from "../components/StorefrontHeader";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";

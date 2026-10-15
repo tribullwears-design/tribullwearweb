@@ -3,6 +3,7 @@ import { Link, useParams } from "wouter";
 import { apiFetch } from "../lib/api";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -13,7 +14,6 @@ import ProductPrice from "../components/ProductPrice";
 export type CategoryProduct = {
   id: string;
   name: string;
-  category?: string;
   price: string;
   image: string;
   originalPrice?: number | null;
@@ -154,13 +154,10 @@ function ProductCard({ item, delay = 0, isWishlisted, onWishlist, onAddToCart, i
       <article
         ref={ref}
         className={`category-page__card category-cinema-product reveal-scale-in ${visible ? "reveal-visible" : ""} cursor-pointer hover:shadow-lg transition-shadow`}
-        style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
+        style={{ transitionDelay: `${delay}s` }}
       >
         <div className="category-catalog-card__image-wrap">
-          <img src={item.image} alt={item.name} className="category-page__image product-image-primary" />
-          {getShowcaseProductHoverImage(item.image) && (
-            <img src={getShowcaseProductHoverImage(item.image)} alt="" aria-hidden="true" className="category-page__image product-image-hover" />
-          )}
+          <img src={item.image} alt={item.name} className="category-page__image" />
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -170,41 +167,62 @@ function ProductCard({ item, delay = 0, isWishlisted, onWishlist, onAddToCart, i
           >
             <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
           </button>
-          <button
-            type="button"
-            className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(); }}
-            aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
-          >
-            {isAdded ? <Check size={17} /> : <ShoppingCart size={17} />}
-          </button>
         </div>
         <div className="category-page__meta">
           <div>
             <h2>{item.name}</h2>
             <ProductPrice sellingPrice={item.price} originalPrice={item.originalPrice} productName={item.name} />
           </div>
+          <button
+            type="button"
+            className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(event.currentTarget); }}
+            aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
+          >
+            {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
+          </button>
         </div>
       </article>
     </Link>
   );
 }
 
+type CatalogTab = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
+type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
+
 function GlobalNavigation() {
-  return <StorefrontHeader />;
+  return (
+    <div className="cinema-page-header">
+      <div className="cinema-marketbar" aria-label="Announcement">
+        <div className="cinema-marketbar__track">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <span key={i}>
+              <b>100% COTTON.</b> SHOP NOW
+              <i>✦</i>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <header className="site-header cinema-site-header">
+        <MobileCategoryMenu />
+        <a className="wordmark" href="/" aria-label="Tribull home">
+          <img src="/products/logo.png" alt="TRIBULL" />
+        </a>
+        <HeaderActions />
+      </header>
+    </div>
+  );
 }
 
 function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string; hierarchy: CategoryHierarchy }) {
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
-  const visibleSubcategories = definition.subcategories
-    .filter(({ slug }) => slug !== selectedSubcategory)
-    .slice(0, selectedSubcategory ? 5 : undefined);
 
   return (
     <nav className="category-nav cinema-category-nav" aria-label={`${definition.title} categories`}>
       <div className="category-nav__track">
-        {visibleSubcategories.map(({ label, slug, image }) => (
+        {definition.subcategories.map(({ label, slug, image }) => (
           <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>
             <span className="category-nav__image"><img src={image} alt="" /></span>
             <span className="category-nav__label">{label}</span>
@@ -215,20 +233,12 @@ function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string;
   );
 }
 
-type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
-type CatalogFilter = "oversized" | "hoodie";
-const catalogFilters: { id: CatalogFilter; label: string; icon: string }[] = [
+const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
+  { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
   { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
+  { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
-const hoodieProducts = defaultProducts.filter((product) => product.category === "hoodie");
-const hoodieColorVariants: CategoryProduct[] = hoodieProducts.slice(0, 4).map((product) => ({
-  id: `${product.id}-white`,
-  name: `${product.name} - White`,
-  category: product.category,
-  price: `₹${product.price.toLocaleString("en-IN")}`,
-  image: getShowcaseProductImage(3),
-}));
 
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
@@ -239,7 +249,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
   const [cart, setCart] = useState<Record<string, number>>(() => {
-    try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}") as Record<string, number>; } catch { return {}; }
+    try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
 
@@ -304,9 +314,11 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     return items;
   }, [storedCatalog, selectedTab, sort]);
 
+  const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
+  const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
   const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
-  const addToCart = (item: CategoryProduct) => {
+  const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
     const key = productKey(item);
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -317,38 +329,41 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     } catch {
       // Keep the existing quantity cart usable if metadata storage is unavailable.
     }
-    const nextCart = { ...cart, [key]: (cart[key] || 0) + 1 };
-    setCart(nextCart);
-    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
-    window.dispatchEvent(new Event("tribull-cart-updated"));
+    setCart((current) => {
+      const nextCart = { ...current, [key]: (current[key] || 0) + 1 };
+      window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+      window.dispatchEvent(new Event("tribull-cart-updated"));
+      return nextCart;
+    });
     setAddedProduct(key);
+    if (source) animateAddToCart(source, item.image);
     window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
 
   return (
     <>
       <div className="category-catalog-controls">
-        <div className="category-catalog-tabs" aria-label="Filter products by style">
-          {catalogFilters.map(({ id, label, icon }) => (
-            <button key={id} type="button" className={`category-catalog-tab ${filter === id ? "is-active" : ""}`} onClick={() => setFilter(id)} aria-pressed={filter === id}>
+        <div className="category-catalog-tabs" aria-label="Product categories">
+          {catalogTabs.map(({ id, label, icon }) => (
+            <button key={id} type="button" className={`category-catalog-tab ${selectedTab === id ? "is-active" : ""}`} onClick={() => setSelectedTab(id)} aria-pressed={selectedTab === id}>
               <img src={icon} alt="" />
               <span>{label}</span>
             </button>
           ))}
         </div>
-      </div>
-      <div className="category-catalog-toolbar">
-        <p>Showing: <strong>{filter}</strong> ({visibleCatalog.length})</p>
-        <label>
-          <span>Sort by:</span>
-          <select value={sort} onChange={(event) => setSort(event.target.value as CatalogSort)} aria-label="Sort products">
-            <option value="featured">Featured</option>
-            <option value="newest">Newest</option>
-            <option value="low">Price: Low to High</option>
-            <option value="high">Price: High to Low</option>
-            <option value="selling">Best Selling</option>
-          </select>
-        </label>
+        <div className="category-catalog-toolbar">
+          <p>Showing: <strong>{selectedLabel}</strong></p>
+          <label>
+            <span>Sort by:</span>
+            <select value={sort} onChange={(event) => setSort(event.target.value as CatalogSort)} aria-label="Sort products">
+              <option value="featured">Featured</option>
+              <option value="newest">Newest</option>
+              <option value="low">Price: Low to High</option>
+              <option value="high">Price: High to Low</option>
+              <option value="selling">Best Selling</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
         {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {

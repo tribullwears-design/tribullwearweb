@@ -3,7 +3,8 @@ import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-r
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
-import StorefrontHeader from "../components/StorefrontHeader";
+import MobileCategoryMenu from "../components/MobileCategoryMenu";
+import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
@@ -26,6 +27,14 @@ const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
+}
+
+function Wordmark({ inverse = false }: { inverse?: boolean }) {
+  return (
+    <a className={`wordmark ${inverse ? "wordmark--inverse" : ""}`} href="#top" aria-label="Tribull home">
+      <img src={brandAssets.logo} alt="TRIBULL" />
+    </a>
+  );
 }
 
 function Reveal({

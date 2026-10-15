@@ -57,6 +57,11 @@ export default function ProductDetailPage() {
   const [isAdded, setIsAdded] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [sizeError, setSizeError] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [pincodeFeedback, setPincodeFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({
+    kind: "idle",
+    message: "",
+  });
 
   useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
@@ -334,13 +339,31 @@ export default function ProductDetailPage() {
       return;
     }
 
-    if (!isAdded) addCurrentProductToCart();
-    setLocation("/checkout");
+    setPincodeFeedback({
+      kind: "success",
+      message: `Estimated delivery for ${numericPin}: 2–5 business days in this service area.`,
+    });
   };
 
   return (
     <div className="product-detail-page">
-      <StorefrontHeader />
+      <div className="product-detail-page__announcement" aria-label="Announcement">
+        <div className="product-detail-page__announcement-track">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <span key={index}>
+              100% cotton <b>shop now</b> <i>✦</i>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <header className="site-header" aria-label="Main nav">
+        <MobileCategoryMenu />
+        <a className="wordmark" href="/" aria-label="Tribull home">
+          <img src="/products/logo.png" alt="TRIBULL" />
+        </a>
+        <HeaderActions />
+      </header>
 
       <main className="product-detail-page__main">
         <div className="product-detail-page__shell">
@@ -401,34 +424,12 @@ export default function ProductDetailPage() {
               </p>
             )}
 
-            {isTShirtColorVariant ? (
-              <div className="product-detail-color-option">
-                <span>Colour: {activeColor}</span>
-                <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
-                  {tShirtColors.map((option) => (
-                    <button
-                      key={option.name}
-                      data-color={option.name}
-                      className={activeColor === option.name ? "is-selected" : ""}
-                      type="button"
-                      onClick={() => {
-                        setSelectedColor(option.name);
-                        setSelectedImageIndex(0);
-                      }}
-                      aria-label={`Select ${option.name} T-shirt`}
-                      aria-pressed={activeColor === option.name}
-                      title={option.name}
-                      style={{
-                        background: option.value,
-                        ...(option.name === "White"
-                          ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
-                          : {}),
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            <p className="product-detail-panel__description">{productDescription}</p>
+
+            <div className="product-detail-member-price">
+              <span>Member price <b>₹{memberPrice.toLocaleString("en-IN")}</b></span>
+              <small>Join the Tribull community for member-only savings.</small>
+            </div>
 
             {availableSizes.length > 0 && <div className="product-detail-option">
               <div className="product-detail-option__header">
@@ -541,6 +542,27 @@ export default function ProductDetailPage() {
               </button>
             </div>
 
+            <div className="product-detail-pincode">
+              <label htmlFor="product-pin">Delivery check</label>
+              <div className="product-detail-pincode__field">
+                <input
+                  id="product-pin"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pincode}
+                  placeholder="Enter 6-digit PIN"
+                  onChange={(event) => setPincode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                />
+                <button type="button" onClick={handlePincodeSubmit}>Check</button>
+              </div>
+              {pincodeFeedback.kind !== "idle" ? (
+                <p className={pincodeFeedback.kind === "success" ? "is-success" : "is-error"}>{pincodeFeedback.message}</p>
+              ) : (
+                <p className="product-detail-pincode__hint">Service checks are configured for supported delivery zones.</p>
+              )}
+            </div>
+
             <div className="product-detail-features" aria-label="Performance details">
               {[
                 { icon: ShieldCheck, label: "Premium quality" },
@@ -625,26 +647,6 @@ export default function ProductDetailPage() {
         </section>
       </main>
 
-      <section className="product-detail-reviews" id="product-reviews" aria-labelledby="product-reviews-title">
-        <h2 id="product-reviews-title">Sample customer reviews</h2>
-        <p className="product-detail-reviews__sample-note">Example reviews shown for preview.</p>
-        <div className="product-detail-reviews__list">
-          {sampleCustomerReviews.map((review) => (
-            <article className="product-detail-reviews__card" key={review.name}>
-              <div className="product-detail-reviews__card-header">
-                <strong>{review.name}</strong>
-                <span>Sample review</span>
-              </div>
-              <div className="product-detail-reviews__small-stars" aria-label="5 out of 5 stars">
-                {[1, 2, 3, 4, 5].map((star) => <Star key={star} size={15} fill="currentColor" />)}
-              </div>
-              <h3>{review.title}</h3>
-              <p>{review.comment}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
       {isSizeGuideOpen ? (
         <div className="product-detail-guides" aria-modal="true" role="dialog" aria-label="Size guide">
           <div className="product-detail-guides__panel">
@@ -673,7 +675,7 @@ export default function ProductDetailPage() {
         </div>
       ) : null}
 
-      <div className="product-detail-sticky-cart" aria-label="Quick checkout">
+      <div className="product-detail-sticky-cart" aria-label="Quick add to cart">
         <div>
           <ProductPrice
             sellingPrice={product.price}

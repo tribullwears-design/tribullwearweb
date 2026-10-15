@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useLocation } from "wouter";
-import { Search } from "lucide-react";
-import StorefrontHeader from "../components/StorefrontHeader";
+import { ArrowLeft } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
+import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { Product } from "../../../shared/products";
@@ -10,7 +10,6 @@ import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
 type SortOrder = "relevance" | "price-low" | "price-high" | "newest";
-type SearchCategory = "oversized" | "hoodie";
 
 function SearchResultCard({
   product,
@@ -55,42 +54,6 @@ export default function SearchResultsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("relevance");
 
   useEffect(() => {
-    setSearchInput(query);
-  }, [query]);
-
-  useEffect(() => {
-    const syncSearchFromLocation = () => {
-      const searchParams = new URLSearchParams(window.location.search);
-      const category = searchParams.get("category");
-      setQuery(searchParams.get("q")?.trim() || "");
-      setSelectedCategory(category === "oversized" || category === "hoodie" ? category : null);
-    };
-    const selectCategory = (event: Event) => {
-      const { category, query } = (event as CustomEvent<{ category: SearchCategory; query: string }>).detail;
-      setSelectedCategory(category);
-      setQuery(query);
-      setSearchInput(query);
-    };
-    window.addEventListener("popstate", syncSearchFromLocation);
-    window.addEventListener("tribull-search-category-selected", selectCategory);
-    return () => {
-      window.removeEventListener("popstate", syncSearchFromLocation);
-      window.removeEventListener("tribull-search-category-selected", selectCategory);
-    };
-  }, []);
-
-  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextQuery = searchInput.trim();
-    setQuery(nextQuery);
-    const searchParams = new URLSearchParams();
-    if (selectedCategory) searchParams.set("category", selectedCategory);
-    if (nextQuery) searchParams.set("q", nextQuery);
-    const search = searchParams.toString();
-    setLocation(search ? `/search?${search}` : "/search");
-  };
-
-  useEffect(() => {
     let active = true;
     const syncProducts = (refresh = false) => (refresh ? refreshProducts() : fetchProducts())
       .then((products) => {
@@ -118,11 +81,7 @@ export default function SearchResultsPage() {
       ? supportedProducts.filter((product) => matchesProductSearch(product, query))
       : supportedProducts;
 
-    const categoryMatches = selectedCategory
-      ? matches.filter((product) => getProductSearchCategory(product) === selectedCategory)
-      : matches;
-
-    return [...categoryMatches].sort((first, second) => {
+    return [...matches].sort((first, second) => {
       if (sortOrder === "price-low") return first.price - second.price;
       if (sortOrder === "price-high") return second.price - first.price;
       if (sortOrder === "newest") return second.created - first.created;
@@ -136,22 +95,21 @@ export default function SearchResultsPage() {
 
   return (
     <div className="search-page">
-      <StorefrontHeader />
+      <header className="search-page__header">
+        <Link href="/" className="search-page__back" aria-label="Back to home">
+          <ArrowLeft size={18} />
+          <span>Home</span>
+        </Link>
+        <Link href="/" className="search-page__brand" aria-label="Tribull home">
+          <img src="/products/logo.png" alt="TRIBULL" />
+        </Link>
+        <HeaderActions />
+      </header>
 
       <main className="search-page__content">
         <div className="search-page__heading">
           <p>Search results</p>
-          <h1>{query ? `Results for “${query}”` : selectedCategory === "oversized" ? "Oversized" : selectedCategory === "hoodie" ? "Hoodie" : "Oversized & Hoodie"}</h1>
-          <form className="search-page__search-form" onSubmit={submitSearch} role="search">
-            <Search size={18} aria-hidden="true" />
-            <input
-              aria-label="Search products or categories"
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="Search products or categories"
-            />
-            <button type="submit">Search</button>
-          </form>
+          <h1>{query ? `Results for “${query}”` : "Oversized & Hoodie"}</h1>
         </div>
 
         <div className="search-page__toolbar">
