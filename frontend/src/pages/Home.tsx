@@ -11,6 +11,7 @@ import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
+import { fetchFeaturedProductIds } from "../lib/storefrontSettings";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -119,6 +120,7 @@ export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
+  const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -144,6 +146,23 @@ export default function Home() {
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const syncFeaturedProducts = () => {
+      void fetchFeaturedProductIds().then((ids) => {
+        if (active) setFeaturedProductIds(ids);
+      }).catch((error: unknown) => {
+        console.error("Could not load featured product selection from the storefront settings API.", error);
+      });
+    };
+    syncFeaturedProducts();
+    window.addEventListener("tribull-featured-products-updated", syncFeaturedProducts);
+    return () => {
+      active = false;
+      window.removeEventListener("tribull-featured-products-updated", syncFeaturedProducts);
     };
   }, []);
 
@@ -200,7 +219,11 @@ export default function Home() {
 
   const productLink = (product: StorefrontProduct) => `/product/${encodeURIComponent(product.id)}`;
   const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : [];
-  const arrivalCards = getNewArrivals(eligibleProducts, hierarchy).map((product) => ({
+  const selectedFeaturedProducts = featuredProductIds
+    .map((id) => eligibleProducts.find((product) => product.id === id))
+    .filter((product): product is StorefrontProduct => Boolean(product));
+  const arrivals = selectedFeaturedProducts.length ? selectedFeaturedProducts : getNewArrivals(eligibleProducts, hierarchy);
+  const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
     href: productLink(product),
     originalPrice: product.originalPrice,
@@ -264,7 +287,7 @@ export default function Home() {
           <div className="product-section" id="arrivals">
             <Reveal>
               <div className="section-heading">
-                <Reveal variant="left"><div><p className="eyebrow"></p><h2>New Arrivals</h2></div></Reveal>
+                <Reveal variant="left"><div><p className="eyebrow"></p><h2>{selectedFeaturedProducts.length ? "Featured Products" : "New Arrivals"}</h2></div></Reveal>
               </div>
             </Reveal>
             <div className="product-grid product-grid--featured">

@@ -252,3 +252,35 @@
 .admin-banner-row > strong { color: var(--admin-ink); font-size: 12px; }
 .admin-banner-row__preview { width: 220px; height: 92px; }
 @media (max-width: 700px) { .admin-banner-form { grid-template-columns: 1fr; }.admin-banner-form-actions { grid-column: auto; }.admin-banner-row { grid-template-columns: 1fr auto auto; gap: 8px; }.admin-banner-row__preview { grid-column: 1 / -1; width: 100%; } }
+.admin-sales-chart { width: 100%; height: 245px; }
+.admin-data-warning { margin: 0 0 18px; padding: 11px 13px; border: 1px solid #efd3a4; border-radius: 7px; background: #fff8e9; color: #875f20; font-size: 11px; }
+.admin-data-caption { margin: -8px 0 16px; color: var(--admin-muted); font-size: 11px; }
+.admin-table-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 11px; margin: 0 0 17px; }
+.admin-table-filters label { display: flex; flex-direction: column; gap: 5px; color: var(--admin-muted); font-size: 10px; font-weight: 600; }
+.admin-table-filters select { min-height: 34px; min-width: 132px; padding: 0 9px; border: 1px solid var(--admin-line); border-radius: 6px; background: #fff; color: var(--admin-ink); font-size: 11px; }
+.admin-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px; color: var(--admin-muted); font-size: 10px; }
+.admin-pagination > div { display: flex; align-items: center; gap: 10px; }
+.admin-pagination .admin-secondary-button { min-height: 30px; padding: 0 9px; font-size: 10px; }
+.admin-pagination button:disabled { cursor: not-allowed; opacity: .5; }
+.admin-search:focus-within { border-color: var(--admin-teal); box-shadow: 0 0 0 2px rgba(23,107,104,.14); }
+.admin-shell :focus-visible { outline: 2px solid var(--admin-teal); outline-offset: 2px; }
+.admin-collection-products { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 14px; min-width: 0; padding: 13px; border: 1px solid var(--admin-line); border-radius: 7px; }
+.admin-collection-products legend { padding: 0 5px; color: var(--admin-muted); font-size: 11px; font-weight: 600; }
+.admin-collection-products label { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--admin-ink); font-size: 11px; }
+.admin-collection-products label span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-collection-products input { accent-color: var(--admin-teal); }
+.admin-collection-list { margin-top: 24px; }
+.admin-collection-list .admin-section-heading { margin-bottom: 8px; }
+.admin-collection-list .admin-management-row { min-height: 62px; }
+.admin-collection-list .admin-management-row > div:first-child { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
+.admin-collection-list .admin-management-row > div:first-child span { overflow-wrap: anywhere; }
+@media (max-width: 600px) { .admin-sales-chart { height: 205px; }.admin-table-filters { align-items: stretch; }.admin-table-filters label { flex: 1 1 135px; }.admin-table-filters select { width: 100%; }.admin-pagination { align-items: flex-start; flex-direction: column; }.admin-pagination > div { width: 100%; justify-content: space-between; } }
+.admin-report-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.admin-report-summary > div { display: flex; flex-direction: column; gap: 5px; padding: 14px; border: 1px solid var(--admin-line); border-radius: 8px; background: #fbfcfc; }
+.admin-report-summary span { color: var(--admin-muted); font-size: 10px; }
+.admin-report-summary strong { color: var(--admin-navy); font-size: 18px; }
+.admin-report-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 16px 0 22px; }
+.admin-report-stats .admin-stat-card { min-height: 86px; padding: 14px; }
+.admin-report-stats .admin-stat-card > strong { margin-top: 10px; }
+@media (max-width: 600px) { .admin-collection-products { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .admin-report-summary { grid-template-columns: 1fr; }.admin-report-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

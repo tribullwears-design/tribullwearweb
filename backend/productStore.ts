@@ -54,6 +54,19 @@ function validateProductId(id: string) {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Product ID is invalid");
 }
 
+export function validateInventoryAdjustment(adjustment: unknown): asserts adjustment is number {
+  if (typeof adjustment !== "number" || !Number.isSafeInteger(adjustment) || adjustment === 0) {
+    throw new Error("Inventory adjustment must be a non-zero whole number");
+  }
+}
+
+export class InsufficientInventoryError extends Error {
+  constructor() {
+    super("Inventory adjustment would make stock negative");
+    this.name = "InsufficientInventoryError";
+  }
+}
+
 function normalizeProduct(product: WithId<ProductDocument>): ProductDocument {
   const { _id, ...fields } = product;
   const id = fields.id || _id.toString();
@@ -101,9 +114,9 @@ function isProductInput(value: unknown): value is Partial<ProductInput> {
   return entries.length > 0 && entries.every(([key]) => supportedFields.has(key));
 }
 
-export async function listProducts(mainCategoryId?: string, subcategoryId?: string, productType?: string) {
+export async function listProducts(mainCategoryId?: string, subcategoryId?: string, productType?: string, includeDrafts = false) {
   const collection = await getCollection();
-  let filter: Filter<ProductDocument> = {};
+  let filter: Filter<ProductDocument> = includeDrafts ? {} : { status: "Active" };
   if (mainCategoryId !== undefined && subcategoryId !== undefined) {
     const categories = await listCategories();
     const { main, subcategory } = resolveCategory(categories, mainCategoryId, subcategoryId);
@@ -119,10 +132,30 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
   return products.map(normalizeProduct);
 }
 
-export async function getProduct(id: string) {
+export async function getProduct(id: string, includeDrafts = false) {
   validateProductId(id);
-  const product = await (await getCollection()).findOne(productFilter(id));
+  const product = await (await getCollection()).findOne({
+    ...productFilter(id),
+    ...(!includeDrafts ? { status: "Active" as const } : {}),
+  });
   return product ? normalizeProduct(product) : null;
+}
+
+export async function adjustProductInventory(id: string, adjustment: unknown) {
+  validateProductId(id);
+  validateInventoryAdjustment(adjustment);
+  const collection = await getCollection();
+  const filter: Filter<ProductDocument> = adjustment < 0
+    ? { ...productFilter(id), stock: { $gte: -adjustment } }
+    : productFilter(id);
+  const updated = await collection.findOneAndUpdate(
+    filter,
+    { $inc: { stock: adjustment }, $set: { updatedAt: new Date().toISOString() } },
+    { returnDocument: "after", projection: { _id: 0 } },
+  );
+  if (updated) return normalizeProduct(updated);
+  if (!await collection.findOne(productFilter(id), { projection: { _id: 1 } })) return null;
+  throw new InsufficientInventoryError();
 }
 
 export async function createProduct(input: ProductInput) {

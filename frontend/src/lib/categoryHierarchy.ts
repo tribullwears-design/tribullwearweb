@@ -95,7 +95,7 @@ function toApiDocuments(hierarchy: CategoryHierarchy) {
   return hierarchy.main.map((category) => ({ ...category, subcategories: hierarchy.subcategories[category.value] || [] }));
 }
 
-async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) {
+async function requestCategory<T = unknown>(path: string, method: "POST" | "PUT" | "PATCH" | "DELETE", body?: unknown): Promise<T> {
   invalidatePendingCategoryRequest();
   const response = await apiFetch(path, {
     method,
@@ -115,7 +115,7 @@ async function requestCategory(path: string, method: "POST" | "PATCH" | "DELETE"
       : "";
     throw new Error(details?.error || serverMessage || `Category request failed (HTTP ${response.status})`);
   }
-  return response.json();
+  return await response.json() as T;
 }
 
 function cacheHierarchy(hierarchy: CategoryHierarchy, notify = true) {
@@ -142,14 +142,9 @@ function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
 
 export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
   invalidatePendingCategoryRequest();
-  try {
-    const response = await apiFetch("/api/categories", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(toApiDocuments(hierarchy)) });
-    if (!response.ok) return false;
-    cacheHierarchy(fromApiDocuments(await response.json()));
-    return true;
-  } catch {
-    return false;
-  }
+  const response = await requestCategory<ApiCategoryResponse>("/api/categories", "PUT", toApiDocuments(hierarchy));
+  cacheHierarchy(fromApiDocuments(response));
+  return true;
 }
 
 export async function fetchCategoryHierarchy(fallback: CategoryHierarchy) {

@@ -1,5 +1,6 @@
 import { type Collection, ObjectId } from "mongodb";
 import { getDatabase } from "./database.js";
+import type { AdminPermissions } from "./adminPermissions.js";
 
 export type CustomerDocument = {
   _id?: ObjectId;
@@ -7,6 +8,10 @@ export type CustomerDocument = {
   email: string;
   mobile: string;
   passwordHash?: string | null;
+  adminRole?: "admin";
+  adminTitle?: "Super Admin" | "Admin" | "Manager" | "Staff";
+  adminStatus?: "Active" | "Inactive";
+  adminPermissions?: AdminPermissions;
   googleId?: string;
   authProviders: ("password" | "google")[];
   isProfileComplete: boolean;
@@ -61,6 +66,14 @@ export function safeCustomer(customer: CustomerDocument): SafeCustomer {
     mobile: customer.mobile,
     isProfileComplete: customer.isProfileComplete,
   };
+}
+
+export async function listCustomersForAdmin(): Promise<SafeCustomer[]> {
+  const customers = await (await getCollection())
+    .find({}, { projection: { _id: 1, name: 1, email: 1, mobile: 1, isProfileComplete: 1 } })
+    .sort({ name: 1, email: 1 })
+    .toArray();
+  return customers.map(safeCustomer);
 }
 
 async function getCollection() {

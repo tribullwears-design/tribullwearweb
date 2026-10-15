@@ -6,8 +6,14 @@ import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, findOrderByIdempotencyKey, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
-import { createProduct, getProduct, listProducts, updateProduct } from "./productStore.js";
+import { adjustProductInventory, createProduct, getProduct, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
+import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
+import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
+import { createOffer, deleteOffer, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
+import { requireAdminPermission } from "./adminAuth.js";
+import { AdminUserConflictError, AdminUserValidationError, createAdminUser, listAdminUsers, updateAdminUser } from "./adminUserStore.js";
+import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { rateLimit } from "express-rate-limit";
 import {
   consumePasswordReset,
@@ -17,6 +23,7 @@ import {
   incrementCustomerTokenVersion,
   isValidCustomerEmail,
   isValidCustomerMobile,
+  listCustomersForAdmin,
   normalizeCustomerEmail,
   safeCustomer,
   issuePasswordOtp,
@@ -398,20 +405,25 @@ async function startServer() {
     const status = message.includes("required") || message.includes("supported image") || message.includes("smaller") ? 400 : message.includes("not found") ? 404 : 500;
     res.status(status).json({ error: message });
   };
+  const sendOfferError = (res: express.Response, error: unknown) => {
+    const message = error instanceof Error ? error.message : "Offer request failed";
+    const status = error instanceof OfferConflictError ? 409 : error instanceof OfferValidationError ? 400 : 500;
+    res.status(status).json({ error: message });
+  };
 
   app.get("/api/categories", async (_req, res) => {
     try { res.json(await listCategories()); } catch (error) { sendError(res, error); }
   });
-  app.put("/api/categories", async (req, res) => {
+  app.put("/api/categories", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.json(await replaceCategories(req.body)); } catch (error) { sendError(res, error); }
   });
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/categories", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await createCategory(req.body)); } catch (error) { sendError(res, error); }
   });
-  app.patch("/api/categories/:value", async (req, res) => {
+  app.patch("/api/categories/:value", requireAdminPermission("products", "edit"), async (req, res) => {
     try { const category = await updateCategory(req.params.value, req.body); if (!category) return res.status(404).json({ error: "Category not found" }); res.json(category); } catch (error) { sendError(res, error); }
   });
-  app.patch("/api/categories/:value/visibility", async (req, res) => {
+  app.patch("/api/categories/:value/visibility", requireAdminPermission("products", "edit"), async (req, res) => {
     if (!req.body || typeof req.body.isVisible !== "boolean" || Object.keys(req.body).length !== 1) {
       return res.status(400).json({ error: "isVisible must be a boolean" });
     }
@@ -421,16 +433,16 @@ async function startServer() {
       res.json(category);
     } catch (error) { sendError(res, error); }
   });
-  app.delete("/api/categories/:value", async (req, res) => {
+  app.delete("/api/categories/:value", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.json({ deleted: await deleteCategory(req.params.value) }); } catch (error) { sendError(res, error); }
   });
-  app.post("/api/categories/:parent/subcategories", async (req, res) => {
+  app.post("/api/categories/:parent/subcategories", requireAdminPermission("products", "edit"), async (req, res) => {
     try { const category = await addSubcategory(req.params.parent, req.body); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.status(201).json(category); } catch (error) { sendError(res, error); }
   });
-  app.patch("/api/categories/:parent/subcategories/:value", async (req, res) => {
+  app.patch("/api/categories/:parent/subcategories/:value", requireAdminPermission("products", "edit"), async (req, res) => {
     try { const category = await editSubcategory(req.params.parent, req.params.value, req.body); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
   });
-  app.patch("/api/categories/:parent/subcategories/:value/visibility", async (req, res) => {
+  app.patch("/api/categories/:parent/subcategories/:value/visibility", requireAdminPermission("products", "edit"), async (req, res) => {
     if (!req.body || typeof req.body.isVisible !== "boolean" || Object.keys(req.body).length !== 1) {
       return res.status(400).json({ error: "isVisible must be a boolean" });
     }
@@ -442,7 +454,7 @@ async function startServer() {
       res.json(subcategory);
     } catch (error) { sendError(res, error); }
   });
-  app.delete("/api/categories/:parent/subcategories/:value", async (req, res) => {
+  app.delete("/api/categories/:parent/subcategories/:value", requireAdminPermission("products", "edit"), async (req, res) => {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
   });
   app.get("/api/banners", async (_req, res) => {
@@ -451,17 +463,130 @@ async function startServer() {
   app.get("/api/banners/:categoryId", async (req, res) => {
     try { res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
   });
-  app.post("/api/banners", async (req, res) => {
+  app.post("/api/banners", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
   });
-  app.put("/api/banners/:id", async (req, res) => {
+  app.put("/api/banners/:id", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.json(await updateBanner(req.params.id, req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
   });
-  app.delete("/api/banners/:id", async (req, res) => {
+  app.delete("/api/banners/:id", requireAdminPermission("products", "edit"), async (req, res) => {
     try {
       if (!await deleteBanner(req.params.id)) return res.status(404).json({ error: "Banner not found" });
       res.json({ deleted: true });
-    } catch (error) { sendBannerError(res, error); }
+    } catch (error) { sendBannerError(res, error);     }
+  });
+  app.get("/api/admin/users", requireAdminPermission("settings", "view"), async (_req, res) => {
+    try {
+      res.json(await listAdminUsers());
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+  app.post("/api/admin/users", requireAdminPermission("settings", "edit"), async (req, res) => {
+    try {
+      res.status(201).json(await createAdminUser(req.body));
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.patch("/api/admin/users/:id", requireAdminPermission("settings", "edit"), async (req, res) => {
+    try {
+      const user = await updateAdminUser(req.params.id, req.body);
+      if (!user) return res.status(404).json({ error: "Admin user not found" });
+      res.json(user);
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/storefront/settings/social", async (_req, res) => {
+    try { res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/storefront/featured-products", async (_req, res) => {
+    try { res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/admin/settings/general", requireAdminPermission("settings", "view"), async (_req, res) => {
+    try { res.json(await getGeneralSettings()); } catch (error) { sendError(res, error); }
+  });
+  app.put("/api/admin/settings/general", requireAdminPermission("settings", "edit"), async (req, res) => {
+    try { res.json(await saveGeneralSettings(req.body)); } catch (error) {
+      if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/settings/social", requireAdminPermission("content", "view"), async (_req, res) => {
+    try { res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
+  });
+  app.put("/api/admin/settings/social", requireAdminPermission("content", "edit"), async (req, res) => {
+    try { res.json(await saveSocialSettings(req.body)); } catch (error) {
+      if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/settings/featured-products", requireAdminPermission("content", "view"), async (_req, res) => {
+    try { res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
+  });
+  app.put("/api/admin/settings/featured-products", requireAdminPermission("content", "edit"), async (req, res) => {
+    try { res.json(await saveFeaturedProductIds(req.body?.productIds)); } catch (error) {
+      if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/collections", requireAdminPermission("content", "view"), async (_req, res) => {
+    try { res.json(await listStoreCollections()); } catch (error) { sendError(res, error); }
+  });
+  app.post("/api/admin/collections", requireAdminPermission("content", "edit"), async (req, res) => {
+    try { res.status(201).json(await createStoreCollection(req.body)); } catch (error) {
+      if (error instanceof CollectionConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof CollectionValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.patch("/api/admin/collections/:id", requireAdminPermission("content", "edit"), async (req, res) => {
+    try {
+      const collection = await updateStoreCollection(req.params.id, req.body);
+      if (!collection) return res.status(404).json({ error: "Collection not found" });
+      res.json(collection);
+    } catch (error) {
+      if (error instanceof CollectionConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof CollectionValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.delete("/api/admin/collections/:id", requireAdminPermission("content", "edit"), async (req, res) => {
+    try {
+      if (!await deleteStoreCollection(req.params.id)) return res.status(404).json({ error: "Collection not found" });
+      res.json({ deleted: true });
+    } catch (error) {
+      if (error instanceof CollectionValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/marketing/:kind", requireAdminPermission("marketing", "view"), async (req, res) => {
+    if (!isOfferKind(req.params.kind)) return res.status(400).json({ error: "Offer type is invalid" });
+    try { res.json(await listOffers(req.params.kind)); } catch (error) { sendOfferError(res, error); }
+  });
+  app.post("/api/admin/marketing/:kind", requireAdminPermission("marketing", "edit"), async (req, res) => {
+    if (!isOfferKind(req.params.kind)) return res.status(400).json({ error: "Offer type is invalid" });
+    try { res.status(201).json(await createOffer(req.params.kind, req.body)); } catch (error) { sendOfferError(res, error); }
+  });
+  app.patch("/api/admin/marketing/:kind/:id", requireAdminPermission("marketing", "edit"), async (req, res) => {
+    if (!isOfferKind(req.params.kind)) return res.status(400).json({ error: "Offer type is invalid" });
+    try {
+      const offer = await updateOffer(req.params.kind, req.params.id, req.body);
+      if (!offer) return res.status(404).json({ error: "Offer not found" });
+      res.json(offer);
+    } catch (error) { sendOfferError(res, error); }
+  });
+  app.delete("/api/admin/marketing/:kind/:id", requireAdminPermission("marketing", "edit"), async (req, res) => {
+    if (!isOfferKind(req.params.kind)) return res.status(400).json({ error: "Offer type is invalid" });
+    try {
+      if (!await deleteOffer(req.params.kind, req.params.id)) return res.status(404).json({ error: "Offer not found" });
+      res.json({ deleted: true });
+    } catch (error) { sendOfferError(res, error); }
   });
   app.get("/api/products", async (req, res) => {
     try {
@@ -485,14 +610,31 @@ async function startServer() {
       res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
     }
   });
-  app.post("/api/products", async (req, res) => {
+  app.get("/api/admin/products", requireAdminPermission("products", "view"), async (_req, res) => {
+    try {
+      res.json(await listProducts(undefined, undefined, undefined, true));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/products/:id", requireAdminPermission("products", "view"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product request failed";
+      res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+  app.post("/api/products", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await createProduct(req.body)); } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
       const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });
-  app.patch("/api/products/:id", async (req, res) => {
+  app.patch("/api/products/:id", requireAdminPermission("products", "edit"), async (req, res) => {
     try {
       const product = await updateProduct(req.params.id, req.body);
       if (!product) return res.status(404).json({ error: "Product not found" });
@@ -503,7 +645,35 @@ async function startServer() {
       res.status(status).json({ error: message });
     }
   });
-  app.get("/api/orders", async (req, res) => {
+  app.patch("/api/products/:id/inventory", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await adjustProductInventory(req.params.id, req.body?.adjustment);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      res.json(product);
+    } catch (error) {
+      if (error instanceof InsufficientInventoryError) return res.status(409).json({ error: error.message });
+      const message = error instanceof Error ? error.message : "Inventory adjustment failed";
+      const status = message.includes("invalid") || message.includes("whole number") ? 400 : 500;
+      res.status(status).json({ error: message });
+    }
+  });
+  app.get("/api/admin/customers", requireAdminPermission("customers", "view"), async (_req, res) => {
+    try {
+      res.json(await listCustomersForAdmin());
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/analytics", requireAdminPermission("analytics", "view"), async (req, res) => {
+    const range = req.query.range === undefined ? "Today" : req.query.range;
+    if (!isDashboardRange(range)) return res.status(400).json({ error: "Analytics range is invalid" });
+    try {
+      res.json(await getAdminAnalytics(range));
+    } catch (error) {
+      sendError(res, error);
+    }
+  });
+  app.get("/api/orders", requireAdminPermission("orders", "view"), async (req, res) => {
     try { res.json(await listOrders(typeof req.query.status === "string" ? req.query.status : undefined)); } catch (error) { sendError(res, error); }
   });
   app.post("/api/orders", (_req, res) => {
@@ -630,7 +800,7 @@ async function startServer() {
       return res.status(500).json({ error: "Unable to place the test order right now" });
     }
   });
-  app.patch("/api/orders/:id", async (req, res) => {
+  app.patch("/api/orders/:id", requireAdminPermission("orders", "edit"), async (req, res) => {
     try {
       const status = req.body?.status;
       if (!orderStatuses.includes(status as OrderStatus)) return res.status(400).json({ error: "Invalid order status" });

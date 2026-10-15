@@ -17,6 +17,45 @@ export class CategoryConflictError extends Error {
   }
 }
 
+export type CategoryAssignment = { mainCategoryId: string; subcategoryId?: string };
+
+export function getRemovedCategoryAssignments(
+  current: CategoryDocument[],
+  next: CategoryDocument[],
+): CategoryAssignment[] {
+  const nextByValue = new Map(next.map((category) => [category.value, category]));
+  const removed: CategoryAssignment[] = [];
+
+  for (const category of current) {
+    const nextCategory = nextByValue.get(category.value);
+    if (!nextCategory) {
+      removed.push({ mainCategoryId: category.value });
+      continue;
+    }
+    const nextSubcategoryValues = new Set((nextCategory.subcategories || []).map((subcategory) => subcategory.value));
+    for (const subcategory of category.subcategories || []) {
+      if (!nextSubcategoryValues.has(subcategory.value)) {
+        removed.push({ mainCategoryId: category.value, subcategoryId: subcategory.value });
+      }
+    }
+  }
+
+  return removed;
+}
+
+async function assertNoProductAssignments(assignments: CategoryAssignment[]) {
+  if (assignments.length === 0) return;
+  const products = (await getDatabase()).collection("products");
+  const filters = assignments.map(({ mainCategoryId, subcategoryId }) => ({
+    mainCategoryId,
+    ...(subcategoryId === undefined ? {} : { subcategoryId }),
+  }));
+  const assignedProduct = await products.findOne({ $or: filters }, { projection: { _id: 1 } });
+  if (assignedProduct) {
+    throw new CategoryConflictError("Cannot remove categories assigned to products. Reassign those products first.");
+  }
+}
+
 const defaultCategories: CategoryDocument[] = [
   { value: "cinema", label: "Cinema", image: "/products/cinema.jpg", position: 0, subcategories: [
     { value: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
@@ -86,13 +125,16 @@ export async function listCategories() {
 }
 
 export async function replaceCategories(categories: CategoryDocument[]) {
+  if (!Array.isArray(categories)) throw new Error("Categories must be a list");
   const collection = await getCollection();
   await ensureCategoryValueIndex(collection);
+  const current = await collection.find({}, { projection: { _id: 0 } }).toArray();
   const values = new Set<string>();
   for (const category of categories) {
     if (!category.value || values.has(category.value)) throw new CategoryConflictError("Duplicate category value");
     values.add(category.value);
   }
+  await assertNoProductAssignments(getRemovedCategoryAssignments(current, categories));
   await collection.deleteMany({ value: { $nin: categories.map((category) => category.value) } });
   for (let position = 0; position < categories.length; position += 1) {
     const category = categories[position];
@@ -154,6 +196,7 @@ export async function setSubcategoryVisibility(parent: string, value: string, is
 
 export async function deleteCategory(value: string) {
   const collection = await getCollection();
+  await assertNoProductAssignments([{ mainCategoryId: value }]);
   return (await collection.deleteOne({ value })).deletedCount > 0;
 }
 
@@ -162,6 +205,10 @@ async function updateSubcategories(parent: string, updater: (items: CategoryDocu
   const category = await collection.findOne({ value: parent });
   if (!category) return undefined;
   const subcategories = updater(category.subcategories || []);
+  await assertNoProductAssignments(getRemovedCategoryAssignments(
+    [{ ...category, subcategories: category.subcategories || [] }],
+    [{ ...category, subcategories }],
+  ));
   return collection.findOneAndUpdate({ value: parent }, { $set: { subcategories } }, { returnDocument: "after", projection: { _id: 0 } });
 }
 

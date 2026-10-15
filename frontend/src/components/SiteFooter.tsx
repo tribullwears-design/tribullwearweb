@@ -1,11 +1,11 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { X } from "lucide-react";
+import { defaultSocialSettings, fetchSocialSettings, type SocialSettings } from "../lib/storefrontSettings";
 
 type SiteFooterProps = {
   className?: string;
 };
 
-type SocialLinks = { facebook: string; instagram: string; pinterest: string; whatsapp: string; linkedin: string };
 type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "careers" | "vouchers" | "community";
 
 const footerTopicContent: Record<FooterTopic, { title: string; description: string; action: string }> = {
@@ -58,37 +58,24 @@ const faqItems = [
   { question: "Which payment options are available?", answer: "Available payment options are shown at checkout before you place your order." },
 ];
 
-const defaultSocialLinks = {
-  facebook: "https://www.facebook.com/share/18tqYR5pxD/",
-  instagram: "https://instagram.com/tribull.in?obrf=MWdtZG9ycWc0dmVkaQ%3D%3D",
-  pinterest: "https://pin.it/5UqZJvyWI",
-  whatsapp: "https://wa.me/916385400605",
-};
-
-function readSocialLinks(): SocialLinks {
-  try {
-    const saved = window.localStorage.getItem("tribull-social-links");
-    const configured = saved ? JSON.parse(saved) as Partial<SocialLinks> : {};
-    return {
-      ...defaultSocialLinks,
-      linkedin: configured.linkedin || "",
-    };
-  } catch {
-    return { ...defaultSocialLinks, linkedin: "" };
-  }
-}
-
 export default function SiteFooter({ className = "" }: SiteFooterProps) {
-  const [socialLinks, setSocialLinks] = useState<SocialLinks>(() => readSocialLinks());
+  const [socialLinks, setSocialLinks] = useState<SocialSettings>(() => ({ ...defaultSocialSettings }));
   const [activeTopic, setActiveTopic] = useState<FooterTopic | null>(null);
 
   useEffect(() => {
-    const syncSocialLinks = () => setSocialLinks(readSocialLinks());
-    window.addEventListener("tribull-social-links-updated", syncSocialLinks);
-    window.addEventListener("storage", syncSocialLinks);
+    let active = true;
+    const syncSocialLinks = () => {
+      void fetchSocialSettings().then((settings) => {
+        if (active) setSocialLinks(settings);
+      }).catch((error: unknown) => {
+        console.error("Failed to load Tribull social links from the settings API.", error);
+      });
+    };
+    syncSocialLinks();
+    window.addEventListener("tribull-social-settings-updated", syncSocialLinks);
     return () => {
-      window.removeEventListener("tribull-social-links-updated", syncSocialLinks);
-      window.removeEventListener("storage", syncSocialLinks);
+      active = false;
+      window.removeEventListener("tribull-social-settings-updated", syncSocialLinks);
     };
   }, []);
 
