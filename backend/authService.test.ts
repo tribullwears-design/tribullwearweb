@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Response } from "express";
-import { findCustomerById } from "./authStore.js";
-import { customerCookieName, getSessionCustomer, issueCustomerSession } from "./authService.js";
+import { findCustomerByEmail, findCustomerById } from "./authStore.js";
+import { authenticatePassword, customerCookieName, getSessionCustomer, hashPassword, issueCustomerSession } from "./authService.js";
 
-vi.mock("./authStore.js", () => ({ findCustomerById: vi.fn() }));
+vi.mock("./authStore.js", () => ({ findCustomerByEmail: vi.fn(), findCustomerById: vi.fn() }));
 
+const findCustomerByEmailMock = vi.mocked(findCustomerByEmail);
 const findCustomer = vi.mocked(findCustomerById);
 
 const customer = {
@@ -21,10 +22,37 @@ const customer = {
 };
 
 beforeEach(() => {
+  findCustomerByEmailMock.mockReset();
+  findCustomer.mockReset();
   vi.stubEnv("NODE_ENV", "production");
   vi.stubEnv("JWT_SECRET", "a".repeat(32));
   vi.stubEnv("JWT_EXPIRES_IN", "7d");
   delete process.env.AUTH_COOKIE_SAME_SITE;
+});
+
+describe("password customer authentication", () => {
+  it("accepts the existing password hash for a complete customer account", async () => {
+    const passwordHash = await hashPassword("unit-test-password-not-for-login");
+    findCustomerByEmailMock.mockResolvedValue({ ...customer, passwordHash });
+
+    await expect(authenticatePassword("CUSTOMER@example.com", "unit-test-password-not-for-login"))
+      .resolves.toMatchObject({ customer: { email: "customer@example.com" }, reason: null });
+    expect(findCustomerByEmailMock).toHaveBeenCalledWith("CUSTOMER@example.com");
+  });
+
+  it("rejects bad passwords and incomplete profiles without issuing a session", async () => {
+    findCustomerByEmailMock.mockResolvedValue({ ...customer, passwordHash: await hashPassword("correct-password") });
+    await expect(authenticatePassword("customer@example.com", "wrong-password"))
+      .resolves.toMatchObject({ customer: null, reason: "invalid-password" });
+
+    findCustomerByEmailMock.mockResolvedValue({
+      ...customer,
+      passwordHash: await hashPassword("correct-password"),
+      isProfileComplete: false,
+    });
+    await expect(authenticatePassword("customer@example.com", "correct-password"))
+      .resolves.toMatchObject({ customer: null, reason: "profile-incomplete" });
+  });
 });
 
 afterEach(() => {

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
 import { getSessionCustomer } from "./authService.js";
 import { authorizeAdmin, requireAdmin, requireAdminPermission } from "./adminAuth.js";
-import { fullAdminPermissions } from "./adminPermissions.js";
+import { fullAdminPermissions, type AdminPermissions } from "./adminPermissions.js";
 
 vi.mock("./authService.js", () => ({ customerCookieName: "tribull_customer", getSessionCustomer: vi.fn() }));
 
@@ -137,6 +137,22 @@ describe("authorizeAdmin", () => {
     });
     expect(authorizeAdmin(true, "admin", "Active", undefined, { section: "orders", action: "edit" }))
       .toEqual({ allowed: true });
+  });
+
+  it("allows a demo admin to view products while denying every other admin capability", () => {
+    const productsReadOnly = Object.fromEntries(
+      Object.keys(fullAdminPermissions).map((section) => [section, {
+        view: section === "products",
+        edit: false,
+      }]),
+    ) as AdminPermissions;
+
+    expect(authorizeAdmin(true, "admin", "Active", productsReadOnly, { section: "products", action: "view" }))
+      .toEqual({ allowed: true });
+    expect(authorizeAdmin(true, "admin", "Active", productsReadOnly, { section: "products", action: "edit" }))
+      .toMatchObject({ allowed: false, status: 403 });
+    expect(authorizeAdmin(true, "admin", "Active", productsReadOnly, { section: "orders", action: "view" }))
+      .toMatchObject({ allowed: false, status: 403 });
   });
 
   it("allows legacy admins and enforces persisted edit permissions in middleware", async () => {
