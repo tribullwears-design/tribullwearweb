@@ -6,7 +6,7 @@ The backend and its dependencies are part of this repository-root pnpm project; 
 
 Render serves the backend API only. `GET /health` is the health-check endpoint, `/api/*` serves the backend routes, and other paths return a JSON 404. The Vite storefront remains deployed separately on Vercel; the backend does not serve `dist/public`.
 
-After pushing this change, deploy the latest commit to Render and set its health-check path to `/health`. No Vercel frontend or rewrite changes are needed; keep `CATEGORY_API_URL` pointed at the Render service and rebuild Vercel only when that value changes.
+After pushing this change, deploy the latest commit to Render and set its health-check path to `/health`. The Vercel frontend proxies `/api/*` to the Render service so browser session cookies remain same-origin; deploy the frontend after changing `vercel.json` or the client.
 
 - **Root Directory:** repository root (`.`; leave the field blank if Render uses the repository root by default)
 - **Build Command:** `pnpm install --frozen-lockfile && pnpm run build`
@@ -23,7 +23,7 @@ Set these Render environment variables:
 - `GOOGLE_CLIENT_ID` — required for Google sign-in
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` — required for password-reset email
 
-Set `CATEGORY_API_URL` in the Vercel project's production environment to the Render service's HTTPS base URL (without a trailing slash), then rebuild the frontend. Keep localhost URLs out of production configuration. The Vercel project is not changed automatically.
+Set `CATEGORY_API_URL` to the Render service's HTTPS base URL (without a trailing slash) for the Vite development proxy. Keep localhost URLs out of production configuration. Vercel production requests use the checked-in `/api/*` rewrite; the Vercel project is not changed automatically.
 
 Admin API access requires an authenticated customer record with `adminRole: "admin"` in the existing `user-credentials` collection. Before deploying these backend changes, provision at least one administrator so existing operators are not locked out: verify the account owner out of band, identify the exact pre-existing customer record in Atlas, and set that single record's `adminRole` field to `"admin"`. Do not grant the role based only on a self-registered email address; customer signup does not verify email ownership and does not accept role fields. The admin must sign in through the existing storefront so its authenticated customer session cookie is available. Without an explicitly provisioned role, protected admin operations return 403.
 

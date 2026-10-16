@@ -7,7 +7,10 @@ export function resolveApiBaseUrl(configuredBaseUrl?: string) {
 const configuredApiBaseUrl = resolveApiBaseUrl(import.meta.env.CATEGORY_API_URL);
 
 export function apiUrl(path: string) {
-  if (typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname)) return path;
+  // Browser requests stay same-origin so Vercel can proxy /api/* to Render and
+  // preserve the customer session cookie without relying on third-party cookie
+  // support. Vite's development proxy handles the same relative path locally.
+  if (typeof window !== "undefined") return path;
   return `${configuredApiBaseUrl}${path}`;
 }
 
