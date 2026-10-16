@@ -396,7 +396,7 @@ const productTypeOptions = [
   { value: "acid-oversized", label: "Acid Oversized" },
   { value: "hoodie", label: "Hoodie" },
 ];
-function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; submitLabel?: string }) {
+function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; submitLabel?: string }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
   return <form className="admin-form" onSubmit={onSave}>
@@ -412,7 +412,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Main Category</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category (optional)</option>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
     <label><span>Subcategory / Industry</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || !subcategories.length} value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">Select subcategory (optional)</option>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
     <label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label>
-    {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError}</p>}
+    {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError} {onRetryHierarchy && <button className="admin-text-button" type="button" onClick={onRetryHierarchy}>Retry</button>}</p>}
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={productSaving || hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0}>{productSaving ? "Saving..." : submitLabel}</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className={savedNotice.includes("saved") ? "admin-form-success" : "admin-image-error"} role="status">{savedNotice}</p>}
   </form>;
 }
@@ -442,7 +442,7 @@ function CategoryVisibilityButton({ isVisible, label, saving, onClick }: { isVis
   return <button type="button" className="admin-small-button" disabled={saving} aria-label={`${isVisible ? "Hide" : "Show"} ${label}`} aria-pressed={isVisible} onClick={onClick}>{saving ? "Saving..." : isVisible ? "Visible" : "Hidden"}</button>;
 }
 
-function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
+function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy: () => void; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
   const [parentCategory, setParentCategory] = useState(hierarchy.main[0]?.value || "");
   const [newMainCategory, setNewMainCategory] = useState("");
   const [newMainImage, setNewMainImage] = useState("");
@@ -575,7 +575,7 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
     <section className="admin-category-management">
       <SectionHeading title="Main Categories" />
       <div className="admin-category-list">
-        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : hierarchy.main.map((category) => (
+        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again. <button className="admin-text-button" type="button" onClick={onRetryHierarchy}>Retry</button></span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : hierarchy.main.map((category) => (
           <div className="admin-management-row" key={category.value}>
             <CategoryImage
               image={editingMain === category.value ? editingMainImage : category.image}
@@ -609,7 +609,7 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
         <button className="admin-primary-button" type="button" onClick={addSubcategory}><Plus size={15} />Add subcategory</button>
       </div>
       <div className="admin-subcategory-list">
-        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again.</span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : (hierarchy.subcategories[parentCategory] || []).length === 0 ? <span className="admin-empty-state">No subcategories found.</span> : (hierarchy.subcategories[parentCategory] || []).map((subcategory) => {
+        {hierarchyLoading ? <span className="admin-empty-state">Loading categories...</span> : hierarchyError ? <span className="admin-empty-state">Unable to load categories. Please try again. <button className="admin-text-button" type="button" onClick={onRetryHierarchy}>Retry</button></span> : hierarchy.main.length === 0 ? <span className="admin-empty-state">No categories found.</span> : (hierarchy.subcategories[parentCategory] || []).length === 0 ? <span className="admin-empty-state">No subcategories found.</span> : (hierarchy.subcategories[parentCategory] || []).map((subcategory) => {
           const parent = hierarchy.main.find((category) => category.value === parentCategory);
           const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value;
           return <div className={`admin-subcategory-row ${isEditing ? "admin-subcategory-row--editing" : ""}`} key={`${parentCategory}-${subcategory.value}`}>
@@ -652,6 +652,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
   const [readingImage, setReadingImage] = useState(false);
   const savingRef = useRef(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [image, setImage] = useState("");
   const [editing, setEditing] = useState<CategoryBanner | null>(null);
@@ -659,11 +660,11 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
 
   const refresh = async () => {
     setLoading(true);
-    setError("");
+    setLoadError("");
     try {
       setBanners(await loadBanners());
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to load banners.");
+      setLoadError(cause instanceof Error ? cause.message : "Unable to load banners.");
     } finally {
       setLoading(false);
     }
@@ -775,7 +776,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
     </form>
     {error && <p className="admin-image-error" role="alert">{error}</p>}
     <div className="admin-banner-list">
-      {loading ? <p>Loading banners...</p> : banners.length ? banners.map((banner) => <div className="admin-banner-row" key={banner.id}>
+      {loading ? <p>Loading banners...</p> : loadError ? <EmptyState title="Unable to load banners" message={loadError} action="Retry" onAction={() => void refresh()} /> : banners.length ? banners.map((banner) => <div className="admin-banner-row" key={banner.id}>
         <div className="admin-banner-row__preview">{banner.image ? <img src={banner.image} alt={`${banner.categoryName} banner`} /> : <span>No image</span>}</div>
         <strong>{banner.categoryName}</strong>
         <button className="admin-small-button" type="button" onClick={() => edit(banner)}>Edit</button>
@@ -836,6 +837,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>({ main: [], subcategories: {} });
   const [categoryHierarchyLoading, setCategoryHierarchyLoading] = useState(true);
   const [categoryHierarchyError, setCategoryHierarchyError] = useState("");
+  const [categoryHierarchyLoadVersion, setCategoryHierarchyLoadVersion] = useState(0);
   const [featured, setFeatured] = useState<string[]>([]);
   const [featuredLoading, setFeaturedLoading] = useState(false);
   const [featuredSaving, setFeaturedSaving] = useState(false);
@@ -911,7 +913,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       }
     })();
     return () => { active = false; };
-  }, []);
+  }, [categoryHierarchyLoadVersion]);
+  const retryCategoryHierarchy = () => setCategoryHierarchyLoadVersion((version) => version + 1);
   const refreshProducts = async () => {
     setProductsLoading(true);
     setProductsError("");
@@ -1621,9 +1624,9 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       </>}
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
-    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} submitLabel="Save Changes" />}</AdminPanel>;
-    if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
+    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
+    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} submitLabel="Save Changes" />}</AdminPanel>;
+    if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "add-product") return <AdminPanel title="Add Product"><form className="admin-form" onSubmit={saveProduct}>{["name", "description", "price", "compareAt", "stock", "sizes", "colors"].map((field) => <label key={field}><span>{field === "compareAt" ? "Compare-at price" : field.charAt(0).toUpperCase() + field.slice(1)}</span>{field === "description" ? <textarea value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} /> : <input required={field === "name" || field === "price"} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} />}</label>)}<label className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => { setProductForm((current) => ({ ...current, image: "" })); setImageError(""); }}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</label><label><span>Category</span><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{categories.map((category) => <option key={category.label} value={category.label}>{category.label}</option>)}</select></label><label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label><div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}</form></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
     if (screen === "inventory") return <AdminPanel title="Inventory">

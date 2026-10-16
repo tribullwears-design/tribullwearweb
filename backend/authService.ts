@@ -37,7 +37,9 @@ function expirySeconds() {
 }
 
 function cookieSettings() {
-  const sameSite = (process.env.AUTH_COOKIE_SAME_SITE || "lax").toLowerCase();
+  const configuredSameSite = process.env.AUTH_COOKIE_SAME_SITE
+    || (process.env.NODE_ENV === "production" ? "none" : "lax");
+  const sameSite = configuredSameSite.toLowerCase();
   if (!["strict", "lax", "none"].includes(sameSite)) throw new Error("AUTH_COOKIE_SAME_SITE must be strict, lax, or none");
   const secure = process.env.NODE_ENV === "production";
   if (sameSite === "none" && !secure) throw new Error("SameSite=None cookies require HTTPS");

@@ -1,5 +1,5 @@
 import type { RequestHandler } from "express";
-import { getSessionCustomer } from "./authService.js";
+import { customerCookieName, getSessionCustomer } from "./authService.js";
 import { hasAdminPermission, type AdminPermissionAction, type AdminPermissionSection } from "./adminPermissions.js";
 
 export type AdminAuthorization = { allowed: true } | { allowed: false; status: 401 | 403; error: string };
@@ -42,16 +42,44 @@ function adminMiddleware(requiredPermission?: { section: AdminPermissionSection;
           requiredPermission,
         );
         if (!authorization.allowed) {
+          const category = authorization.status === 401
+            ? hasCustomerSessionCookie(request) ? "invalid_or_expired_session" : "session_cookie_missing"
+            : authorization.error === "Admin access is required"
+              ? "admin_role_missing"
+              : authorization.error === "This admin account is inactive"
+                ? "admin_grant_inactive"
+                : "admin_permission_missing";
+          console.warn("Admin authorization denied", {
+            category,
+            method: request.method,
+            path: request.path,
+          });
           response.status(authorization.status).json({ error: authorization.error });
           return;
         }
         next();
       })
       .catch((error: unknown) => {
-        console.error("Admin session lookup failed", error);
+        console.error("Admin session lookup failed", {
+          category: "session_lookup_error",
+          method: request.method,
+          path: request.path,
+          errorType: error instanceof Error ? error.name : "UnknownError",
+        });
         response.status(500).json({ error: "Unable to verify admin access" });
       });
   };
+}
+
+function hasCustomerSessionCookie(request: Parameters<RequestHandler>[0]) {
+  const cookieHeader = request.headers?.cookie;
+  if (!cookieHeader) return false;
+  return cookieHeader.split(";").some((part) => {
+    const separator = part.indexOf("=");
+    return separator >= 0
+      && part.slice(0, separator).trim() === customerCookieName
+      && part.slice(separator + 1).trim().length > 0;
+  });
 }
 
 export const requireAdmin: RequestHandler = adminMiddleware();

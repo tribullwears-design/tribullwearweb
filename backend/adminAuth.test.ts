@@ -4,7 +4,7 @@ import { getSessionCustomer } from "./authService.js";
 import { authorizeAdmin, requireAdmin, requireAdminPermission } from "./adminAuth.js";
 import { fullAdminPermissions } from "./adminPermissions.js";
 
-vi.mock("./authService.js", () => ({ getSessionCustomer: vi.fn() }));
+vi.mock("./authService.js", () => ({ customerCookieName: "tribull_customer", getSessionCustomer: vi.fn() }));
 
 const sessionLookup = vi.mocked(getSessionCustomer);
 
@@ -42,6 +42,7 @@ describe("authorizeAdmin", () => {
 
   it("returns 401 when a request has no authenticated customer session", async () => {
     sessionLookup.mockResolvedValue(null);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const response = responseMock();
     const next = vi.fn();
 
@@ -50,7 +51,30 @@ describe("authorizeAdmin", () => {
 
     expect(response.status).toHaveBeenCalledWith(401);
     expect(response.json).toHaveBeenCalledWith({ error: "Sign in with an authorized admin account" });
+    expect(warn).toHaveBeenCalledWith("Admin authorization denied", {
+      category: "session_cookie_missing",
+      method: undefined,
+      path: undefined,
+    });
     expect(next).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("diagnoses a present but unusable session cookie without logging its value", async () => {
+    sessionLookup.mockResolvedValue(null);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const response = responseMock();
+
+    requireAdmin({ headers: { cookie: "tribull_customer=redacted" }, method: "GET", path: "/api/admin/products" } as Request, response, vi.fn());
+    await settleMiddleware();
+
+    expect(warn).toHaveBeenCalledWith("Admin authorization denied", {
+      category: "invalid_or_expired_session",
+      method: "GET",
+      path: "/api/admin/products",
+    });
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("redacted");
+    warn.mockRestore();
   });
 
   it("returns 403 when the authenticated customer is not an admin", async () => {
