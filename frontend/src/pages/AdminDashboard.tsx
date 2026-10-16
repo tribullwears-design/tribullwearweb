@@ -11,6 +11,7 @@ import type { Product } from "../../../shared/products";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
+import { getAdminProductLoadError } from "../lib/adminProductError";
 import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, type DashboardRange } from "../lib/adminDashboardData";
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
@@ -920,10 +921,13 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     setProductsError("");
     try {
       const response = await apiFetch("/api/admin/products", { cache: "no-store" });
-      if (!response.ok) throw new Error("Product request failed");
+      if (!response.ok) {
+        setProductsError(getAdminProductLoadError(response.status));
+        return;
+      }
       setDatabaseProducts(await response.json() as StoredProduct[]);
     } catch {
-      setProductsError("Unable to load saved products. Please try again.");
+      setProductsError(getAdminProductLoadError());
     } finally {
       setProductsLoading(false);
     }

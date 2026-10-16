@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   findOneAndUpdate: vi.fn(),
   findOne: vi.fn(),
   getDatabase: vi.fn(),
+  collection: vi.fn(),
 }));
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
@@ -15,16 +16,62 @@ import { adjustProductInventory, getProduct, InsufficientInventoryError, listPro
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getDatabase.mockResolvedValue({
-    collection: () => ({
+    collection: mocks.collection.mockImplementation(() => ({
       createIndex: mocks.createIndex,
       find: mocks.find,
       findOneAndUpdate: mocks.findOneAndUpdate,
       findOne: mocks.findOne,
-    }),
+    })),
   });
 });
 
 describe("public product reads", () => {
+  it("reads admin listings from the products collection without filtering stored fields or drafts", async () => {
+    const storedProduct = {
+      _id: "mongo-id",
+      id: "saved-product-id",
+      name: "Saved product",
+      description: "Preserved description",
+      price: 1299,
+      compareAt: 1499,
+      image: "https://cdn.example/image.jpg",
+      stock: 7,
+      sizes: ["S", "M"],
+      colors: ["Black"],
+      status: "Draft",
+      mainCategoryId: "hoodies",
+      subcategoryId: "classic",
+      mainCategory: "Hoodies",
+      subcategory: "Classic",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    };
+    const toArray = vi.fn().mockResolvedValue([storedProduct]);
+    const sort = vi.fn().mockReturnValue({ toArray });
+    mocks.find.mockReturnValue({ sort });
+
+    await expect(listProducts(undefined, undefined, undefined, true)).resolves.toEqual([{
+      id: "saved-product-id",
+      name: storedProduct.name,
+      description: storedProduct.description,
+      price: storedProduct.price,
+      compareAt: storedProduct.compareAt,
+      image: storedProduct.image,
+      stock: storedProduct.stock,
+      sizes: storedProduct.sizes,
+      colors: storedProduct.colors,
+      status: storedProduct.status,
+      mainCategoryId: storedProduct.mainCategoryId,
+      subcategoryId: storedProduct.subcategoryId,
+      mainCategory: storedProduct.mainCategory,
+      subcategory: storedProduct.subcategory,
+      createdAt: storedProduct.createdAt,
+      updatedAt: storedProduct.updatedAt,
+    }]);
+    expect(mocks.collection).toHaveBeenCalledWith("products");
+    expect(mocks.find).toHaveBeenCalledWith({});
+  });
+
   it("limits storefront listings to active products while admin listings may include drafts", async () => {
     const toArray = vi.fn().mockResolvedValue([]);
     const sort = vi.fn().mockReturnValue({ toArray });
