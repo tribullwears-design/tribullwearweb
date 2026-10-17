@@ -7,6 +7,8 @@ import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
+import { createCheckoutSubmission } from "../lib/checkout";
+import { checkoutPaymentMethods, getCheckoutPaymentLabel, indianStatesAndTerritories, isIndianState, normalizeIndianState, type CheckoutPaymentMethod } from "../../../shared/checkout";
 
 type CartEntry = {
   id: string;
@@ -204,7 +206,7 @@ export default function CheckoutPage() {
     country: "India",
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutForm | "paymentMethod", string>>>({});
-  const [paymentMethod, setPaymentMethod] = useState("upi");
+  const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>("upi");
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [showTrackingInfo, setShowTrackingInfo] = useState(false);
@@ -380,7 +382,7 @@ export default function CheckoutPage() {
     else if (!/^\+?\d{10,15}$/.test(form.phone.trim().replace(/[()\s-]/g, ""))) nextErrors.phone = "Enter a valid mobile number.";
     if (form.address.trim().length < 5) nextErrors.address = "Enter a complete street address.";
     if (!form.city.trim()) nextErrors.city = "City is required.";
-    if (!form.state.trim()) nextErrors.state = "State is required.";
+    if (!isIndianState(form.state)) nextErrors.state = "Select a valid Indian state or union territory.";
     if (!/^\d{6}$/.test(form.pinCode.trim())) nextErrors.pinCode = "Enter a valid 6-digit Indian PIN code.";
     if (!paymentMethod) nextErrors.paymentMethod = "Please select a payment method.";
 
@@ -408,14 +410,14 @@ export default function CheckoutPage() {
       const response = await apiFetch("/api/checkout/test-orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(createCheckoutSubmission({
           idempotencyKey: key,
           customer: { name: form.fullName, email: form.email, phone: form.phone },
           shippingAddress: {
             address: form.address,
             apartment: form.apartment,
             city: form.city,
-            state: form.state,
+            state: normalizeIndianState(form.state),
             pinCode: form.pinCode,
             country: "India",
           },
@@ -433,7 +435,7 @@ export default function CheckoutPage() {
               },
             };
           }),
-        }),
+        })),
       });
       const result = await response.json() as {
         error?: string;
@@ -450,7 +452,8 @@ export default function CheckoutPage() {
       };
       if (!response.ok) throw new Error(result.error || "Unable to place the test order. Please try again.");
       if (!result.id || !result.items || typeof result.total !== "number"
-        || result.paymentMode !== "test" || result.status !== "Pending" || result.payment?.status !== "Simulated") {
+        || result.paymentMode !== "test" || result.status !== "Pending"
+        || result.payment?.method !== paymentMethod || result.payment.status !== "Simulated") {
         throw new Error("The checkout server returned an incomplete order confirmation.");
       }
       const summary: OrderSummary = {
@@ -532,7 +535,7 @@ export default function CheckoutPage() {
       `Subtotal: ${formatPrice(visibleOrder.subtotal)}`,
       `Shipping: ${formatPrice(visibleOrder.shipping)}`,
       `Total: ${formatPrice(visibleOrder.total)}`,
-      `Payment: ${paymentMethod === "upi" ? "UPI" : "Credit / Debit Card"}`,
+      `Payment: ${getCheckoutPaymentLabel(paymentMethod)}`,
     ];
     try {
       setInvoiceError("");
@@ -595,7 +598,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="checkout-summary__totals checkout-summary__totals--success">
-              <div><span>Payment method</span><strong>{paymentMethod === "upi" ? "UPI (simulated)" : paymentMethod === "card" ? "Debit / credit card (simulated)" : "Net banking (simulated)"}</strong></div>
+              <div><span>Payment method</span><strong>{getCheckoutPaymentLabel(paymentMethod)} (simulated — no payment collected)</strong></div>
               <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
             </div>
             <p className="checkout-success__message">
@@ -662,7 +665,7 @@ export default function CheckoutPage() {
                 <div><span>Subtotal</span><strong>{formatPrice(visibleOrder.subtotal)}</strong></div>
                 <div><span>Shipping</span><strong>{formatPrice(visibleOrder.shipping)}</strong></div>
                 <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
-                <div><span>Payment method</span><strong>{paymentMethod === "upi" ? "UPI" : "Credit / Debit Card"}</strong></div>
+                <div><span>Payment method</span><strong>{getCheckoutPaymentLabel(paymentMethod)}</strong></div>
               </div>
               <button type="button" className="checkout-primary-button checkout-invoice__download" onClick={downloadBill}>
                 <Download size={15} /> Download PDF
@@ -692,7 +695,7 @@ export default function CheckoutPage() {
             <div className="checkout-section checkout-review">
               <h3>Review Order</h3>
               <p><strong>Deliver to</strong><br />{form.fullName}<br />{form.address}{form.apartment ? `, ${form.apartment}` : ""}<br />{form.city}, {form.state} {form.pinCode}, India<br />{form.phone} · {form.email}</p>
-              <p><strong>Simulated payment</strong><br />{paymentMethod === "upi" ? "UPI" : paymentMethod === "card" ? "Debit / credit card" : "Net banking"} — no payment will be made.</p>
+              <p><strong>Simulated payment</strong><br />{getCheckoutPaymentLabel(paymentMethod)} — no payment will be made or collected.</p>
               <div className="checkout-summary__totals">
                 <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
                 <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
@@ -736,15 +739,12 @@ export default function CheckoutPage() {
 
           <div className="checkout-section">
             <h3>Shipping Address</h3>
-            <div className="checkout-grid checkout-grid--one">
+            <div className="checkout-grid checkout-grid--address">
               <label className="checkout-field">
                 <span>Address</span>
                 <input value={form.address} onChange={(event) => handleFieldChange("address", event.target.value)} placeholder="House number, street name" />
                 {errors.address && <small>{errors.address}</small>}
               </label>
-            </div>
-
-            <div className="checkout-grid checkout-grid--two">
               <label className="checkout-field">
                 <span>Apartment / Building</span>
                 <input value={form.apartment} onChange={(event) => handleFieldChange("apartment", event.target.value)} placeholder="Optional" />
@@ -754,17 +754,17 @@ export default function CheckoutPage() {
                 <input value={form.city} onChange={(event) => handleFieldChange("city", event.target.value)} placeholder="City" />
                 {errors.city && <small>{errors.city}</small>}
               </label>
-            </div>
-
-            <div className="checkout-grid checkout-grid--three">
               <label className="checkout-field">
                 <span>State</span>
-                <input value={form.state} onChange={(event) => handleFieldChange("state", event.target.value)} placeholder="State" />
+                <select required value={normalizeIndianState(form.state)} onChange={(event) => handleFieldChange("state", event.target.value)}>
+                  <option value="">Select state or union territory</option>
+                  {indianStatesAndTerritories.map((state) => <option key={state} value={state}>{state}</option>)}
+                </select>
                 {errors.state && <small>{errors.state}</small>}
               </label>
               <label className="checkout-field">
                 <span>PIN Code</span>
-                <input value={form.pinCode} onChange={(event) => handleFieldChange("pinCode", event.target.value)} placeholder="Postal code" />
+                <input inputMode="numeric" maxLength={6} value={form.pinCode} onChange={(event) => handleFieldChange("pinCode", event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="Postal code" />
                 {errors.pinCode && <small>{errors.pinCode}</small>}
               </label>
               <label className="checkout-field">
@@ -777,14 +777,10 @@ export default function CheckoutPage() {
           <div className="checkout-section">
             <h3>Payment</h3>
             <div className="checkout-payment-options">
-              {[
-                { id: "upi", label: "UPI" },
-                { id: "card", label: "Debit / credit card" },
-                { id: "netbanking", label: "Net banking" },
-              ].map((option) => (
+              {checkoutPaymentMethods.map((option) => (
                 <label key={option.id} className={`checkout-payment-option ${paymentMethod === option.id ? "is-selected" : ""}`}>
-                  <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => setPaymentMethod(option.id)} />
-                  <span>{option.label} <small>Test simulation only</small></span>
+                  <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => { setPaymentMethod(option.id); setErrors((current) => ({ ...current, paymentMethod: "" })); }} />
+                  <span>{option.label} <small>{option.id === "cod" ? "Test order only; no payment collected" : "Test simulation only"}</small></span>
                 </label>
               ))}
             </div>

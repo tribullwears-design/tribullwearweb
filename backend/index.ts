@@ -17,6 +17,7 @@ import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import type { AdminUserActor } from "./adminUserStore.js";
 import { redactAdminOrderPersonalInformation } from "./adminPrivacy.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
+import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
 import { rateLimit } from "express-rate-limit";
 import {
   consumePasswordReset,
@@ -687,12 +688,12 @@ async function startServer() {
       }
       if (!shippingAddress || typeof shippingAddress.address !== "string" || shippingAddress.address.trim().length < 5
         || typeof shippingAddress.apartment !== "string" || typeof shippingAddress.city !== "string" || !shippingAddress.city.trim()
-        || typeof shippingAddress.state !== "string" || !shippingAddress.state.trim()
+        || !isIndianState(shippingAddress.state)
         || typeof shippingAddress.pinCode !== "string" || !/^\d{6}$/.test(shippingAddress.pinCode)
         || typeof shippingAddress.country !== "string" || shippingAddress.country !== "India") {
         return res.status(400).json({ error: "Enter a complete Indian delivery address with a valid 6-digit PIN code" });
       }
-      if (!["upi", "card", "netbanking"].includes(paymentMethod)) {
+      if (!isCheckoutPaymentMethod(paymentMethod)) {
         return res.status(400).json({ error: "Choose one of the simulated test payment methods" });
       }
       if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
@@ -762,7 +763,7 @@ async function startServer() {
           address: shippingAddress.address.trim(),
           apartment: shippingAddress.apartment.trim(),
           city: shippingAddress.city.trim(),
-          state: shippingAddress.state.trim(),
+          state: normalizeIndianState(shippingAddress.state),
           pinCode: shippingAddress.pinCode,
           country: "India",
         },
