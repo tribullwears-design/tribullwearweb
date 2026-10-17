@@ -141,6 +141,45 @@ describe("password customer authentication", () => {
       expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("regular-admin@example.test");
     });
 
+    it("authenticates an ADMIN_LOGIN_EMAIL account from admin-datas with bcrypt", async () => {
+      vi.stubEnv("ADMIN_LOGIN_EMAIL", "primary-admin@example.test");
+      vi.stubEnv("ADMIN_TEST_EMAIL", "");
+      const password = "primary-allowlist-admin-password";
+      const superAdmin = {
+        ...adminCustomer,
+        email: "primary-admin@example.test",
+        passwordHash: await hashPassword(password),
+      };
+      adminTestMocks.findByEmail.mockResolvedValue(superAdmin);
+
+      await expect(authenticateAdminLoginPassword(
+        " PRIMARY-ADMIN@EXAMPLE.TEST ",
+        password,
+        "primary-admin@example.test",
+        null,
+      )).resolves.toMatchObject({
+        customer: { email: "primary-admin@example.test", adminTitle: "Super Admin" },
+        reason: null,
+        source: "admin-datas",
+      });
+      await expect(authenticateAdminLoginPassword(
+        "primary-admin@example.test",
+        "wrong-password",
+        "primary-admin@example.test",
+        null,
+      )).resolves.toMatchObject({ customer: null, reason: "invalid-password", source: null });
+      expect(findCustomerByEmailMock).toHaveBeenCalledWith("primary-admin@example.test");
+      expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("primary-admin@example.test");
+
+      let issuedToken = "";
+      const response = { cookie: vi.fn((_name: string, token: string) => { issuedToken = token; }) } as unknown as Response;
+      issueAdminSession(response, superAdmin, "admin-datas");
+      adminTestMocks.findById.mockResolvedValue(superAdmin);
+      await expect(getSessionAdmin({
+        headers: { cookie: `${adminCookieName}=${issuedToken}` },
+      } as Request)).resolves.toMatchObject({ adminAccountSource: "admin-datas" });
+    });
+
     it("rejects a valid password when a normalized email exists in both account collections", async () => {
       const password = "valid-but-ambiguous-password";
       const passwordHash = await hashPassword(password);

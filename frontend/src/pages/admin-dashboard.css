@@ -291,3 +291,32 @@
 .admin-shell--read-only .admin-content button:not(.admin-pagination button):not(.admin-text-button):not(.admin-modal-close){display:none!important}
 .admin-shell--read-only .admin-content .admin-more-button{display:inline-flex!important}
 .admin-shell--read-only .admin-content .admin-order-detail-modal label{display:none}
+.admin-account-settings { max-width: 760px; }
+.admin-account-identity { display: flex; flex-direction: column; gap: 4px; margin-bottom: 21px; padding: 15px 17px; border: 1px solid var(--admin-line); border-radius: 8px; background: #f9fbfb; }
+.admin-account-identity > span:first-child { color: var(--admin-muted); font-size: 10px; }
+.admin-account-identity strong { color: var(--admin-navy); font-size: 15px; }
+.admin-account-identity > span:last-child { color: var(--admin-muted); font-size: 11px; }
+.admin-account-form { max-width: none; }
+.admin-account-password-heading { grid-column: 1 / -1; margin-top: 5px; padding-top: 17px; border-top: 1px solid var(--admin-line); }
+.admin-account-password-heading h3 { margin: 0; color: var(--admin-navy); font-size: 14px; }
+.admin-account-password-heading p { margin: 4px 0 0; color: var(--admin-muted); font-size: 11px; }
+.admin-account-form > .admin-image-error, .admin-account-form > .admin-form-success { grid-column: 1 / -1; }
+.admin-help-center { padding: 0; border: 0; box-shadow: none; }
+.admin-help-search { display: flex; align-items: center; gap: 9px; width: min(520px, 100%); height: 39px; margin: 0 0 18px; padding: 0 11px; border: 1px solid var(--admin-line); border-radius: 7px; background: #fbfcfc; color: var(--admin-muted); }
+.admin-help-search:focus-within { border-color: var(--admin-teal); box-shadow: 0 0 0 3px rgba(23,107,104,.08); }
+.admin-help-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--admin-ink); font-size: 12px; }
+.admin-help-faqs { max-width: 860px; border-top: 1px solid var(--admin-line); }
+.admin-help-faq { border-bottom: 1px solid var(--admin-line); }
+.admin-help-faq summary { position: relative; padding: 15px 30px 15px 2px; color: var(--admin-navy); font-size: 12px; font-weight: 700; cursor: pointer; list-style: none; }
+.admin-help-faq summary::-webkit-details-marker { display: none; }
+.admin-help-faq summary::after { position: absolute; right: 4px; color: var(--admin-teal); content: "+"; font-size: 18px; font-weight: 400; line-height: 1; }
+.admin-help-faq[open] summary::after { content: "−"; }
+.admin-help-faq > p { max-width: 760px; margin: -3px 28px 16px 2px; color: var(--admin-muted); font-size: 11px; line-height: 1.7; }
+.admin-help-empty { max-width: 520px; padding: 18px; border: 1px solid var(--admin-line); border-radius: 7px; background: #fbfcfc; color: var(--admin-muted); font-size: 12px; }
+.admin-sidebar-help { width: calc(100% - 6px); text-align: left; cursor: pointer; }
+.admin-sidebar-help:hover { border-color: #bcd8d0; background: #edf7f4; }
+@media (max-width: 700px) {
+  .admin-account-password-heading, .admin-account-form > .admin-image-error, .admin-account-form > .admin-form-success { grid-column: auto; }
+  .admin-help-center { padding: 0; }
+  .admin-help-faq summary { padding-top: 13px; padding-bottom: 13px; }
+}

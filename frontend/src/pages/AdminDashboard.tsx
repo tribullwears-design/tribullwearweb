@@ -14,6 +14,8 @@ import { apiFetch } from "../lib/api";
 import { saveAdminUserAndRefresh } from "../lib/adminUsers";
 import { adminPermissionSections, adminRoleTitles, defaultRolePermissions, getEffectiveAdminPermissions, hasAdminPermission, type AdminPermissions, type AdminRoleTitle, type AdminPermissionSection } from "../lib/adminAccess";
 import { getAdminProductLoadError } from "../lib/adminProductError";
+import AdminAccountSettings from "./AdminAccountSettings";
+import AdminHelpCenter from "./AdminHelpCenter";
 import { getCheckoutPaymentLabel } from "../../../shared/checkout";
 import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, type DashboardRange } from "../lib/adminDashboardData";
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
@@ -72,7 +74,8 @@ const navigation: NavSection[] = [
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }, { label: "Promotions", icon: Gift, screen: "promotions" }] },
   { label: "Content", items: [{ label: "Collections", icon: Boxes, screen: "collections" }, { label: "Featured Products", icon: ShoppingBag, screen: "featured" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
   { label: "Analytics", items: [{ label: "Analytics", icon: BarChart3, screen: "analytics" }, { label: "Sales Reports", icon: Activity, screen: "sales-reports" }, { label: "Product Reports", icon: FileText, screen: "product-reports" }] },
-  { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
+  { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Account Settings", icon: UserRound, screen: "account-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
+  { label: "Help", items: [{ label: "Help Center", icon: LifeBuoy, screen: "help-center" }] },
 ];
 const adminRoutes: Record<string, string> = {
   dashboard: "/admin26/dashboard",
@@ -99,7 +102,9 @@ const adminRoutes: Record<string, string> = {
   "sales-reports": "/admin26/analytics/sales-reports",
   "product-reports": "/admin26/analytics/product-reports",
   "general-settings": "/admin26/settings/general",
+  "account-settings": "/admin26/settings/account",
   "admin-users": "/admin26/settings/admin-users",
+  "help-center": "/admin26/help",
 };
 
 const permissionSections: { key: AdminPermissionSection; label: string }[] = [
@@ -820,6 +825,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [signOutLoading, setSignOutLoading] = useState(false);
+  const signOutInFlight = useRef(false);
   const [range, setDashboardRange] = useState<DashboardRange>("Today");
   const setRange = (value: string) => {
     if (value === "Today" || value === "Yesterday" || value === "Last 7 days" || value === "Last 30 days") setDashboardRange(value);
@@ -856,12 +863,22 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     return () => { active = false; };
   }, []);
   const signOut = async () => {
+    if (signOutInFlight.current) return;
+    signOutInFlight.current = true;
+    setSignOutLoading(true);
     try {
       const response = await apiFetch("/api/admin/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Unable to sign out right now.");
+      setProfileOpen(false);
+      setCurrentAdmin(null);
+      setCurrentAdminName("");
+      setCurrentAdminEmail("");
       setLocation("/admin26");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to sign out right now.");
+    } finally {
+      signOutInFlight.current = false;
+      setSignOutLoading(false);
     }
   };
   const canView = (section: AdminPermissionSection) => Boolean(currentAdmin && hasAdminPermission(currentAdmin.permissions, section, "view"));
@@ -1262,7 +1279,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setInventoryAdjustmentSaving(false);
     }
   };
-  const navigate = (nextScreen: string) => { setScreen(nextScreen); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
+  const navigate = (nextScreen: string) => { setScreen(nextScreen); setProfileOpen(false); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
   const saveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const price = Number(productForm.price);
@@ -1760,7 +1777,9 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
 
   const renderScreen = () => {
     const section = permissionSectionForScreen(screen);
-    if (!canView(section)) return <AdminPanel title="Access denied"><p role="alert">Your account does not have permission to view this section.</p></AdminPanel>;
+    if (!["account-settings", "help-center"].includes(screen) && !canView(section)) return <AdminPanel title="Access denied"><p role="alert">Your account does not have permission to view this section.</p></AdminPanel>;
+    if (screen === "account-settings") return <AdminPanel title="Account Settings"><AdminAccountSettings name={currentAdminName} email={currentAdminEmail} onProfileUpdated={setCurrentAdminName} /></AdminPanel>;
+    if (screen === "help-center") return <AdminPanel title="Help Center"><AdminHelpCenter /></AdminPanel>;
     if (["add-product", "edit-product"].includes(screen) && !canEdit("products")) return <AdminPanel title="Read-only access"><p role="alert">Your role can view products but cannot make changes.</p></AdminPanel>;
     if (screen === "dashboard") {
       const stats: { label: string; value: string; note: string; icon: Icon }[] = [
@@ -1934,19 +1953,19 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   if (identityLoading) return <main className="admin-content" aria-live="polite"><p>Checking admin access...</p></main>;
   if (!currentAdmin || identityError) return <main className="admin-content"><AdminPanel title="Admin access required"><p className="admin-image-error" role="alert">{identityError || "Sign in with an authorized admin account."}</p></AdminPanel></main>;
 
-  return <div className={`admin-shell ${collapsed ? "admin-shell--collapsed" : ""} ${!canEdit(permissionSectionForScreen(screen)) && screen !== "admin-users" ? "admin-shell--read-only" : ""}`}>
+  return <div className={`admin-shell ${collapsed ? "admin-shell--collapsed" : ""} ${!canEdit(permissionSectionForScreen(screen)) && !["admin-users", "account-settings", "help-center"].includes(screen) ? "admin-shell--read-only" : ""}`}>
     <aside className={`admin-sidebar ${mobileOpen ? "admin-sidebar--open" : ""}`}>
       <div className="admin-brand"><div className="admin-brand-mark">T</div><div className="admin-brand-copy"><strong>TRIBULL</strong><span>Admin</span></div><button className="admin-icon-button admin-sidebar-close" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)}><X size={18} /></button></div>
       <div className="admin-store-switcher"><div className="admin-store-icon"><Store size={17} /></div><div><strong>Tribull Store</strong><span>Online store</span></div><ChevronDown size={15} /></div>
       <nav className="admin-navigation" aria-label="Admin navigation">{navigation.map((section) => {
-        const items = section.items.filter(({ screen: itemScreen }) => canView(permissionSectionForScreen(itemScreen)) && (itemScreen !== "add-product" || canEdit("products")));
+        const items = section.items.filter(({ screen: itemScreen }) => (["account-settings", "help-center"].includes(itemScreen) || canView(permissionSectionForScreen(itemScreen))) && (itemScreen !== "add-product" || canEdit("products")));
         return items.length ? <div className="admin-nav-section" key={section.label}><p>{section.label}</p>{items.map(({ label, icon: NavIcon, screen: itemScreen }) => <button className={`admin-nav-item ${screen === itemScreen ? "admin-nav-item--active" : ""}`} type="button" key={`${section.label}-${label}`} onClick={() => navigate(itemScreen)} title={collapsed ? label : undefined}><NavIcon size={17} /><span>{label}</span></button>)}</div> : null;
       })}</nav>
-      <div className="admin-sidebar-help"><LifeBuoy size={18} /><div><strong>Need a hand?</strong><span>Visit help center</span></div><ChevronRight size={14} /></div><button className="admin-collapse-button" type="button" onClick={() => setCollapsed(!collapsed)}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}<span>{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span></button>
+      <button className="admin-sidebar-help" type="button" onClick={() => navigate("help-center")}><LifeBuoy size={18} /><div><strong>Need a hand?</strong><span>Visit help center</span></div><ChevronRight size={14} /></button><button className="admin-collapse-button" type="button" onClick={() => setCollapsed(!collapsed)}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}<span>{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span></button>
     </aside>
     {mobileOpen && <button className="admin-drawer-overlay" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
     <div className="admin-main-wrap">
-      <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>{currentAdmin.role}</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders and products..." value={adminSearch} onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); setOrderPage(1); }} /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">{currentAdminName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="admin-profile-name">{currentAdminName}</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>{currentAdminName}</strong><span>{currentAdminEmail}</span><span>{currentAdmin.role}</span><button type="button"><UserRound size={15} /> Account settings</button><button type="button"><LifeBuoy size={15} /> Help center</button><button type="button" onClick={() => void signOut()}>Sign out</button></div>}</div></div></header>
+      <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>{currentAdmin.role}</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders and products..." value={adminSearch} onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); setOrderPage(1); }} /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">{currentAdminName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="admin-profile-name">{currentAdminName}</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>{currentAdminName}</strong><span>{currentAdminEmail}</span><span>{currentAdmin.role}</span><button type="button" onClick={() => navigate("account-settings")}><UserRound size={15} /> Account settings</button><button type="button" onClick={() => navigate("help-center")}><LifeBuoy size={15} /> Help center</button><button type="button" disabled={signOutLoading} onClick={() => void signOut()}>{signOutLoading ? "Signing out..." : "Sign out"}</button></div>}</div></div></header>
       <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{screen === "products" && isProductEditorOpen && <div className="admin-modal-backdrop admin-product-edit-backdrop" onClick={closeProductEditor}><section className="admin-modal admin-product-edit-modal" role="dialog" aria-modal="true" aria-labelledby="admin-product-edit-title" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" aria-label="Close editor" onClick={closeProductEditor}><X size={17} /></button><h2 id="admin-product-edit-title">Edit Product</h2>{editProductLoading ? <p>Loading product...</p> : editProductError && !editingProduct ? <><p className="admin-image-error" role="alert">Unable to load product details. Please try again.</p><div className="admin-form-actions">{editingProductTarget && <button className="admin-primary-button" type="button" onClick={() => void editProduct(editingProductTarget)}>Retry</button>}<button className="admin-secondary-button" type="button" onClick={closeProductEditor}>Close</button></div></> : editingProduct && <AddProductForm productForm={editingProductForm} setProductForm={setEditingProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveEditedProduct} onCancel={closeProductEditor} imageError={imageError} onImageChange={(event) => handleProductImageChange(event, setEditingProductForm)} savedNotice={editProductError} productSaving={productSaving} submitLabel="Save Changes" />}</section></div>}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.mainCategory && selectedProduct.subcategory ? `${selectedProduct.mainCategory} · ${selectedProduct.subcategory}` : selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : selectedProduct.status} />{selectedProduct.mainCategoryId && <div className="admin-form"><label><span>Main Category</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductCategory} onChange={(event) => { const value = event.target.value; setEditingProductCategory(value); setEditingProductSubcategory(categoryHierarchy.subcategories[value]?.[0]?.value || ""); }}>{categoryHierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label><label><span>Subcategory / Industry</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductSubcategory} onChange={(event) => setEditingProductSubcategory(event.target.value)}>{(categoryHierarchy.subcategories[editingProductCategory] || []).map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>{(productUpdateError || categoryHierarchyError) && <p className="admin-image-error" role="alert">{productUpdateError || categoryHierarchyError}</p>}<div className="admin-form-actions"><button type="button" className="admin-primary-button" disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} onClick={() => void saveProductCategory()}>Save Category</button></div></div>}</div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p><p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p><div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div><p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p>      <p>Payment: {getCheckoutPaymentLabel(selectedOrder.payment.method)} ({selectedOrder.payment.status})</p><label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label><StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
     </div>
   </div>;

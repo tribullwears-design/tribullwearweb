@@ -1,6 +1,8 @@
-import { Router } from "express";
-import { rateLimit } from "express-rate-limit";
-import { requireAdminPermission, requireSuperAdmin } from "./adminAuth.js";
+import { Router, type Request, type Response } from "express";
+import { createHash } from "node:crypto";
+import { ipKeyGenerator, rateLimit } from "express-rate-limit";
+import { requireAdmin, requireAdminPermission, requireSuperAdmin } from "./adminAuth.js";
+import { AdminAccountSettingsError, updateOwnAdminAccountSettings } from "./adminAccountStore.js";
 import { getConfiguredAdminLoginEmail, getConfiguredAdminTestEmail } from "./adminLoginConfig.js";
 import {
   AdminUserConflictError,
@@ -27,12 +29,49 @@ import {
 
 export const adminLoginRateLimit = {
   windowMs: 15 * 60 * 1000,
-  limit: 8,
+  perAccountIpLimit: 8,
+  perIpLimit: 30,
 } as const;
+
+function adminLoginIpKey(request: Request) {
+  return ipKeyGenerator(request.ip || request.socket.remoteAddress || "unknown");
+}
+
+function adminLoginAccountIpKey(request: Request) {
+  const email = typeof request.body?.email === "string"
+    ? normalizeCustomerEmail(request.body.email)
+    : "";
+  return createHash("sha256")
+    .update(`${adminLoginIpKey(request)}\0${email}`)
+    .digest("hex");
+}
 
 export function createAdminRouter() {
   const router = Router();
-  const adminLoginLimiter = rateLimit({ ...adminLoginRateLimit, standardHeaders: "draft-8", legacyHeaders: false });
+  const rateLimitOptions = {
+    windowMs: adminLoginRateLimit.windowMs,
+    standardHeaders: "draft-8" as const,
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    requestWasSuccessful: (_request: Request, response: Response) =>
+      response.statusCode !== 401 && response.statusCode !== 403,
+  };
+  const adminLoginIpLimiter = rateLimit({
+    ...rateLimitOptions,
+    limit: adminLoginRateLimit.perIpLimit,
+    keyGenerator: adminLoginIpKey,
+  });
+  const adminLoginAccountLimiter = rateLimit({
+    ...rateLimitOptions,
+    limit: adminLoginRateLimit.perAccountIpLimit,
+    keyGenerator: adminLoginAccountIpKey,
+  });
+  const clearAdminLoginFailures = async (request: Request) => {
+    await Promise.all([
+      adminLoginIpLimiter.resetKey(adminLoginIpKey(request)),
+      adminLoginAccountLimiter.resetKey(adminLoginAccountIpKey(request)),
+    ]);
+  };
 
   router.use("/api/admin/auth", (_req, res, next) => {
     try {
@@ -46,7 +85,7 @@ export function createAdminRouter() {
     }
   });
 
-  router.post("/api/admin/auth/login", adminLoginLimiter, async (req, res) => {
+  router.post("/api/admin/auth/login", adminLoginIpLimiter, adminLoginAccountLimiter, async (req, res) => {
     const { email, password } = req.body ?? {};
     if (typeof email !== "string" || !isValidCustomerEmail(normalizeCustomerEmail(email)) || typeof password !== "string" || !password) {
       return res.status(400).json({ error: "Enter a valid email address and password" });
@@ -70,6 +109,7 @@ export function createAdminRouter() {
       if (customer.adminRole !== "admin" || customer.adminStatus === "Inactive" || !customer.adminTitle) {
         return res.status(403).json({ error: "This account is not authorized for admin access" });
       }
+      await clearAdminLoginFailures(req);
       issueAdminSession(res, customer, result.source || "user-credentials");
       return res.json({ user: safeCustomer(customer), admin: {
         role: customer.adminTitle,
@@ -113,6 +153,22 @@ export function createAdminRouter() {
     } catch (error) {
       console.error("Admin sign-out failed", { errorType: error instanceof Error ? error.name : "UnknownError" });
       return res.status(500).json({ error: "Unable to sign out right now" });
+    }
+  });
+
+  router.patch("/api/admin/account", requireAdmin, async (req, res) => {
+    try {
+      const result = await updateOwnAdminAccountSettings(res.locals.adminActor, req.body);
+      if (result.passwordChanged) issueAdminSession(res, result.account, result.source);
+      return res.json({ user: safeCustomer(result.account) });
+    } catch (error) {
+      if (error instanceof AdminAccountSettingsError) {
+        return res.status(error.status).json({ error: error.message });
+      }
+      console.error("Admin account settings update failed", {
+        errorType: error instanceof Error ? error.name : "UnknownError",
+      });
+      return res.status(500).json({ error: "Unable to update account settings right now" });
     }
   });
 

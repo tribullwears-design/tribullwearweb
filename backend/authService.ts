@@ -8,6 +8,7 @@ import {
   findCustomerByEmail,
   findCustomerByGoogleId,
   findCustomerById,
+  isValidCustomerEmail,
   insertCustomer,
   normalizeCustomerEmail,
   normalizeCustomerMobile,
@@ -144,8 +145,10 @@ export async function getSessionAdmin(request: Request) {
     : await findCustomerById(claims.sub);
   if (!customer || (customer.adminTokenVersion ?? 0) !== claims.ver || !customer.isProfileComplete) return null;
   if (source === "admin-datas" && customer.adminAccountType !== "dedicated") {
-    const configuredEmail = getConfiguredAdminTestEmail();
-    if (!configuredEmail || normalizeCustomerEmail(customer.email) !== configuredEmail) return null;
+    const primaryEmail = normalizeCustomerEmail(process.env.ADMIN_LOGIN_EMAIL || "");
+    const testEmail = getConfiguredAdminTestEmail();
+    if (![primaryEmail, testEmail].some((email) =>
+      email !== null && isValidCustomerEmail(email) && normalizeCustomerEmail(customer.email) === email)) return null;
   }
   customer.adminAccountSource = source;
   return customer;
@@ -220,7 +223,7 @@ export async function authenticateAdminLoginPassword(
     const result = await authenticateCustomerPassword(testAdmin, password);
     return { ...result, source: result.customer ? "admin-datas" as const : null };
   }
-  if (canAuthenticateTest && testAdmin) {
+  if ((canAuthenticateRegular || canAuthenticateTest) && testAdmin) {
     const result = await authenticateCustomerPassword(testAdmin, password);
     return { ...result, source: result.customer ? "admin-datas" as const : null };
   }

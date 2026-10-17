@@ -18,6 +18,8 @@ Set these Render environment variables:
 - `MONGODB_URI` — MongoDB Atlas connection string
 - `MONGODB_DB` — database name (defaults to `tribull`)
 - `JWT_SECRET` — at least 32 bytes of secret material
+- `ADMIN_LOGIN_EMAIL` — required primary admin email allowlist; the existing active admin may be in `user-credentials` or `admin-datas`
+- `ADMIN_TEST_EMAIL` — optional additional allowlisted account in `admin-datas`
 - `AUTH_COOKIE_SAME_SITE` — set to `none` for the HTTPS Vercel frontend calling the Render API
 - `FRONTEND_URL` — exact allowed frontend origin(s), comma-separated if needed
 - `GOOGLE_CLIENT_ID` — required for Google sign-in
@@ -25,11 +27,17 @@ Set these Render environment variables:
 - `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` — required for online checkout; use test credentials until live mode is approved
 - `RAZORPAY_WEBHOOK_SECRET` — optional, required only when webhook reconciliation is configured
 
+When `NODE_ENV=production`, the Express server trusts exactly one reverse-proxy hop, as used by Render, for client IP and secure request metadata. Local and test environments do not trust forwarded proxy headers.
+
 Set `CATEGORY_API_URL` to the Render service's HTTPS base URL (without a trailing slash) for the Vite development proxy. Keep localhost URLs out of production configuration. Vercel production requests use the checked-in `/api/*` rewrite; the Vercel project is not changed automatically.
 
 ## Admin sign-in and provisioning
 
-`ADMIN_LOGIN_EMAIL` is an email allowlist for the dedicated email-and-password login at `/admin26`. It does not create an account, set a password, or grant an admin role. Login requires an existing customer record with a valid password hash and an active admin grant. Google login and the customer session are separate from this admin login.
+`ADMIN_LOGIN_EMAIL` is the primary email allowlist for the dedicated email-and-password login at `/admin26`. The allowlisted account may be in `user-credentials` or `admin-datas`; it must already have a valid password hash and an active admin grant. This setting does not create an account or grant admin permissions, and customer login/session cookies never grant admin access. `ADMIN_TEST_EMAIL` remains an optional additional allowlist for a non-dedicated account in `admin-datas`.
+
+Admin login counts failed attempts only: up to 8 failures per normalized email and trusted client IP, plus 30 failures per trusted client IP, within a 15-minute window. A successful authorized login clears both counters for that email/IP pair; otherwise the counters expire automatically after 15 minutes. The authenticated `/api/admin/auth/me` session-check endpoint is not subject to login-attempt limiting.
+
+Authenticated admins can open Account Settings from the profile menu to update their own name or change their password after verifying the current password. Password changes are bcrypt-hashed, update only the account identified by the verified admin session, and rotate that session while keeping the current admin signed in. The Help Center is available in the admin navigation and profile menu. Sign out invalidates the current admin session and clears only the admin cookie.
 
 To enable password login for an existing account that has no password credential:
 
@@ -95,7 +103,7 @@ When the dev launcher reports Vite at `http://localhost:3001`, sign in at `http:
 
 ### Hosted Atlas testing Super Admin (explicit setup only)
 
-The existing admin login uses `POST /api/admin/auth/login`, bcrypt password verification, and the signed `tribull_admin` HttpOnly cookie. Regular admins remain in `user-credentials`. The optional testing Super Admin is stored separately in `admin-datas`; its session token identifies that source so session restoration, permission checks, and logout token invalidation use the normal admin middleware. `ADMIN_LOGIN_EMAIL` continues to allow the existing regular admin, while `ADMIN_TEST_EMAIL` independently allows the designated testing account in `admin-datas`. The test-account password is used only by the explicit setup command and is not needed in the hosted runtime environment.
+The existing admin login uses `POST /api/admin/auth/login`, bcrypt password verification, and the signed `tribull_admin` HttpOnly cookie. Regular admins remain in `user-credentials`; Super Admin accounts may be in `admin-datas`. The session token identifies the account source so session restoration, permission checks, and logout token invalidation use the normal admin middleware. `ADMIN_LOGIN_EMAIL` can allow an existing admin in either collection, while `ADMIN_TEST_EMAIL` is an optional additional allowlist for a designated account in `admin-datas`. The test-account password is used only by the explicit setup command and is not needed in the hosted runtime environment.
 
 The explicit Atlas setup command creates a new test account for the normalized email in `ADMIN_TEST_EMAIL` in the `tribull` database, inside collection `admin-datas`. Before writing, it checks both `user-credentials` and `admin-datas` and refuses any email already present in either collection; it will not update or overwrite an existing account. The script requires `MONGODB_DB=tribull` and an Atlas `mongodb+srv://...mongodb.net` URI; if the URI includes a database path, that path must also be `tribull`. It creates a unique case-insensitive email index if needed, stores a hash made with the existing bcrypt helper, assigns the new document the Super Admin role and full permissions, and initializes its token versions. It does not run on application startup, build, or deployment. It never drops a collection or changes other users.
 
@@ -103,7 +111,7 @@ If the test-account password is compromised, use the separate `admin:rotate-test
 
 Do not run the Atlas setup until you have chosen a new email absent from both account collections and explicitly decided to create that exact test account in the configured Atlas database. The command requires a matching email confirmation argument and accepts only a MongoDB Atlas `mongodb+srv://...mongodb.net` URI. Use an authorized Atlas database user and verify the named database is the intended target. Do not put the password or MongoDB URI into shell history or source control.
 
-Setup variables are `MONGODB_URI`, `MONGODB_DB`, `ADMIN_TEST_EMAIL`, and `ADMIN_TEST_PASSWORD` (12-72 UTF-8 bytes). `ADMIN_TEST_NAME` is optional. `ADMIN_LOGIN_EMAIL` remains the regular admin's allowlisted email and does not need to match `ADMIN_TEST_EMAIL`. The existing regular admin and the configured test Super Admin can each log in through `/api/admin/auth/login`; if the same email exists in both collections, login is rejected as ambiguous. After setup, configure the hosted backend with both `ADMIN_TEST_EMAIL` and the existing `ADMIN_LOGIN_EMAIL`; do not configure `ADMIN_TEST_PASSWORD` on the hosted runtime. Keep the Atlas URI, database name, and JWT secret in server-only environment settings, never frontend/Vite-prefixed variables.
+Setup variables are `MONGODB_URI`, `MONGODB_DB`, `ADMIN_TEST_EMAIL`, and `ADMIN_TEST_PASSWORD` (12-72 UTF-8 bytes). `ADMIN_TEST_NAME` is optional. `ADMIN_LOGIN_EMAIL` is the primary existing-admin allowlist and need not match `ADMIN_TEST_EMAIL`; both values can point to records in `admin-datas`, but the same email in both collections is rejected as ambiguous. After setup, configure the hosted backend with `ADMIN_LOGIN_EMAIL` and, only if needed, `ADMIN_TEST_EMAIL`; do not configure `ADMIN_TEST_PASSWORD` on the hosted runtime. Keep the Atlas URI, database name, and JWT secret in server-only environment settings, never frontend/Vite-prefixed variables.
 
 After you have reviewed and chosen the exact account email and verified the Atlas cluster is the intended target, run the following intentionally from a secure PowerShell session. The script loads only `backend/.env.local` (never `backend/.env.production`); variables already set in the process environment take precedence. Set `MONGODB_DB` to `tribull`.
 

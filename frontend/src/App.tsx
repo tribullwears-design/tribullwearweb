@@ -50,7 +50,9 @@ function Router() {
       <Route path={"/admin26/analytics/sales-reports"}>{() => <AdminRoute initialScreen="sales-reports" />}</Route>
       <Route path={"/admin26/analytics/product-reports"}>{() => <AdminRoute initialScreen="product-reports" />}</Route>
       <Route path={"/admin26/settings/general"}>{() => <AdminRoute initialScreen="general-settings" />}</Route>
+      <Route path={"/admin26/settings/account"}>{() => <AdminRoute initialScreen="account-settings" />}</Route>
       <Route path={"/admin26/settings/admin-users"}>{() => <AdminRoute initialScreen="admin-users" />}</Route>
+      <Route path={"/admin26/help"}>{() => <AdminRoute initialScreen="help-center" />}</Route>
       <Route path={"/products"} component={AllProductsPage} />
       <Route path={"/search"} component={SearchResultsPage} />
       <Route path={"/checkout"} component={CheckoutPage} />

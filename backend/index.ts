@@ -12,6 +12,7 @@ import { CollectionConflictError, CollectionValidationError, createStoreCollecti
 import { createOffer, deleteOffer, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
 import { createAdminRouter } from "./adminRoutes.js";
+import { configureProxyTrust } from "./proxyTrust.js";
 import { createRazorpayCheckoutRouter } from "./razorpayRoutes.js";
 import { createAdminOrderRouter } from "./orderRoutes.js";
 import { createCustomerRouter } from "./customerRoutes.js";
@@ -72,6 +73,7 @@ async function startServer() {
   validateCustomerAuthConfiguration();
 
   const app = express();
+  configureProxyTrust(app);
   const server = createServer(app);
   app.use(express.json({
     limit: "10mb",

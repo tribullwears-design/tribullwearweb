@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import { createServer, type Server } from "node:http";
 import bcrypt from "bcryptjs";
+import { configureProxyTrust } from "./proxyTrust.js";
 
 const mocks = vi.hoisted(() => ({
   sessionUser: null as {
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
     authProviders: ("password" | "google")[];
     isProfileComplete: boolean;
     tokenVersion: number;
-    adminAccountSource?: "admin-datas";
+    adminAccountSource?: "user-credentials" | "admin-datas";
     adminRole?: "admin";
     adminTitle?: "Super Admin" | "Admin" | "Manager" | "Staff";
     adminStatus?: "Active" | "Inactive";
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   listDedicatedAdminAccounts: vi.fn(),
   updateDedicatedAdminAccount: vi.fn(),
   updateAdminUser: vi.fn(),
+  updateOwnAdminAccountSettings: vi.fn(),
 }));
 
 vi.mock("./authStore.js", async (importOriginal) => {
@@ -69,10 +71,18 @@ vi.mock("./adminUserStore.js", () => ({
   updateAdminUser: mocks.updateAdminUser,
 }));
 
+vi.mock("./adminAccountStore.js", () => ({
+  AdminAccountSettingsError: class AdminAccountSettingsError extends Error {
+    constructor(message: string, readonly status: number) { super(message); }
+  },
+  updateOwnAdminAccountSettings: mocks.updateOwnAdminAccountSettings,
+}));
+
 import { adminLoginRateLimit, createAdminRouter } from "./adminRoutes.js";
 
 let server: Server | undefined;
 let origin: string;
+let app: express.Express;
 
 beforeEach(async () => {
   vi.stubEnv("NODE_ENV", "test");
@@ -93,8 +103,10 @@ beforeEach(async () => {
   mocks.listDedicatedAdminAccounts.mockReset().mockResolvedValue([]);
   mocks.updateDedicatedAdminAccount.mockReset();
   mocks.updateAdminUser.mockReset();
+  mocks.updateOwnAdminAccountSettings.mockReset();
 
-  const app = express();
+  app = express();
+  configureProxyTrust(app);
   app.use(express.json());
   app.use(createAdminRouter());
   server = createServer(app);
@@ -129,43 +141,105 @@ function activeSuperAdmin() {
 }
 
 describe("admin HTTP routes", () => {
-  it("limits only admin login to eight requests per IP in a 15-minute window", async () => {
-    expect(adminLoginRateLimit).toEqual({ limit: 8, windowMs: 15 * 60 * 1000 });
-
-    const attempts = await Promise.all(Array.from({ length: adminLoginRateLimit.limit }, () =>
-      fetch(`${origin}/api/admin/auth/login`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      })));
-    expect(attempts.every((response) => response.status === 400)).toBe(true);
-
-    const blocked = await fetch(`${origin}/api/admin/auth/login`, {
+  const login = (email = "admin@example.com", password = "incorrect-test-password", headers: Record<string, string> = {}) =>
+    fetch(`${origin}/api/admin/auth/login`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ email, password }),
     });
+
+  it("limits failed attempts per normalized account and IP, with a separate IP-wide cap", async () => {
+    expect(adminLoginRateLimit).toEqual({
+      windowMs: 15 * 60 * 1000,
+      perAccountIpLimit: 8,
+      perIpLimit: 30,
+    });
+    expect(app.get("trust proxy")).toBe(false);
+
+    expect((await login("", "missing-email")).status).toBe(400);
+    expect((await login("admin@example.com", "")).status).toBe(400);
+    const attempts = await Promise.all(Array.from({ length: adminLoginRateLimit.perAccountIpLimit }, () =>
+      login(" ADMIN@EXAMPLE.COM ")));
+    expect(attempts.every((response) => response.status === 401)).toBe(true);
+
+    const blocked = await login();
     expect(blocked.status).toBe(429);
-    expect(blocked.headers.get("ratelimit-policy")).toMatch(/q=8; w=900/);
+    expect(blocked.headers.get("ratelimit-policy")).toContain("w=900");
+
+    for (let attempt = 0; attempt < adminLoginRateLimit.perIpLimit - adminLoginRateLimit.perAccountIpLimit; attempt += 1) {
+      expect((await login(`other${attempt}@example.com`)).status).toBe(401);
+    }
+    expect((await login("another@example.com")).status).toBe(429);
+  });
+
+  it("uses only the configured production proxy hop for the IP-wide limit", async () => {
+    configureProxyTrust(app, { NODE_ENV: "production" });
+    expect(app.get("trust proxy")).toBe(1);
+
+    const loginThroughProxy = (ip: string, email: string) => fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-forwarded-for": ip,
+        forwarded: `for=${ip}`,
+      },
+      body: JSON.stringify({ email, password: "incorrect-test-password" }),
+    });
+    const firstClientResponses: Response[] = [];
+    for (let attempt = 0; attempt < adminLoginRateLimit.perIpLimit; attempt += 1) {
+      firstClientResponses.push(await loginThroughProxy("198.51.100.21", `user${attempt}@example.com`));
+    }
+    expect(firstClientResponses.every((response) => response.status === 401)).toBe(true);
+    expect((await loginThroughProxy("198.51.100.21", "last@example.com")).status).toBe(429);
+    expect((await loginThroughProxy("198.51.100.22", "last@example.com")).status).toBe(401);
+  });
+
+  it("does not limit authenticated session checks during normal dashboard use", async () => {
+    const user = activeSuperAdmin();
+    mocks.sessionUser = user;
+
+    const sessionChecks = await Promise.all(Array.from({ length: 40 }, () =>
+      fetch(`${origin}/api/admin/auth/me`, { headers: { cookie: "tribull_admin=test-session" } })));
+    expect(sessionChecks.every((response) => response.status === 200)).toBe(true);
     expect(mocks.authenticateAdminLoginPassword).not.toHaveBeenCalled();
   });
 
-  it("does not consume the login limit for session checks and still permits a successful login", async () => {
+  it("allows a successful login to clear stale failure counters", async () => {
     const user = activeSuperAdmin();
-    mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: user, reason: null, source: "user-credentials" });
-    mocks.sessionUser = user;
+    for (let attempt = 0; attempt < adminLoginRateLimit.perAccountIpLimit - 1; attempt += 1) {
+      mocks.authenticateAdminLoginPassword.mockResolvedValueOnce({ customer: null, reason: "invalid-password" });
+    }
+    mocks.authenticateAdminLoginPassword
+      .mockResolvedValueOnce({ customer: user, reason: null, source: "user-credentials" })
+      .mockResolvedValue({ customer: null, reason: "invalid-password" });
 
-    const sessionChecks = await Promise.all(Array.from({ length: 12 }, () =>
-      fetch(`${origin}/api/admin/auth/me`)));
-    expect(sessionChecks.every((response) => response.status === 401)).toBe(true);
+    for (let attempt = 0; attempt < adminLoginRateLimit.perAccountIpLimit - 1; attempt += 1) {
+      expect((await login()).status).toBe(401);
+    }
+    expect((await login(user.email, "correct-test-password")).status).toBe(200);
+    for (let attempt = 0; attempt < adminLoginRateLimit.perAccountIpLimit; attempt += 1) {
+      expect((await login()).status).toBe(401);
+    }
+    expect((await login()).status).toBe(429);
+    expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledTimes(adminLoginRateLimit.perAccountIpLimit * 2);
+  });
 
-    const login = await fetch(`${origin}/api/admin/auth/login`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email: user.email, password: "provided-by-test" }),
-    });
-    expect(login.status).toBe(200);
-    expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledTimes(1);
+  it("expires failed-login cooldown after fifteen minutes", async () => {
+    let now = Date.now();
+    const dateNow = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      for (let attempt = 0; attempt < adminLoginRateLimit.perAccountIpLimit; attempt += 1) {
+        expect((await login()).status).toBe(401);
+      }
+      expect((await login()).status).toBe(429);
+
+      now += adminLoginRateLimit.windowMs + 1;
+      const user = activeSuperAdmin();
+      mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: user, reason: null, source: "user-credentials" });
+      expect((await login(user.email, "correct-test-password")).status).toBe(200);
+    } finally {
+      dateNow.mockRestore();
+    }
   });
 
   it("rejects invalid credentials without issuing a session cookie", async () => {
@@ -215,9 +289,9 @@ describe("admin HTTP routes", () => {
     warning.mockRestore();
   });
 
-  it("authenticates the configured admin-datas account through normal session and authorization flow", async () => {
-    vi.stubEnv("ADMIN_LOGIN_EMAIL", "regular-admin@example.test");
-    vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
+  it("authenticates an ADMIN_LOGIN_EMAIL account in admin-datas through normal session flow", async () => {
+    vi.stubEnv("ADMIN_LOGIN_EMAIL", "testing-admin@example.test");
+    vi.stubEnv("ADMIN_TEST_EMAIL", "");
     const user = {
       ...activeSuperAdmin(),
       email: "testing-admin@example.test",
@@ -235,8 +309,8 @@ describe("admin HTTP routes", () => {
     expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledWith(
       user.email.toUpperCase(),
       "provided-by-test",
-      "regular-admin@example.test",
       "testing-admin@example.test",
+      null,
     );
     expect(mocks.issueAdminSession).toHaveBeenCalledWith(expect.any(Object), user, "admin-datas");
     expect(mocks.findCustomerByEmail).not.toHaveBeenCalled();
@@ -253,7 +327,10 @@ describe("admin HTTP routes", () => {
       headers: { cookie },
     });
     expect(logout.status).toBe(204);
+    expect(logout.headers.get("set-cookie")).toMatch(/tribull_admin=;.*Expires=Thu, 01 Jan 1970/i);
+    expect(logout.headers.get("set-cookie")).not.toMatch(/tribull_customer=/i);
     expect(mocks.incrementAdminTokenVersion).toHaveBeenCalledWith(user._id.toString(), "admin-datas");
+    expect((await fetch(`${origin}/api/admin/auth/me`, { headers: { cookie } })).status).toBe(401);
   });
 
   it("allows only an authenticated Super Admin to create a dedicated account", async () => {
@@ -392,6 +469,27 @@ describe("admin HTTP routes", () => {
     expect(mocks.issueAdminSession).not.toHaveBeenCalled();
   });
 
+  it("rejects an account without an admin grant even when password authentication succeeds", async () => {
+    const customer = {
+      ...activeSuperAdmin(),
+      adminRole: undefined,
+    };
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({
+      customer,
+      reason: null,
+      source: "user-credentials",
+    });
+    const response = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: customer.email, password: "valid-test-password" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(mocks.issueAdminSession).not.toHaveBeenCalled();
+  });
+
   it("allows the regular admin to log in while a separate test email is configured", async () => {
     vi.stubEnv("ADMIN_LOGIN_EMAIL", "regular-admin@example.test");
     vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
@@ -484,6 +582,61 @@ describe("admin HTTP routes", () => {
     expect(deniedCreate.status).toBe(401);
     expect(mocks.listAdminUsers).toHaveBeenCalledOnce();
     expect(mocks.createAdminUser).toHaveBeenCalledOnce();
+  });
+
+  it("updates only the authenticated admin account and issues a renewed session after password changes", async () => {
+    const user = { ...activeSuperAdmin(), adminAccountSource: "admin-datas" as const };
+    mocks.sessionUser = user;
+    const updatedAccount = { ...user, name: "Updated Admin" };
+    mocks.updateOwnAdminAccountSettings.mockResolvedValue({
+      account: updatedAccount,
+      passwordChanged: true,
+      source: "admin-datas",
+    });
+
+    const response = await fetch(`${origin}/api/admin/account`, {
+      method: "PATCH",
+      headers: {
+        cookie: "tribull_admin=test-session",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        id: "507f1f77bcf86cd799439012",
+        source: "user-credentials",
+        role: "Super Admin",
+        name: updatedAccount.name,
+        currentPassword: "current-test-password",
+        newPassword: "new-test-password-123",
+        confirmNewPassword: "new-test-password-123",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      user: {
+        id: user._id.toString(),
+        name: updatedAccount.name,
+        username: updatedAccount.name,
+        email: user.email,
+        mobile: user.mobile,
+        isProfileComplete: true,
+      },
+    });
+    expect(mocks.updateOwnAdminAccountSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ id: user._id.toString(), source: "admin-datas", role: "Super Admin" }),
+      expect.objectContaining({ name: updatedAccount.name }),
+    );
+    expect(mocks.issueAdminSession).toHaveBeenCalledWith(expect.any(Object), updatedAccount, "admin-datas");
+  });
+
+  it("requires admin authentication before changing own account settings", async () => {
+    const response = await fetch(`${origin}/api/admin/account`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "507f1f77bcf86cd799439011", name: "Updated Admin" }),
+    });
+    expect(response.status).toBe(401);
+    expect(mocks.updateOwnAdminAccountSettings).not.toHaveBeenCalled();
   });
 
   it("limits combined admin-account records to authenticated Super Admin sessions", async () => {
