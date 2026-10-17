@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import { getSessionCustomer } from "./authService.js";
+import { getSessionAdmin } from "./authService.js";
 import { authorizeAdmin, requireAdmin, requireAdminPermission } from "./adminAuth.js";
-import { fullAdminPermissions, type AdminPermissions } from "./adminPermissions.js";
+import { fullAdminPermissions, getEffectiveAdminPermissions, type AdminPermissions } from "./adminPermissions.js";
 
-vi.mock("./authService.js", () => ({ customerCookieName: "tribull_customer", getSessionCustomer: vi.fn() }));
+vi.mock("./authService.js", () => ({ adminCookieName: "tribull_admin", getSessionAdmin: vi.fn() }));
 
-const sessionLookup = vi.mocked(getSessionCustomer);
+const sessionLookup = vi.mocked(getSessionAdmin);
 
 function responseMock() {
   const response = {
     status: vi.fn(),
     json: vi.fn(),
+    locals: {},
   } as unknown as Response;
   vi.mocked(response.status).mockReturnValue(response);
   return response;
@@ -65,7 +66,7 @@ describe("authorizeAdmin", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const response = responseMock();
 
-    requireAdmin({ headers: { cookie: "tribull_customer=redacted" }, method: "GET", path: "/api/admin/products" } as Request, response, vi.fn());
+    requireAdmin({ headers: { cookie: "tribull_admin=redacted" }, method: "GET", path: "/api/admin/products" } as Request, response, vi.fn());
     await settleMiddleware();
 
     expect(warn).toHaveBeenCalledWith("Admin authorization denied", {
@@ -137,6 +138,8 @@ describe("authorizeAdmin", () => {
     });
     expect(authorizeAdmin(true, "admin", "Active", undefined, { section: "orders", action: "edit" }))
       .toEqual({ allowed: true });
+    expect(authorizeAdmin(true, "admin", "Active", undefined, { section: "settings", action: "edit" }))
+      .toEqual({ allowed: true });
   });
 
   it("allows a demo admin to view products while denying every other admin capability", () => {
@@ -180,5 +183,31 @@ describe("authorizeAdmin", () => {
     expect(response.status).toHaveBeenCalledWith(403);
     expect(response.json).toHaveBeenCalledWith({ error: "You do not have permission to perform this action" });
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("enforces Manager and Staff read-only policy for products, orders, and customer data", () => {
+    for (const role of ["Manager", "Staff"] as const) {
+      const permissions = getEffectiveAdminPermissions(role, fullAdminPermissions);
+      expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "products", action: "view" }, role))
+        .toEqual({ allowed: true });
+      expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "products", action: "edit" }, role))
+        .toMatchObject({ allowed: false, status: 403 });
+      expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "customers", action: "view" }, role))
+        .toMatchObject({ allowed: false, status: 403 });
+      expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "orders", action: "edit" }, role))
+        .toMatchObject({ allowed: false, status: 403 });
+    }
+    expect(authorizeAdmin(true, "admin", "Active", getEffectiveAdminPermissions("Manager"), { section: "orders", action: "view" }, "Manager"))
+      .toEqual({ allowed: true });
+    expect(authorizeAdmin(true, "admin", "Active", getEffectiveAdminPermissions("Staff"), { section: "orders", action: "view" }, "Staff"))
+      .toMatchObject({ allowed: false, status: 403 });
+  });
+
+  it("lets Admin edit general settings but denies Admin Users management without its explicit grant", () => {
+    const permissions = getEffectiveAdminPermissions("Admin");
+    expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "settings", action: "edit" }, "Admin"))
+      .toEqual({ allowed: true });
+    expect(authorizeAdmin(true, "admin", "Active", permissions, { section: "adminUsers", action: "edit" }, "Admin"))
+      .toMatchObject({ allowed: false, status: 403 });
   });
 });

@@ -56,30 +56,6 @@ async function assertNoProductAssignments(assignments: CategoryAssignment[]) {
   }
 }
 
-const defaultCategories: CategoryDocument[] = [
-  { value: "cinema", label: "Cinema", image: "/products/cinema.jpg", position: 0, subcategories: [
-    { value: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
-    { value: "bollywood", label: "Bollywood", image: "/products/bollywood.jpg" },
-    { value: "kollywood", label: "Kollywood", image: "/products/kollywood.jpg" },
-    { value: "tollywood", label: "Tollywood", image: "/products/tollywood.jpg" },
-    { value: "mollywood", label: "Mollywood", image: "/products/mollywood.jpg" },
-    { value: "sandalwood", label: "Sandalwood", image: "/products/sandalwood.jpg" },
-  ] },
-  { value: "sports", label: "Sports", image: "/products/sports.png", position: 1, subcategories: [
-    { value: "cricket", label: "Cricket", image: "/products/cricket.jpg" },
-    { value: "football", label: "Football", image: "/products/football.jpg" },
-    { value: "gym", label: "Gym", image: "/products/gym.jpg" },
-  ] },
-  { value: "games", label: "Games", image: "/products/games.jpg", position: 2, subcategories: [
-    { value: "pc-games", label: "PC Games", image: "/products/pc games.jpg" },
-    { value: "mobile-games", label: "Mobile Games", image: "/products/mobilegames.jpg" },
-  ] },
-  { value: "motorsports", label: "MotoSports", image: "/products/motosports.jpg", position: 3, subcategories: [
-    { value: "car", label: "Car", image: "/products/car.jpg" },
-    { value: "bike", label: "Bike", image: "/products/bike.jpg" },
-  ] },
-];
-
 async function getCollection(): Promise<Collection<CategoryDocument>> {
   const db = await getDatabase();
   return db.collection<CategoryDocument>("main-category");
@@ -89,30 +65,8 @@ async function ensureCategoryValueIndex(collection: Collection<CategoryDocument>
   await collection.createIndex({ value: 1 }, { unique: true });
 }
 
-let visibilityDefaultsPromise: Promise<void> | undefined;
-
-function ensureVisibilityDefaults(collection: Collection<CategoryDocument>) {
-  if (!visibilityDefaultsPromise) {
-    const migration = (async () => {
-      await collection.updateMany({ isVisible: { $exists: false } }, { $set: { isVisible: true } });
-      await collection.updateMany(
-        { "subcategories.isVisible": { $exists: false } },
-        { $set: { "subcategories.$[subcategory].isVisible": true } },
-        { arrayFilters: [{ "subcategory.isVisible": { $exists: false } }] },
-      );
-    })();
-    visibilityDefaultsPromise = migration.catch((error: unknown) => {
-      visibilityDefaultsPromise = undefined;
-      throw error;
-    });
-  }
-  return visibilityDefaultsPromise;
-}
-
 export async function listCategories() {
   const collection = await getCollection();
-  if (await collection.countDocuments() === 0) await collection.insertMany(defaultCategories);
-  await ensureVisibilityDefaults(collection);
   const categories = await collection.find({}, { projection: { _id: 0 } }).sort({ position: 1, label: 1 }).toArray();
   return categories.map((category) => ({
     ...category,

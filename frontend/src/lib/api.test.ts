@@ -16,6 +16,7 @@ describe("frontend API client", () => {
   it("uses the same-origin API path in the browser for the Vercel proxy", () => {
     vi.stubGlobal("window", { location: { hostname: "www.tribull.shop" } });
     expect(apiUrl("/api/auth/me")).toBe("/api/auth/me");
+    expect(apiUrl("/api/admin/auth/login")).toBe("/api/admin/auth/login");
   });
 
   it("falls back to the Render backend when no frontend API URL is configured", () => {
@@ -33,5 +34,12 @@ describe("frontend API client", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", {
       credentials: "include",
     });
+  });
+
+  it("sends admin login through the same-origin development proxy with cookies enabled", async () => {
+    vi.stubGlobal("window", { location: { hostname: "localhost" } });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 401 }));
+    await apiFetch("/api/admin/auth/login", { method: "POST" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/admin/auth/login", { method: "POST", credentials: "include" });
   });
 });

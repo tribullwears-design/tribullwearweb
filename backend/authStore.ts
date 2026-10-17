@@ -4,6 +4,7 @@ import type { AdminPermissions } from "./adminPermissions.js";
 
 export type CustomerDocument = {
   _id?: ObjectId;
+  adminAccountSource?: "user-credentials" | "admin-datas";
   name: string;
   email: string;
   mobile: string;
@@ -16,6 +17,7 @@ export type CustomerDocument = {
   authProviders: ("password" | "google")[];
   isProfileComplete: boolean;
   tokenVersion: number;
+  adminTokenVersion?: number;
   resetOtpEmail?: string;
   resetOtpHash?: string;
   resetOtpCreatedAt?: Date;
@@ -248,4 +250,12 @@ export async function consumePasswordReset(authorizationHash: string, passwordHa
 export async function incrementCustomerTokenVersion(id: string) {
   if (!ObjectId.isValid(id)) return;
   await (await getCollection()).updateOne({ _id: new ObjectId(id) }, { $inc: { tokenVersion: 1 }, $set: { updatedAt: new Date() } });
+}
+
+export async function incrementAdminTokenVersion(id: string, source: "user-credentials" | "admin-datas" = "user-credentials") {
+  if (!ObjectId.isValid(id)) return;
+  const collection = source === "admin-datas"
+    ? (await getDatabase()).collection<CustomerDocument>("admin-datas")
+    : await getCollection();
+  await collection.updateOne({ _id: new ObjectId(id) }, { $inc: { adminTokenVersion: 1 }, $set: { updatedAt: new Date() } });
 }

@@ -1,9 +1,9 @@
 import { ObjectId, type Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 import { isValidCustomerEmail, normalizeCustomerEmail, type CustomerDocument } from "./authStore.js";
-import { adminPermissionSections, fullAdminPermissions, type AdminPermissions } from "./adminPermissions.js";
+import { adminPermissionSections, canManageAdminUsers, getEffectiveAdminPermissions, type AdminPermissions, type AdminRoleTitle } from "./adminPermissions.js";
 
-export type AdminTitle = "Super Admin" | "Admin" | "Manager" | "Staff";
+export type AdminTitle = AdminRoleTitle;
 export type AdminStatus = "Active" | "Inactive";
 export type AdminUser = {
   id: string;
@@ -13,6 +13,20 @@ export type AdminUser = {
   role: AdminTitle;
   status: AdminStatus;
   permissions: AdminPermissions;
+};
+
+export type AdminUserAccountRecord = {
+  id: string;
+  source: "user-credentials" | "admin-datas";
+  name: string;
+  role: AdminTitle;
+  status: AdminStatus;
+  permissions: AdminPermissions;
+};
+
+export type AdminUserRecordGroup = {
+  email: string;
+  records: AdminUserAccountRecord[];
 };
 
 type AdminUserDocument = CustomerDocument & {
@@ -28,6 +42,8 @@ type AdminUserInput = {
 
 export class AdminUserValidationError extends Error {}
 export class AdminUserConflictError extends Error {}
+
+export type AdminUserActor = { id?: string; role: AdminRoleTitle; permissions: AdminPermissions };
 
 const adminTitles: AdminTitle[] = ["Super Admin", "Admin", "Manager", "Staff"];
 const adminStatuses: AdminStatus[] = ["Active", "Inactive"];
@@ -86,7 +102,7 @@ function toAdminUser(customer: AdminUserDocument): AdminUser {
     phone: customer.mobile,
     role: customer.adminTitle || "Admin",
     status: customer.adminStatus || "Active",
-    permissions: customer.adminPermissions || fullAdminPermissions,
+    permissions: getEffectiveAdminPermissions(customer.adminTitle || "Admin", customer.adminPermissions),
   };
 }
 
@@ -101,8 +117,52 @@ export async function listAdminUsers(): Promise<AdminUser[]> {
   return users.map(toAdminUser);
 }
 
-export async function createAdminUser(input: AdminUserInput): Promise<AdminUser> {
+export async function listAdminUserRecords(): Promise<AdminUserRecordGroup[]> {
+  const database = await getDatabase();
+  const [regularAdmins, testAdmins] = await Promise.all([
+    database.collection<AdminUserDocument>("user-credentials")
+      .find(
+        { adminRole: "admin", email: { $type: "string" } },
+        { projection: { _id: 1, name: 1, email: 1, adminTitle: 1, adminStatus: 1, adminPermissions: 1 } },
+      )
+      .sort({ name: 1, email: 1 })
+      .toArray(),
+    database.collection<AdminUserDocument>("admin-datas")
+      .find(
+        { adminRole: "admin", email: { $type: "string" } },
+        { projection: { _id: 1, name: 1, email: 1, adminTitle: 1, adminStatus: 1, adminPermissions: 1 } },
+      )
+      .sort({ name: 1, email: 1 })
+      .toArray(),
+  ]);
+
+  const grouped = new Map<string, AdminUserRecordGroup>();
+  const addRecords = (users: AdminUserDocument[], source: AdminUserAccountRecord["source"]) => {
+    for (const user of users) {
+      const email = normalizeCustomerEmail(user.email);
+      const group = grouped.get(email) || { email, records: [] };
+      group.records.push({
+        id: user._id.toString(),
+        source,
+        name: user.name || "",
+        role: user.adminTitle || "Admin",
+        status: user.adminStatus || "Active",
+        permissions: getEffectiveAdminPermissions(user.adminTitle || "Admin", user.adminPermissions),
+      });
+      grouped.set(email, group);
+    }
+  };
+
+  addRecords(regularAdmins, "user-credentials");
+  addRecords(testAdmins, "admin-datas");
+  return Array.from(grouped.values()).sort((left, right) => left.email.localeCompare(right.email));
+}
+
+export async function createAdminUser(input: AdminUserInput, actor: AdminUserActor): Promise<AdminUser> {
   const details = validateAdminInput(input, true);
+  if (!canManageAdminUsers(actor, {}, details.role, details.permissions)) {
+    throw new AdminUserValidationError("You are not authorized to grant this role or these permissions");
+  }
   const collection = await getCollection();
   const customer = await collection.findOne(
     { email: details.email },
@@ -113,7 +173,7 @@ export async function createAdminUser(input: AdminUserInput): Promise<AdminUser>
 
   const updated = await collection.findOneAndUpdate(
     { _id: customer._id, adminRole: { $ne: "admin" } },
-    { $set: { adminRole: "admin", adminTitle: details.role, adminStatus: details.status, adminPermissions: details.permissions } },
+    { $set: { adminRole: "admin", adminTitle: details.role, adminStatus: details.status, adminPermissions: details.permissions, updatedAt: new Date() } },
     {
       returnDocument: "after",
       projection: { _id: 1, name: 1, email: 1, mobile: 1, adminTitle: 1, adminStatus: 1, adminPermissions: 1 },
@@ -123,15 +183,27 @@ export async function createAdminUser(input: AdminUserInput): Promise<AdminUser>
   return toAdminUser(updated);
 }
 
-export async function updateAdminUser(id: string, input: AdminUserInput): Promise<AdminUser | null> {
+export async function updateAdminUser(id: string, input: AdminUserInput, actor: AdminUserActor): Promise<AdminUser | null> {
   if (!ObjectId.isValid(id)) return null;
   const details = validateAdminInput(input, false);
   const collection = await getCollection();
 
+  const current = await collection.findOne({ _id: new ObjectId(id), adminRole: "admin" }, { projection: { adminStatus: 1, adminTitle: 1 } });
+  if (!current) return null;
+  if (!canManageAdminUsers(actor, { id, role: current.adminTitle || "Admin" }, details.role, details.permissions)) {
+    throw new AdminUserValidationError("You are not authorized to change this role or these permissions");
+  }
+  const isLastSuperAdminChange = current.adminTitle === "Super Admin"
+    && (details.status === "Inactive" || details.role !== "Super Admin")
+    && current.adminStatus !== "Inactive";
+  if (isLastSuperAdminChange) {
+    const activeSuperAdmins = await collection.countDocuments({ adminRole: "admin", adminTitle: "Super Admin", adminStatus: { $ne: "Inactive" } });
+    if (activeSuperAdmins <= 1) throw new AdminUserConflictError("At least one active Super Admin account must remain");
+  }
+
   if (details.status === "Inactive") {
-    const current = await collection.findOne({ _id: new ObjectId(id), adminRole: "admin" }, { projection: { adminStatus: 1 } });
-    if (!current) return null;
-    if (current.adminStatus !== "Inactive") {
+    const status = current.adminStatus;
+    if (status !== "Inactive") {
       const activeCount = await collection.countDocuments({ adminRole: "admin", adminStatus: { $ne: "Inactive" } });
       if (activeCount <= 1) throw new AdminUserConflictError("At least one active admin account must remain");
     }
@@ -139,7 +211,7 @@ export async function updateAdminUser(id: string, input: AdminUserInput): Promis
 
   const updated = await collection.findOneAndUpdate(
     { _id: new ObjectId(id), adminRole: "admin" },
-    { $set: { adminTitle: details.role, adminStatus: details.status, adminPermissions: details.permissions } },
+    { $set: { adminTitle: details.role, adminStatus: details.status, adminPermissions: details.permissions, updatedAt: new Date() } },
     {
       returnDocument: "after",
       projection: { _id: 1, name: 1, email: 1, mobile: 1, adminTitle: 1, adminStatus: 1, adminPermissions: 1 },

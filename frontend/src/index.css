@@ -891,6 +891,8 @@ body.mobile-category-menu-open { overflow:hidden; overflow-x:hidden; }
 .category-nav__image img { display:block; width:100%; height:100%; object-fit:cover; object-position:center; transition:transform .35s var(--ease-out); }
 .category-nav__item:hover .category-nav__image img { transform:none; }
 .category-nav__label { font:700 9px/1.1 Montserrat,sans-serif; letter-spacing:.04em; text-align:center; white-space:nowrap; }
+.category-nav__message { display:flex; justify-content:center; align-items:center; gap:10px; margin:0; padding:16px; color:var(--tribull-green); font:600 12px/1.4 Montserrat,sans-serif; }
+.category-nav__message button { border:0; background:transparent; color:var(--tribull-green); font:700 12px/1.4 Montserrat,sans-serif; text-decoration:underline; cursor:pointer; }
 
 .tribull-page .category-nav__track { gap: 20px; }
 .tribull-page .category-nav__item { flex: 0 0 116px; gap: 10px; }

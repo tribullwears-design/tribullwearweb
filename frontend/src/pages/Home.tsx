@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
-import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontMainCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
@@ -119,6 +119,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
 export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
+  const mainCategories = getStorefrontMainCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -250,16 +251,19 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      {hierarchy.loaded && hierarchy.main.some((category) => category.value === "cinema") && <nav className="category-nav" aria-label="Cinema categories">
+      {hierarchy.loaded ? mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
         <div className="category-nav__track">
-          {(hierarchy.subcategories.cinema || []).map(({ value, label, image }) => (
-            <a className="category-nav__item" href={`/category/cinema/${value}`} key={value}>
-              <span className="category-nav__image"><img src={image || "/products/front-white.png"} alt="" /></span>
+          {mainCategories.map(({ value, label, image, href }) => (
+            <Link className="category-nav__item" href={href} key={value} aria-label={`Shop ${label}`}>
+              <span className="category-nav__image"><img src={image} alt="" /></span>
               <span className="category-nav__label">{label}</span>
-            </a>
+            </Link>
           ))}
         </div>
-      </nav>}
+      </nav> : <p className="category-nav__message" role="status">No visible categories are available right now.</p>
+        : fetchedHierarchy.error
+          ? <div className="category-nav__message" role="alert"><span>Categories could not be loaded.</span><button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
+          : <p className="category-nav__message" role="status">Loading categories...</p>}
 
       <main>
         <section className="hero" aria-label="Tribull new collection">

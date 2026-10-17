@@ -11,8 +11,11 @@ import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
+import { createAdminRouter } from "./adminRoutes.js";
 import { requireAdminPermission } from "./adminAuth.js";
-import { AdminUserConflictError, AdminUserValidationError, createAdminUser, listAdminUsers, updateAdminUser } from "./adminUserStore.js";
+import { getEffectiveAdminPermissions } from "./adminPermissions.js";
+import type { AdminUserActor } from "./adminUserStore.js";
+import { redactAdminOrderPersonalInformation } from "./adminPrivacy.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { rateLimit } from "express-rate-limit";
 import {
@@ -98,6 +101,7 @@ async function startServer() {
     }
     next();
   });
+  app.use(createAdminRouter());
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
@@ -258,7 +262,12 @@ async function startServer() {
     try {
       const customer = await getSessionCustomer(req);
       if (!customer) return res.status(401).json({ error: "Not signed in" });
-      return res.json({ user: safeCustomer(customer) });
+      const admin = customer.adminRole === "admin" ? {
+        role: customer.adminTitle || "Admin",
+        status: customer.adminStatus || "Active",
+        permissions: getEffectiveAdminPermissions(customer.adminTitle || "Admin", customer.adminPermissions),
+      } : null;
+      return res.json({ user: safeCustomer(customer), admin });
     } catch (error) {
       console.error("Customer session lookup failed", error);
       return res.status(500).json({ error: "Unable to check sign-in status" });
@@ -475,33 +484,6 @@ async function startServer() {
       res.json({ deleted: true });
     } catch (error) { sendBannerError(res, error);     }
   });
-  app.get("/api/admin/users", requireAdminPermission("settings", "view"), async (_req, res) => {
-    try {
-      res.json(await listAdminUsers());
-    } catch (error) {
-      sendError(res, error);
-    }
-  });
-  app.post("/api/admin/users", requireAdminPermission("settings", "edit"), async (req, res) => {
-    try {
-      res.status(201).json(await createAdminUser(req.body));
-    } catch (error) {
-      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
-      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
-      sendError(res, error);
-    }
-  });
-  app.patch("/api/admin/users/:id", requireAdminPermission("settings", "edit"), async (req, res) => {
-    try {
-      const user = await updateAdminUser(req.params.id, req.body);
-      if (!user) return res.status(404).json({ error: "Admin user not found" });
-      res.json(user);
-    } catch (error) {
-      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
-      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
-      sendError(res, error);
-    }
-  });
   app.get("/api/storefront/settings/social", async (_req, res) => {
     try { res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
   });
@@ -674,7 +656,14 @@ async function startServer() {
     }
   });
   app.get("/api/orders", requireAdminPermission("orders", "view"), async (req, res) => {
-    try { res.json(await listOrders(typeof req.query.status === "string" ? req.query.status : undefined)); } catch (error) { sendError(res, error); }
+    try {
+      const orders = await listOrders(typeof req.query.status === "string" ? req.query.status : undefined);
+      const actor = res.locals.adminActor as AdminUserActor;
+      if (actor.role === "Manager" || actor.role === "Staff") {
+        return res.json(orders.map(redactAdminOrderPersonalInformation));
+      }
+      res.json(orders);
+    } catch (error) { sendError(res, error); }
   });
   app.post("/api/orders", (_req, res) => {
     return res.status(410).json({ error: "Client-priced order creation is disabled. Use the validated checkout endpoint." });
@@ -841,7 +830,8 @@ async function startServer() {
   try {
     await getDatabase();
     console.log("MongoDB connection established");
-  } catch {
+  } catch (error) {
+    console.error("MongoDB connection detail:", error instanceof Error ? error.message : error);
     throw new Error("MongoDB connection failed; verify MONGODB_URI, Atlas network access, and the database user");
   }
 

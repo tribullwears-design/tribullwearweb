@@ -1,0 +1,346 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import express from "express";
+import { createServer, type Server } from "node:http";
+import bcrypt from "bcryptjs";
+
+const mocks = vi.hoisted(() => ({
+  sessionUser: null as {
+    _id: { toString: () => string };
+    name: string;
+    email: string;
+    mobile: string;
+    authProviders: ("password" | "google")[];
+    isProfileComplete: boolean;
+    tokenVersion: number;
+    adminAccountSource?: "admin-datas";
+    adminRole?: "admin";
+    adminTitle?: "Super Admin" | "Admin" | "Manager" | "Staff";
+    adminStatus?: "Active" | "Inactive";
+  } | null,
+  sessionRevoked: false as boolean,
+  findCustomerByEmail: vi.fn(),
+  authenticateAdminLoginPassword: vi.fn(),
+  issueAdminSession: vi.fn(),
+  incrementAdminTokenVersion: vi.fn(),
+  listAdminUserRecords: vi.fn(),
+  listAdminUsers: vi.fn(),
+  createAdminUser: vi.fn(),
+  updateAdminUser: vi.fn(),
+}));
+
+vi.mock("./authStore.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./authStore.js")>();
+  return {
+    ...actual,
+    findCustomerByEmail: mocks.findCustomerByEmail,
+    incrementAdminTokenVersion: mocks.incrementAdminTokenVersion.mockImplementation(async () => { mocks.sessionRevoked = true; }),
+  };
+});
+
+vi.mock("./authService.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./authService.js")>();
+  return {
+    ...actual,
+    authenticateAdminLoginPassword: mocks.authenticateAdminLoginPassword,
+    clearAdminSession: vi.fn((response: { clearCookie: (name: string, options: object) => void }) =>
+      response.clearCookie("tribull_admin", { httpOnly: true, path: "/", sameSite: "lax" })),
+    getSessionAdmin: vi.fn(async (request: { headers: { cookie?: string } }) =>
+      !mocks.sessionRevoked && request.headers.cookie?.includes("tribull_admin=test-session") ? mocks.sessionUser : null),
+    issueAdminSession: mocks.issueAdminSession.mockImplementation((response: { cookie: (name: string, value: string, options: object) => void }) =>
+      response.cookie("tribull_admin", "test-session", { httpOnly: true, secure: false, sameSite: "lax", path: "/" })),
+    validateCustomerAuthConfiguration: vi.fn(),
+  };
+});
+
+vi.mock("./adminUserStore.js", () => ({
+  AdminUserConflictError: class AdminUserConflictError extends Error {},
+  AdminUserValidationError: class AdminUserValidationError extends Error {},
+  createAdminUser: mocks.createAdminUser,
+  listAdminUserRecords: mocks.listAdminUserRecords,
+  listAdminUsers: mocks.listAdminUsers,
+  updateAdminUser: mocks.updateAdminUser,
+}));
+
+import { createAdminRouter } from "./adminRoutes.js";
+
+let server: Server | undefined;
+let origin: string;
+
+beforeEach(async () => {
+  vi.stubEnv("NODE_ENV", "test");
+  vi.stubEnv("ADMIN_LOGIN_EMAIL", "admin@example.com");
+  vi.stubEnv("ADMIN_TEST_EMAIL", "");
+  mocks.sessionUser = null;
+  mocks.sessionRevoked = false;
+  mocks.findCustomerByEmail.mockReset().mockResolvedValue(null);
+  mocks.authenticateAdminLoginPassword.mockReset().mockResolvedValue({ customer: null, reason: "not-found" });
+  mocks.issueAdminSession.mockReset().mockImplementation((response: { cookie: (name: string, value: string, options: object) => void }) =>
+    response.cookie("tribull_admin", "test-session", { httpOnly: true, secure: false, sameSite: "lax", path: "/" }));
+  mocks.incrementAdminTokenVersion.mockClear();
+  mocks.listAdminUsers.mockReset().mockResolvedValue([]);
+  mocks.listAdminUserRecords.mockReset().mockResolvedValue([]);
+  mocks.createAdminUser.mockReset();
+  mocks.updateAdminUser.mockReset();
+
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRouter());
+  server = createServer(app);
+  await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Test server did not bind to a TCP port");
+  origin = `http://127.0.0.1:${address.port}`;
+});
+
+afterEach(async () => {
+  vi.unstubAllEnvs();
+  if (server) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve, reject) => server?.close((error) => error ? reject(error) : resolve()));
+  }
+  server = undefined;
+});
+
+function activeSuperAdmin() {
+  return {
+    _id: { toString: () => "507f1f77bcf86cd799439011" },
+    name: "Test Admin",
+    email: "admin@example.com",
+    mobile: "",
+    authProviders: ["password"] as ("password" | "google")[],
+    isProfileComplete: true,
+    tokenVersion: 1,
+    adminRole: "admin" as const,
+    adminTitle: "Super Admin" as const,
+    adminStatus: "Active" as const,
+  };
+}
+
+describe("admin HTTP routes", () => {
+  it("rejects invalid credentials without issuing a session cookie", async () => {
+    const customer = {
+      ...activeSuperAdmin(),
+      passwordHash: await bcrypt.hash("valid-test-password", 12),
+    };
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: null, reason: "invalid-password" });
+    const response = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "admin@example.com", password: "incorrect-test-password" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Email or password is incorrect" });
+    expect(response.headers.get("set-cookie")).toBeNull();
+    expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledWith(
+      customer.email,
+      "incorrect-test-password",
+      "admin@example.com",
+      null,
+    );
+  });
+
+  it("logs only a safe category when an email matches both account collections", async () => {
+    vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({
+      customer: null,
+      reason: "ambiguous-account",
+      source: null,
+    });
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const response = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "testing-admin@example.test", password: "not-logged" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Email or password is incorrect" });
+    expect(warning).toHaveBeenCalledWith("Admin sign-in rejected", {
+      category: "ambiguous_account_match",
+    });
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("testing-admin@example.test");
+    expect(JSON.stringify(warning.mock.calls)).not.toContain("not-logged");
+    warning.mockRestore();
+  });
+
+  it("authenticates the configured admin-datas account through normal session and authorization flow", async () => {
+    vi.stubEnv("ADMIN_LOGIN_EMAIL", "regular-admin@example.test");
+    vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
+    const user = {
+      ...activeSuperAdmin(),
+      email: "testing-admin@example.test",
+      adminAccountSource: "admin-datas" as const,
+    };
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: user, reason: null, source: "admin-datas" });
+    mocks.sessionUser = user;
+
+    const login = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: user.email.toUpperCase(), password: "provided-by-test" }),
+    });
+    expect(login.status).toBe(200);
+    expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledWith(
+      user.email.toUpperCase(),
+      "provided-by-test",
+      "regular-admin@example.test",
+      "testing-admin@example.test",
+    );
+    expect(mocks.issueAdminSession).toHaveBeenCalledWith(expect.any(Object), user, "admin-datas");
+    expect(mocks.findCustomerByEmail).not.toHaveBeenCalled();
+    expect(await login.json()).toMatchObject({
+      admin: { role: "Super Admin", permissions: { dashboard: { view: true, edit: true } } },
+    });
+
+    const cookie = "tribull_admin=test-session";
+    expect((await fetch(`${origin}/api/admin/users`, { headers: { cookie } })).status).toBe(200);
+    expect((await fetch(`${origin}/api/admin/users`)).status).toBe(401);
+
+    const logout = await fetch(`${origin}/api/admin/auth/logout`, {
+      method: "POST",
+      headers: { cookie },
+    });
+    expect(logout.status).toBe(204);
+    expect(mocks.incrementAdminTokenVersion).toHaveBeenCalledWith(user._id.toString(), "admin-datas");
+  });
+
+  it("allows the regular admin to log in while a separate test email is configured", async () => {
+    vi.stubEnv("ADMIN_LOGIN_EMAIL", "regular-admin@example.test");
+    vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
+    const regularAdmin = {
+      ...activeSuperAdmin(),
+      email: "regular-admin@example.test",
+      adminTitle: "Admin" as const,
+    };
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: regularAdmin, reason: null, source: "user-credentials" });
+    mocks.sessionUser = regularAdmin;
+
+    const response = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "REGULAR-ADMIN@example.test", password: "valid-password" }),
+    });
+    expect(response.status).toBe(200);
+    expect(mocks.authenticateAdminLoginPassword).toHaveBeenCalledWith(
+      "REGULAR-ADMIN@example.test",
+      "valid-password",
+      "regular-admin@example.test",
+      "testing-admin@example.test",
+    );
+    expect(mocks.issueAdminSession).toHaveBeenCalledWith(expect.any(Object), regularAdmin, "user-credentials");
+    expect(await response.json()).toMatchObject({ admin: { role: "Admin" } });
+  });
+
+  it("rejects an email outside both configured login allowlists", async () => {
+    vi.stubEnv("ADMIN_TEST_EMAIL", "testing-admin@example.test");
+    const response = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "outside@example.test", password: "not-logged" }),
+    });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: "Email or password is incorrect" });
+    expect(mocks.authenticateAdminLoginPassword).not.toHaveBeenCalled();
+  });
+
+  it("issues an HttpOnly session, restores /me, and gates Admin Users CRUD", async () => {
+    const user = { ...activeSuperAdmin(), passwordHash: await bcrypt.hash("valid-test-password", 12) };
+    mocks.authenticateAdminLoginPassword.mockResolvedValue({ customer: user, reason: null, source: "user-credentials" });
+    mocks.sessionUser = user;
+    const login = await fetch(`${origin}/api/admin/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "admin@example.com", password: "valid-test-password" }),
+    });
+    const setCookie = login.headers.get("set-cookie");
+    expect(login.status).toBe(200);
+    expect(setCookie).toMatch(/tribull_admin=test-session/);
+    expect(setCookie).toMatch(/HttpOnly/i);
+    expect(await login.json()).toMatchObject({ admin: { role: "Super Admin" } });
+
+    const cookie = "tribull_admin=test-session";
+    const session = await fetch(`${origin}/api/admin/auth/me`, { headers: { cookie } });
+    expect(session.status).toBe(200);
+    expect(await session.json()).toMatchObject({ admin: { role: "Super Admin" } });
+
+    const users = await fetch(`${origin}/api/admin/users`, { headers: { cookie } });
+    expect(users.status).toBe(200);
+    expect(await users.json()).toEqual([]);
+
+    mocks.createAdminUser.mockResolvedValue({ id: "507f1f77bcf86cd799439012", role: "Staff" });
+    const created = await fetch(`${origin}/api/admin/users`, {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ email: "staff@example.com" }),
+    });
+    expect(created.status).toBe(201);
+    expect(mocks.createAdminUser).toHaveBeenCalledOnce();
+
+    const denied = await fetch(`${origin}/api/admin/users`);
+    expect(denied.status).toBe(401);
+    const deniedCreate = await fetch(`${origin}/api/admin/users`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "staff@example.com" }),
+    });
+    expect(deniedCreate.status).toBe(401);
+    expect(mocks.listAdminUsers).toHaveBeenCalledOnce();
+    expect(mocks.createAdminUser).toHaveBeenCalledOnce();
+  });
+
+  it("limits combined admin-account records to authenticated Super Admin sessions", async () => {
+    const cookie = { cookie: "tribull_admin=test-session" };
+    mocks.sessionUser = {
+      ...activeSuperAdmin(),
+      adminTitle: "Admin",
+    };
+    const denied = await fetch(`${origin}/api/admin/users/records`, { headers: cookie });
+    expect(denied.status).toBe(403);
+    expect(mocks.listAdminUserRecords).not.toHaveBeenCalled();
+
+    mocks.sessionUser = {
+      ...activeSuperAdmin(),
+      adminStatus: "Inactive",
+    };
+    const inactive = await fetch(`${origin}/api/admin/users/records`, { headers: cookie });
+    expect(inactive.status).toBe(403);
+    expect(mocks.listAdminUserRecords).not.toHaveBeenCalled();
+
+    mocks.sessionUser = activeSuperAdmin();
+    const records = [{
+      email: "admin@example.com",
+      records: [{
+        id: "507f1f77bcf86cd799439011",
+        source: "admin-datas",
+        name: "Test Admin",
+        role: "Super Admin",
+        status: "Active",
+        permissions: {},
+      }],
+    }];
+    mocks.listAdminUserRecords.mockResolvedValue(records);
+    const allowed = await fetch(`${origin}/api/admin/users/records`, { headers: cookie });
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toEqual(records);
+    expect(mocks.listAdminUserRecords).toHaveBeenCalledOnce();
+
+    const unauthenticated = await fetch(`${origin}/api/admin/users/records`);
+    expect(unauthenticated.status).toBe(401);
+  });
+
+  it("revokes the admin session and clears its cookie on logout", async () => {
+    mocks.sessionUser = activeSuperAdmin();
+    const response = await fetch(`${origin}/api/admin/auth/logout`, {
+      method: "POST",
+      headers: { cookie: "tribull_admin=test-session" },
+    });
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("set-cookie")).toMatch(/tribull_admin=;/);
+    expect(response.headers.get("set-cookie")).toMatch(/Expires=Thu, 01 Jan 1970/i);
+    expect(mocks.incrementAdminTokenVersion).toHaveBeenCalledWith("507f1f77bcf86cd799439011", "user-credentials");
+    const session = await fetch(`${origin}/api/admin/auth/me`, { headers: { cookie: "tribull_admin=test-session" } });
+    expect(session.status).toBe(401);
+  });
+});

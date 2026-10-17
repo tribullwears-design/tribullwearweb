@@ -14,8 +14,11 @@ import {
   updateGoogleProfile,
   type CustomerDocument,
 } from "./authStore.js";
+import { findAdminTestAccountByEmail, findAdminTestAccountById } from "./adminTestStore.js";
+import { getConfiguredAdminTestEmail } from "./adminLoginConfig.js";
 
 export const customerCookieName = "tribull_customer";
+export const adminCookieName = "tribull_admin";
 export const passwordResetCookieName = "tribull_password_reset";
 const passwordCost = 12;
 const passwordResetAuthorizationLifetimeMs = 10 * 60 * 1000;
@@ -64,6 +67,19 @@ export function issueCustomerSession(response: Response, customer: CustomerDocum
   response.cookie(customerCookieName, token, { ...cookieSettings(), maxAge: expiresIn * 1000 });
 }
 
+export function issueAdminSession(response: Response, customer: CustomerDocument, source: "user-credentials" | "admin-datas" = "user-credentials") {
+  if (!customer._id) throw new Error("Cannot create an admin session without a customer ID");
+  const expiresIn = expirySeconds();
+  const token = jwt.sign({ ver: customer.adminTokenVersion ?? 0, type: "admin", source }, jwtSecret(), {
+    subject: customer._id.toString(), expiresIn, issuer: "tribull-store", audience: "tribull-admin",
+  });
+  response.cookie(adminCookieName, token, { ...cookieSettings(), maxAge: expiresIn * 1000 });
+}
+
+export function clearAdminSession(response: Response) {
+  response.clearCookie(adminCookieName, cookieSettings());
+}
+
 export function clearCustomerSession(response: Response) {
   response.clearCookie(customerCookieName, cookieSettings());
 }
@@ -106,6 +122,32 @@ export async function getSessionCustomer(request: Request) {
   if (typeof claims === "string" || claims.type !== "customer" || typeof claims.sub !== "string" || typeof claims.ver !== "number") return null;
   const customer = await findCustomerById(claims.sub);
   if (!customer || customer.tokenVersion !== claims.ver || !customer.isProfileComplete) return null;
+  return customer;
+}
+
+export async function getSessionAdmin(request: Request) {
+  const token = readCookie(request, adminCookieName);
+  if (!token) return null;
+  let claims: string | JwtPayload;
+  try {
+    claims = jwt.verify(token, jwtSecret(), { issuer: "tribull-store", audience: "tribull-admin" });
+  } catch {
+    return null;
+  }
+  if (typeof claims === "string" || claims.type !== "admin" || typeof claims.sub !== "string" || typeof claims.ver !== "number") return null;
+  const source = claims.source === undefined || claims.source === "user-credentials"
+    ? "user-credentials"
+    : claims.source === "admin-datas" ? "admin-datas" : null;
+  if (!source) return null;
+  const customer = source === "admin-datas"
+    ? await findAdminTestAccountById(claims.sub)
+    : await findCustomerById(claims.sub);
+  if (!customer || (customer.adminTokenVersion ?? 0) !== claims.ver || !customer.isProfileComplete) return null;
+  if (source === "admin-datas") {
+    const configuredEmail = getConfiguredAdminTestEmail();
+    if (!configuredEmail || normalizeCustomerEmail(customer.email) !== configuredEmail) return null;
+  }
+  customer.adminAccountSource = source;
   return customer;
 }
 
@@ -153,6 +195,42 @@ export async function createPasswordCustomer(name: string, email: string, mobile
 
 export async function authenticatePassword(email: string, password: string) {
   const customer = await findCustomerByEmail(email);
+  return authenticateCustomerPassword(customer, password);
+}
+
+export async function authenticateAdminLoginPassword(
+  email: string,
+  password: string,
+  regularAdminEmail: string,
+  testAdminEmail: string | null,
+) {
+  const normalizedEmail = normalizeCustomerEmail(email);
+  const canAuthenticateRegular = normalizedEmail === regularAdminEmail;
+  const canAuthenticateTest = normalizedEmail === testAdminEmail;
+  if (!canAuthenticateRegular && !canAuthenticateTest) {
+    return { customer: null, reason: "not-found" as const };
+  }
+
+  const [regularAdmin, testAdmin] = await Promise.all([
+    findCustomerByEmail(normalizedEmail),
+    findAdminTestAccountByEmail(normalizedEmail),
+  ]);
+  if (regularAdmin && testAdmin) {
+    return { customer: null, reason: "ambiguous-account" as const, source: null };
+  }
+
+  if (canAuthenticateTest && testAdmin) {
+    const result = await authenticateCustomerPassword(testAdmin, password);
+    return { ...result, source: result.customer ? "admin-datas" as const : null };
+  }
+  if (canAuthenticateRegular && regularAdmin) {
+    const result = await authenticateCustomerPassword(regularAdmin, password);
+    return { ...result, source: result.customer ? "user-credentials" as const : null };
+  }
+  return { customer: null, reason: "not-found" as const, source: null };
+}
+
+async function authenticateCustomerPassword(customer: CustomerDocument | null, password: string) {
   if (!customer) return { customer: null, reason: "not-found" as const };
   if (!customer.passwordHash || !await bcrypt.compare(password, customer.passwordHash)) return { customer: null, reason: "invalid-password" as const };
   if (!customer.isProfileComplete) return { customer: null, reason: "profile-incomplete" as const };

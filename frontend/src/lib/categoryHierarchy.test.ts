@@ -42,4 +42,21 @@ describe("defaultCategoryHierarchy", () => {
     expect(hierarchy.main.map((category) => category.value)).toEqual(["sports"]);
     expect(hierarchy.subcategories.sports).toEqual([{ value: "cricket", label: "Cricket" }]);
   });
+
+  it("uses the stored category icon and stable category value for storefront links", async () => {
+    const { getStorefrontMainCategories } = await import("./categoryHierarchy");
+    const categories = getStorefrontMainCategories({
+      main: [
+        { value: "cinema", label: "Cinema", image: "/stored/cinema.webp" },
+        { value: "sports", label: "Sports", isVisible: false },
+        { value: "motorsports", label: "MotoSports", image: "/stored/moto.png" },
+      ],
+      subcategories: {},
+    });
+
+    expect(categories).toEqual([
+      { value: "cinema", label: "Cinema", image: "/stored/cinema.webp", href: "/category/cinema" },
+      { value: "motorsports", label: "MotoSports", image: "/stored/moto.png", href: "/category/motorsports" },
+    ]);
+  });
 });

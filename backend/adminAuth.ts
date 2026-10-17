@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
-import { customerCookieName, getSessionCustomer } from "./authService.js";
-import { hasAdminPermission, type AdminPermissionAction, type AdminPermissionSection } from "./adminPermissions.js";
+import { adminCookieName, getSessionAdmin } from "./authService.js";
+import { getEffectiveAdminPermissions, hasAdminPermission, type AdminPermissionAction, type AdminPermissionSection, type AdminRoleTitle } from "./adminPermissions.js";
 
 export type AdminAuthorization = { allowed: true } | { allowed: false; status: 401 | 403; error: string };
 
@@ -10,6 +10,7 @@ export function authorizeAdmin(
   adminStatus?: string,
   permissions?: Parameters<typeof hasAdminPermission>[0],
   requiredPermission?: { section: AdminPermissionSection; action: AdminPermissionAction },
+  adminTitle?: AdminRoleTitle,
 ): AdminAuthorization {
   if (!isAuthenticated) {
     return { allowed: false, status: 401, error: "Sign in with an authorized admin account" };
@@ -23,16 +24,20 @@ export function authorizeAdmin(
     return { allowed: false, status: 403, error: "This admin account is inactive" };
   }
 
-  if (requiredPermission && !hasAdminPermission(permissions, requiredPermission.section, requiredPermission.action)) {
+  const effectivePermissions = getEffectiveAdminPermissions(adminTitle || "Admin", permissions);
+  if (requiredPermission && !hasAdminPermission(effectivePermissions, requiredPermission.section, requiredPermission.action)) {
     return { allowed: false, status: 403, error: "You do not have permission to perform this action" };
   }
 
   return { allowed: true };
 }
 
-function adminMiddleware(requiredPermission?: { section: AdminPermissionSection; action: AdminPermissionAction }): RequestHandler {
+function adminMiddleware(
+  requiredPermission?: { section: AdminPermissionSection; action: AdminPermissionAction },
+  requiredRole?: "Super Admin",
+): RequestHandler {
   return (request, response, next) => {
-    void getSessionCustomer(request)
+    void getSessionAdmin(request)
       .then((customer) => {
         const authorization = authorizeAdmin(
           Boolean(customer),
@@ -40,6 +45,7 @@ function adminMiddleware(requiredPermission?: { section: AdminPermissionSection;
           customer?.adminStatus,
           customer?.adminPermissions,
           requiredPermission,
+          customer?.adminTitle || "Admin",
         );
         if (!authorization.allowed) {
           const category = authorization.status === 401
@@ -57,6 +63,15 @@ function adminMiddleware(requiredPermission?: { section: AdminPermissionSection;
           response.status(authorization.status).json({ error: authorization.error });
           return;
         }
+        if (requiredRole && customer?.adminTitle !== requiredRole) {
+          response.status(403).json({ error: "Only a Super Admin can view all admin account records" });
+          return;
+        }
+        response.locals.adminActor = {
+          id: customer?._id?.toString(),
+          role: customer?.adminTitle || "Admin",
+          permissions: getEffectiveAdminPermissions(customer?.adminTitle || "Admin", customer?.adminPermissions),
+        };
         next();
       })
       .catch((error: unknown) => {
@@ -77,7 +92,7 @@ function hasCustomerSessionCookie(request: Parameters<RequestHandler>[0]) {
   return cookieHeader.split(";").some((part) => {
     const separator = part.indexOf("=");
     return separator >= 0
-      && part.slice(0, separator).trim() === customerCookieName
+      && part.slice(0, separator).trim() === adminCookieName
       && part.slice(separator + 1).trim().length > 0;
   });
 }
@@ -87,3 +102,5 @@ export const requireAdmin: RequestHandler = adminMiddleware();
 export function requireAdminPermission(section: AdminPermissionSection, action: AdminPermissionAction): RequestHandler {
   return adminMiddleware({ section, action });
 }
+
+export const requireSuperAdmin: RequestHandler = adminMiddleware(undefined, "Super Admin");
