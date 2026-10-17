@@ -143,7 +143,7 @@ export async function getSessionAdmin(request: Request) {
     ? await findAdminTestAccountById(claims.sub)
     : await findCustomerById(claims.sub);
   if (!customer || (customer.adminTokenVersion ?? 0) !== claims.ver || !customer.isProfileComplete) return null;
-  if (source === "admin-datas") {
+  if (source === "admin-datas" && customer.adminAccountType !== "dedicated") {
     const configuredEmail = getConfiguredAdminTestEmail();
     if (!configuredEmail || normalizeCustomerEmail(customer.email) !== configuredEmail) return null;
   }
@@ -207,9 +207,6 @@ export async function authenticateAdminLoginPassword(
   const normalizedEmail = normalizeCustomerEmail(email);
   const canAuthenticateRegular = normalizedEmail === regularAdminEmail;
   const canAuthenticateTest = normalizedEmail === testAdminEmail;
-  if (!canAuthenticateRegular && !canAuthenticateTest) {
-    return { customer: null, reason: "not-found" as const };
-  }
 
   const [regularAdmin, testAdmin] = await Promise.all([
     findCustomerByEmail(normalizedEmail),
@@ -219,6 +216,10 @@ export async function authenticateAdminLoginPassword(
     return { customer: null, reason: "ambiguous-account" as const, source: null };
   }
 
+  if (testAdmin?.adminAccountType === "dedicated") {
+    const result = await authenticateCustomerPassword(testAdmin, password);
+    return { ...result, source: result.customer ? "admin-datas" as const : null };
+  }
   if (canAuthenticateTest && testAdmin) {
     const result = await authenticateCustomerPassword(testAdmin, password);
     return { ...result, source: result.customer ? "admin-datas" as const : null };

@@ -69,6 +69,7 @@ function adminMiddleware(
         }
         response.locals.adminActor = {
           id: customer?._id?.toString(),
+          source: customer?.adminAccountSource || "user-credentials",
           role: customer?.adminTitle || "Admin",
           permissions: getEffectiveAdminPermissions(customer?.adminTitle || "Admin", customer?.adminPermissions),
         };

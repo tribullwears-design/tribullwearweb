@@ -47,7 +47,8 @@ export const checkoutPaymentMethods = [
 export type CheckoutPaymentMethod = typeof checkoutPaymentMethods[number]["id"];
 
 export function normalizeIndianState(value: string) {
-  return indianStatesAndTerritories.find((state) => state.toLowerCase() === value.trim().toLowerCase()) || "";
+  const normalized = value.trim().replace(/\s+/g, " ").toLowerCase();
+  return indianStatesAndTerritories.find((state) => state.toLowerCase() === normalized) || "";
 }
 
 export function isIndianState(value: unknown): value is typeof indianStatesAndTerritories[number] {

@@ -103,5 +103,15 @@ describe("paginate", () => {
       ]);
       expect(filterOrders(searchableOrders, "", "pending", "All time").map(({ id }) => id)).toEqual(["simulated-today"]);
     });
+
+    it("routes every supported order status to its matching admin section", () => {
+      const statuses = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"] as const;
+      const statusOrders = statuses.map((status) => ({ ...searchableOrders[0], id: status, status }));
+
+      for (const status of statuses) {
+        expect(filterOrders(statusOrders, "", status.toLowerCase(), "All time").map(({ status: result }) => result))
+          .toEqual([status]);
+      }
+    });
   });
 });

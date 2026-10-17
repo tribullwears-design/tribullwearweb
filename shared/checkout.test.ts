@@ -17,6 +17,7 @@ describe("checkout options", () => {
 
   it("normalizes saved state values and rejects unsupported values", () => {
     expect(normalizeIndianState("  tamil nadu ")).toBe("Tamil Nadu");
+    expect(normalizeIndianState("  tAmIl   nAdU ")).toBe("Tamil Nadu");
     expect(isIndianState("Delhi")).toBe(true);
     expect(isIndianState("Not an Indian state")).toBe(false);
   });

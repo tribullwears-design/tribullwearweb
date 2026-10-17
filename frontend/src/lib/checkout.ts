@@ -2,6 +2,7 @@ import { isCheckoutPaymentMethod, normalizeIndianState, type CheckoutPaymentMeth
 
 export type CheckoutSubmission = {
   idempotencyKey: string;
+  savedAddressId?: string;
   customer: { name: string; email: string; phone: string };
   shippingAddress: {
     address: string;
@@ -18,7 +19,7 @@ export type CheckoutSubmission = {
 export function createCheckoutSubmission(submission: CheckoutSubmission): CheckoutSubmission {
   const state = normalizeIndianState(submission.shippingAddress.state);
   if (!state) throw new Error("Select a valid Indian state or union territory.");
-  if (!isCheckoutPaymentMethod(submission.paymentMethod)) throw new Error("Choose a valid test payment method.");
+  if (!isCheckoutPaymentMethod(submission.paymentMethod)) throw new Error("Choose a valid payment method.");
   return {
     ...submission,
     shippingAddress: { ...submission.shippingAddress, state },

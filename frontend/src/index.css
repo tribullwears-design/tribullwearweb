@@ -370,18 +370,26 @@ main > * + * { margin-top: 0; }
 .header-account-card__row strong { font:700 12px/1.3 Montserrat,sans-serif; }
 .header-account-card__row span { font:600 10px/1 Montserrat,sans-serif; color:rgba(27,54,45,.72); }
 .header-account-card__body { display:flex; flex-direction:column; gap:8px; }
-.header-account-card__item { display:flex; justify-content:space-between; gap:12px; }
+.header-account-card__item { display:flex; align-items:center; gap:12px; }
+.header-account-card__item img { flex:0 0 52px; width:52px; height:58px; object-fit:contain; background:#fff; }
 .header-account-card__item span { font:600 12px/1.3 Montserrat,sans-serif; }
-.header-account-card__item small { font:600 11px/1.3 Montserrat,sans-serif; color:rgba(27,54,45,.72); }
+.header-account-card__item small { display:block; margin-top:4px; font:600 11px/1.3 Montserrat,sans-serif; color:rgba(27,54,45,.72); }
 .header-account-card__actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; }
 .header-account-card__actions button { min-height:30px; padding:0 10px; border:1px solid rgba(27,54,45,.14); background:transparent; color:var(--tribull-green); cursor:pointer; font:700 9px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
 .header-account-card__actions--stack { flex-direction:column; }
 .header-account-card__actions--stack button { width:100%; }
-.header-account-card--wishlist { display:grid; grid-template-columns:58px minmax(0,1fr); gap:12px; }
-.header-account-card--wishlist img { width:58px; height:62px; object-fit:contain; background:#fff; }
-.header-account-card--wishlist > div { display:flex; flex-direction:column; gap:5px; }
-.header-account-card--wishlist strong { font:700 10px/1.3 Montserrat,sans-serif; }
-.header-account-card--wishlist span { font:600 9px/1.2 Montserrat,sans-serif; color:rgba(27,54,45,.72); }
+.header-account-card--wishlist { display:grid; grid-template-columns:64px minmax(0,1fr); align-items:center; gap:10px 12px; min-width:0; }
+.header-account-card--wishlist > img { width:64px; height:72px; object-fit:contain; background:#fff; }
+.header-account-card--wishlist__details { display:flex; flex-direction:column; gap:7px; min-width:0; }
+.header-account-card--wishlist__details > strong { font:700 11px/1.35 Montserrat,sans-serif; overflow-wrap:anywhere; }
+.header-account-card--wishlist__price { display:flex; align-items:baseline; gap:8px; }
+.header-account-card--wishlist__price span { font:700 11px/1.2 Montserrat,sans-serif; color:var(--tribull-green); }
+.header-account-card--wishlist__price del { font:500 10px/1.2 Montserrat,sans-serif; color:rgba(27,54,45,.58); }
+.header-account-card--wishlist__actions { grid-column:2; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; width:100%; }
+.header-account-card--wishlist__actions button { min-width:0; min-height:36px; padding:0 8px; white-space:nowrap; letter-spacing:.04em; }
+.header-account-order-tracking { display:flex; flex-direction:column; gap:5px; padding-top:8px; border-top:1px solid rgba(27,54,45,.12); font:500 11px/1.4 Montserrat,sans-serif; }
+.header-account-order-tracking strong { font-weight:700; }
+.header-account-order-tracking a { color:var(--tribull-green); font-weight:700; }
 .header-account-empty { display:flex; flex-direction:column; align-items:flex-start; gap:10px; padding:18px 0; }
 .header-account-empty p { margin:0; font:700 16px/1.2 Montserrat,sans-serif; }
 .header-account-empty span { font:500 12px/1.5 Montserrat,sans-serif; color:rgba(27,54,45,.7); }
@@ -391,6 +399,15 @@ main > * + * { margin-top: 0; }
 .header-account-settings__group strong { font:600 13px/1.3 Montserrat,sans-serif; }
 .header-account-addresses,
 .header-account-wishlist { display:flex; flex-direction:column; gap:12px; }
+.header-account-wishlist .header-account-card--wishlist { display:grid; }
+@media (max-width: 640px) {
+  .header-account-card--wishlist { grid-template-columns:56px minmax(0,1fr); gap:10px; }
+  .header-account-card--wishlist > img { width:56px; height:64px; }
+  .header-account-card--wishlist__actions { grid-column:1 / -1; }
+}
+@media (max-width: 360px) {
+  .header-account-card--wishlist__actions { grid-template-columns:minmax(0,1fr); }
+}
 .header-account-address-form { display:flex; flex-direction:column; gap:12px; margin-top:18px; padding-top:12px; border-top:1px solid rgba(27,54,45,.12); }
 .header-account-address-form h4 { margin:0; font:700 13px/1.2 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
 .header-account-drawer__signout--full { width:100%; }

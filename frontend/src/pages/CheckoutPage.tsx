@@ -8,6 +8,7 @@ import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { createCheckoutSubmission } from "../lib/checkout";
+import { getRazorpayPaymentConfig, openRazorpayCheckout } from "../lib/razorpayCheckout";
 import { checkoutPaymentMethods, getCheckoutPaymentLabel, indianStatesAndTerritories, isIndianState, normalizeIndianState, type CheckoutPaymentMethod } from "../../../shared/checkout";
 
 type CartEntry = {
@@ -26,6 +27,17 @@ type CartEntry = {
 type CartState = Record<string, number>;
 type CartItemMeta = Partial<Product> & { productId?: string; variant?: string; size?: string; color?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
 type CheckoutSelection = { productId: string; quantity: number; metadata: CartItemMeta };
+type SavedAddress = {
+  id: string;
+  fullName: string;
+  phone: string;
+  address: string;
+  apartment?: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  isDefault: boolean;
+};
 
 type CheckoutForm = {
   fullName: string;
@@ -207,6 +219,8 @@ export default function CheckoutPage() {
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutForm | "paymentMethod", string>>>({});
   const [paymentMethod, setPaymentMethod] = useState<CheckoutPaymentMethod>("upi");
+  const [placedPaymentMode, setPlacedPaymentMode] = useState<"razorpay" | "cod" | "test">("test");
+  const [placedPaymentMethod, setPlacedPaymentMethod] = useState("upi");
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [showTrackingInfo, setShowTrackingInfo] = useState(false);
@@ -228,6 +242,15 @@ export default function CheckoutPage() {
   const [reviewMode, setReviewMode] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState("");
+  const [customerAuthenticated, setCustomerAuthenticated] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [savedAddressesLoading, setSavedAddressesLoading] = useState(false);
+  const [savedAddressesError, setSavedAddressesError] = useState("");
+  const [savedAddressId, setSavedAddressId] = useState("");
+  const [saveAddressLoading, setSaveAddressLoading] = useState(false);
+  const [saveAddressMessage, setSaveAddressMessage] = useState("");
+  const [saveAddressMessageIsError, setSaveAddressMessageIsError] = useState(false);
+  const saveAddressRequestId = useRef<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
 
   useEffect(() => {
@@ -254,28 +277,41 @@ export default function CheckoutPage() {
       .then((result) => {
         if (!active || !result?.user) return;
         const user = result.user;
+        setCustomerAuthenticated(true);
         setForm((current) => ({
           ...current,
           fullName: current.fullName || user.name || user.username || "",
           email: current.email || user.email || "",
           phone: current.phone || user.mobile || "",
         }));
+        setSavedAddressesLoading(true);
+        return apiFetch("/api/customer/addresses", { cache: "no-store" })
+          .then(async (response) => {
+            const data = await response.json().catch(() => undefined) as SavedAddress[] | { error?: string } | undefined;
+            if (!response.ok || !Array.isArray(data)) throw new Error(!Array.isArray(data) && data?.error ? data.error : "Unable to load saved addresses.");
+            if (!active) return;
+            setSavedAddresses(data);
+            const defaultAddress = data.find((entry) => entry.isDefault);
+            if (defaultAddress) {
+              setSavedAddressId(defaultAddress.id);
+              setForm((current) => ({
+                ...current,
+                fullName: defaultAddress.fullName,
+                phone: defaultAddress.phone,
+                address: defaultAddress.address,
+                apartment: defaultAddress.apartment || "",
+                city: defaultAddress.city,
+                state: defaultAddress.state,
+                pinCode: defaultAddress.pinCode,
+              }));
+            }
+          })
+          .catch((error: unknown) => {
+            if (active) setSavedAddressesError(error instanceof Error ? error.message : "Unable to load saved addresses.");
+          })
+          .finally(() => { if (active) setSavedAddressesLoading(false); });
       })
       .catch((error: unknown) => console.error("Could not load the saved checkout profile.", error));
-    const addresses = readStorage<Array<{ fullName?: string; phone?: string; address?: string; apartment?: string; city?: string; state?: string; pinCode?: string }>>("tribull-addresses", []);
-    const savedAddress = addresses.find((address) => address.fullName && address.phone && address.address && address.city && address.state && address.pinCode);
-    if (savedAddress) {
-      setForm((current) => ({
-        ...current,
-        fullName: current.fullName || savedAddress.fullName || "",
-        phone: current.phone || savedAddress.phone || "",
-        address: current.address || savedAddress.address || "",
-        apartment: current.apartment || savedAddress.apartment || "",
-        city: current.city || savedAddress.city || "",
-        state: current.state || savedAddress.state || "",
-        pinCode: current.pinCode || savedAddress.pinCode || "",
-      }));
-    }
     return () => { active = false; };
   }, []);
 
@@ -371,6 +407,90 @@ export default function CheckoutPage() {
   const handleFieldChange = (field: keyof CheckoutForm, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: "" }));
+    if (field !== "email") setSavedAddressId("");
+    setSaveAddressMessage("");
+    setSaveAddressMessageIsError(false);
+  };
+
+  const selectSavedAddress = (id: string) => {
+    setSavedAddressId(id);
+    setSaveAddressMessage("");
+    setSaveAddressMessageIsError(false);
+    const selected = savedAddresses.find((entry) => entry.id === id);
+    if (!selected) return;
+    setForm((current) => ({
+      ...current,
+      fullName: selected.fullName,
+      phone: selected.phone,
+      address: selected.address,
+      apartment: selected.apartment || "",
+      city: selected.city,
+      state: selected.state,
+      pinCode: selected.pinCode,
+    }));
+    setErrors((current) => ({ ...current, fullName: "", phone: "", address: "", city: "", state: "", pinCode: "" }));
+  };
+
+  const saveCheckoutAddress = async () => {
+    if (!customerAuthenticated || saveAddressLoading) return;
+    const address = {
+      fullName: form.fullName.trim(),
+      phone: form.phone.trim(),
+      address: form.address.trim(),
+      apartment: form.apartment.trim(),
+      city: form.city.trim(),
+      state: normalizeIndianState(form.state),
+      pinCode: form.pinCode.trim(),
+    };
+    if (address.fullName.length < 2 || address.fullName.length > 80
+      || !/^\+?\d{10,15}$/.test(address.phone.replace(/[()\s-]/g, ""))
+      || address.address.length < 5 || address.address.length > 240
+      || address.city.length < 2 || address.city.length > 80
+      || !address.state || !/^\d{6}$/.test(address.pinCode)) {
+      setSaveAddressMessage("Complete the valid name, phone, address, city, state, and PIN code fields before saving.");
+      setSaveAddressMessageIsError(true);
+      return;
+    }
+    saveAddressRequestId.current ||= window.sessionStorage.getItem("tribull-checkout-address-request-id")
+      || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `checkout-address-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    window.sessionStorage.setItem("tribull-checkout-address-request-id", saveAddressRequestId.current);
+    setSaveAddressLoading(true);
+    setSaveAddressMessage("");
+    setSaveAddressMessageIsError(false);
+    try {
+      const response = await apiFetch("/api/customer/addresses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...address, requestId: saveAddressRequestId.current }),
+      });
+      const data = await response.json().catch(() => undefined) as SavedAddress | { error?: string } | undefined;
+      if (!response.ok || !data || !("id" in data)) {
+        throw new Error(data && "error" in data && data.error ? data.error : "Unable to save this address.");
+      }
+      setSavedAddresses((current) => current.some((entry) => entry.id === data.id)
+        ? current.map((entry) => entry.id === data.id ? data : entry)
+        : [...current, data]);
+      setSavedAddressId(data.id);
+      setForm((current) => ({
+        ...current,
+        fullName: data.fullName,
+        phone: data.phone,
+        address: data.address,
+        apartment: data.apartment || "",
+        city: data.city,
+        state: data.state,
+        pinCode: data.pinCode,
+      }));
+      saveAddressRequestId.current = null;
+      window.sessionStorage.removeItem("tribull-checkout-address-request-id");
+      setSaveAddressMessage("Address saved to your account.");
+      setSaveAddressMessageIsError(false);
+    } catch (error) {
+      setSaveAddressMessage(error instanceof Error ? error.message : "Unable to save this address.");
+      setSaveAddressMessageIsError(true);
+    } finally {
+      setSaveAddressLoading(false);
+    }
   };
 
   const validateForm = () => {
@@ -407,37 +527,34 @@ export default function CheckoutPage() {
         ? window.crypto.randomUUID()
         : `checkout-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       idempotencyKey.current = key;
-      const response = await apiFetch("/api/checkout/test-orders", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createCheckoutSubmission({
-          idempotencyKey: key,
-          customer: { name: form.fullName, email: form.email, phone: form.phone },
-          shippingAddress: {
-            address: form.address,
-            apartment: form.apartment,
-            city: form.city,
-            state: normalizeIndianState(form.state),
-            pinCode: form.pinCode,
-            country: "India",
-          },
-          paymentMethod,
-          items: cartDetails.entries.map((entry) => {
-            const metadata = cartItems[entry.id];
-            const size = metadata?.size || metadata?.variant?.match(/Size:\s*([^/]+)/i)?.[1]?.trim();
-            const color = metadata?.color || metadata?.variant?.match(/Colour:\s*([^/]+)/i)?.[1]?.trim();
-            return {
-              id: entry.productId,
-              quantity: entry.quantity,
-              variant: {
-                ...(size ? { size } : {}),
-                ...(color ? { color } : {}),
-              },
-            };
-          }),
-        })),
+      const submission = createCheckoutSubmission({
+        idempotencyKey: key,
+        ...(savedAddressId ? { savedAddressId } : {}),
+        customer: { name: form.fullName, email: form.email, phone: form.phone },
+        shippingAddress: {
+          address: form.address,
+          apartment: form.apartment,
+          city: form.city,
+          state: normalizeIndianState(form.state),
+          pinCode: form.pinCode,
+          country: "India",
+        },
+        paymentMethod,
+        items: cartDetails.entries.map((entry) => {
+          const metadata = cartItems[entry.id];
+          const size = metadata?.size || metadata?.variant?.match(/Size:\s*([^/]+)/i)?.[1]?.trim();
+          const color = metadata?.color || metadata?.variant?.match(/Colour:\s*([^/]+)/i)?.[1]?.trim();
+          return {
+            id: entry.productId,
+            quantity: entry.quantity,
+            variant: {
+              ...(size ? { size } : {}),
+              ...(color ? { color } : {}),
+            },
+          };
+        }),
       });
-      const result = await response.json() as {
+      type CheckoutOrderResult = {
         error?: string;
         id?: string;
         items?: Array<{ id: string; name: string; price: number; originalPrice?: number; image: string; quantity: number; variant?: string; lineTotal: number }>;
@@ -450,10 +567,64 @@ export default function CheckoutPage() {
         status?: string;
         shippingAddress?: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string };
       };
-      if (!response.ok) throw new Error(result.error || "Unable to place the test order. Please try again.");
-      if (!result.id || !result.items || typeof result.total !== "number"
-        || result.paymentMode !== "test" || result.status !== "Pending"
-        || result.payment?.method !== paymentMethod || result.payment.status !== "Simulated") {
+      let result: CheckoutOrderResult | null = null;
+      if (paymentMethod === "cod") {
+        const response = await apiFetch("/api/checkout/cod-orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submission),
+        });
+        result = await response.json() as CheckoutOrderResult;
+        if (!response.ok) throw new Error(result.error || "Unable to place the COD order. Please try again.");
+      } else {
+        const response = await apiFetch("/api/create-order", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(submission),
+        });
+        const gatewayOrder = await response.json() as {
+          error?: string;
+          key_id?: string;
+          order_id?: string;
+          amount?: number;
+          currency?: string;
+        };
+        if (!response.ok) throw new Error(gatewayOrder.error || "Unable to start payment. Please try again.");
+        if (!gatewayOrder.key_id || !gatewayOrder.order_id || typeof gatewayOrder.amount !== "number"
+          || !Number.isSafeInteger(gatewayOrder.amount) || !gatewayOrder.currency) {
+          throw new Error("The payment provider returned an incomplete order.");
+        }
+        const payment = await openRazorpayCheckout({
+          key: gatewayOrder.key_id,
+          amount: gatewayOrder.amount,
+          currency: gatewayOrder.currency,
+          name: "Tribull",
+          description: "Tribull order payment",
+          order_id: gatewayOrder.order_id,
+          prefill: { name: form.fullName, email: form.email, contact: form.phone },
+          theme: { color: "#111111" },
+          config: getRazorpayPaymentConfig(paymentMethod),
+        });
+        const verifyResponse = await apiFetch("/api/verify-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payment),
+        });
+        const verification = await verifyResponse.json() as { error?: string; verified?: boolean; captured?: boolean; paymentFailed?: boolean; order?: CheckoutOrderResult };
+        if (!verifyResponse.ok || !verification.verified) {
+          if (verification.paymentFailed) idempotencyKey.current = null;
+          throw new Error(verification.error || "The payment could not be verified. Contact support before retrying.");
+        }
+        if (!verification.captured || !verification.order) {
+          throw new Error("Payment authorization is pending capture. Your order is not yet confirmed.");
+        }
+        result = verification.order;
+      }
+      if (!result?.id || !result.items || typeof result.total !== "number" || result.status !== "Pending"
+        || typeof result.payment?.method !== "string"
+        || (paymentMethod === "cod"
+          ? result.paymentMode !== "cod" || result.payment?.method !== "cod" || result.payment.status !== "Pending collection"
+          : result.paymentMode !== "razorpay" || result.payment.status !== "Paid")) {
         throw new Error("The checkout server returned an incomplete order confirmation.");
       }
       const summary: OrderSummary = {
@@ -488,6 +659,8 @@ export default function CheckoutPage() {
       }
       setPlacedOrderSummary(summary);
       setOrderNumber(result.id);
+      setPlacedPaymentMode(result.paymentMode as "razorpay" | "cod" | "test");
+      setPlacedPaymentMethod(result.payment.method);
       setOrderPlaced(true);
       if (!isDirectCheckout) {
         window.localStorage.setItem("tribull-cart", JSON.stringify({}));
@@ -498,9 +671,9 @@ export default function CheckoutPage() {
       if (isDirectCheckout) window.sessionStorage.removeItem("tribull-checkout-selection");
       window.dispatchEvent(new Event("tribull-cart-updated"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to place the test order. Please try again.";
+      const message = error instanceof Error ? error.message : "Unable to complete checkout. Please try again.";
       setCheckoutError(message);
-      console.error("Test checkout could not create an order.", error);
+      console.error("Checkout could not be completed.", message);
     } finally {
       setIsSubmitting(false);
     }
@@ -535,7 +708,7 @@ export default function CheckoutPage() {
       `Subtotal: ${formatPrice(visibleOrder.subtotal)}`,
       `Shipping: ${formatPrice(visibleOrder.shipping)}`,
       `Total: ${formatPrice(visibleOrder.total)}`,
-      `Payment: ${getCheckoutPaymentLabel(paymentMethod)}`,
+      `Payment: ${getCheckoutPaymentLabel(placedPaymentMethod)}`,
     ];
     try {
       setInvoiceError("");
@@ -580,10 +753,10 @@ export default function CheckoutPage() {
         <main className="checkout-success">
           <div className="checkout-success__panel">
             <div className="checkout-success__icon"><CheckCircle2 size={58} /></div>
-            <p className="checkout-success__eyebrow">TEST ORDER — NO REAL PAYMENT</p>
+            <p className="checkout-success__eyebrow">{placedPaymentMode === "razorpay" ? "PAYMENT CONFIRMED" : "ORDER PLACED — PAYMENT DUE ON DELIVERY"}</p>
             <h2>Thank you for your order!</h2>
             <p className="checkout-success__meta">Order #{orderNumber}</p>
-            <p className="checkout-success__message">Test order recorded as pending. No payment was collected and no real payment gateway was used.</p>
+            <p className="checkout-success__message">{placedPaymentMode === "razorpay" ? "Your payment was verified and confirmed by Razorpay." : "Your order is recorded as pending. Payment has not been collected; pay upon delivery."}</p>
 
             <div className="checkout-success__items">
               {visibleOrder.entries.map((item) => (
@@ -598,7 +771,7 @@ export default function CheckoutPage() {
             </div>
 
             <div className="checkout-summary__totals checkout-summary__totals--success">
-              <div><span>Payment method</span><strong>{getCheckoutPaymentLabel(paymentMethod)} (simulated — no payment collected)</strong></div>
+              <div><span>Payment method</span><strong>{placedPaymentMode === "razorpay" ? `${getCheckoutPaymentLabel(placedPaymentMethod)} (paid)` : `${getCheckoutPaymentLabel(placedPaymentMethod)} (pending collection)`}</strong></div>
               <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
             </div>
             <p className="checkout-success__message">
@@ -665,7 +838,7 @@ export default function CheckoutPage() {
                 <div><span>Subtotal</span><strong>{formatPrice(visibleOrder.subtotal)}</strong></div>
                 <div><span>Shipping</span><strong>{formatPrice(visibleOrder.shipping)}</strong></div>
                 <div><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
-                <div><span>Payment method</span><strong>{getCheckoutPaymentLabel(paymentMethod)}</strong></div>
+                <div><span>Payment method</span><strong>{getCheckoutPaymentLabel(placedPaymentMethod)}</strong></div>
               </div>
               <button type="button" className="checkout-primary-button checkout-invoice__download" onClick={downloadBill}>
                 <Download size={15} /> Download PDF
@@ -686,8 +859,8 @@ export default function CheckoutPage() {
       <main className="checkout-layout">
         <section className="checkout-form-area">
           <div className="checkout-test-notice" role="note">
-            <strong>TEST CHECKOUT — NO REAL PAYMENT</strong>
-            <span>Payment choices are simulated for development. Do not enter payment credentials; no money will be transferred.</span>
+            <strong>SECURE ONLINE PAYMENT</strong>
+            <span>Online payments are processed by Razorpay Checkout. Cash on Delivery is payable upon delivery; payment is not collected at checkout.</span>
           </div>
           {catalogLoadError && <p className="checkout-inline-error" role="alert">{catalogLoadError}</p>}
           {!catalogLoaded && !catalogLoadError && <p className="checkout-inline-note" role="status">Loading current product prices…</p>}
@@ -695,7 +868,7 @@ export default function CheckoutPage() {
             <div className="checkout-section checkout-review">
               <h3>Review Order</h3>
               <p><strong>Deliver to</strong><br />{form.fullName}<br />{form.address}{form.apartment ? `, ${form.apartment}` : ""}<br />{form.city}, {form.state} {form.pinCode}, India<br />{form.phone} · {form.email}</p>
-              <p><strong>Simulated payment</strong><br />{getCheckoutPaymentLabel(paymentMethod)} — no payment will be made or collected.</p>
+              <p><strong>Payment method</strong><br />{paymentMethod === "cod" ? "Cash on Delivery — payment is due upon delivery." : `${getCheckoutPaymentLabel(paymentMethod)} — payment will be processed securely by Razorpay.`}</p>
               <div className="checkout-summary__totals">
                 <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
                 <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
@@ -706,7 +879,7 @@ export default function CheckoutPage() {
               <div className="checkout-review__actions">
                 <button type="button" className="checkout-secondary-button" onClick={() => setReviewMode(false)}>Edit details</button>
                 <button type="button" className="checkout-primary-button" onClick={() => void handlePlaceOrder()} disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
-                  {isSubmitting ? "PLACING TEST ORDER…" : "CONFIRM TEST ORDER"}
+                  {isSubmitting ? "PROCESSING…" : paymentMethod === "cod" ? "PLACE COD ORDER" : "PAY WITH RAZORPAY"}
                 </button>
               </div>
               {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
@@ -739,6 +912,21 @@ export default function CheckoutPage() {
 
           <div className="checkout-section">
             <h3>Shipping Address</h3>
+            {savedAddressesLoading && <p role="status">Loading your saved addresses…</p>}
+            {savedAddressesError && <p className="checkout-inline-error" role="alert">{savedAddressesError}</p>}
+            {savedAddresses.length > 0 && (
+              <label className="checkout-field">
+                <span>Saved Address</span>
+                <select value={savedAddressId} onChange={(event) => selectSavedAddress(event.target.value)}>
+                  <option value="">Add a new address / enter manually</option>
+                  {savedAddresses.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.fullName} · {entry.phone} · {entry.address}{entry.apartment ? `, ${entry.apartment}` : ""}, {entry.city}, {entry.state} {entry.pinCode}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <div className="checkout-grid checkout-grid--address">
               <label className="checkout-field">
                 <span>Address</span>
@@ -772,6 +960,14 @@ export default function CheckoutPage() {
                 <input value="India" readOnly />
               </label>
             </div>
+            {customerAuthenticated && (
+              <div>
+                {!savedAddressId && <button type="button" className="checkout-secondary-button" onClick={() => void saveCheckoutAddress()} disabled={saveAddressLoading}>
+                  {saveAddressLoading ? "Saving address…" : "Save this address to my account"}
+                </button>}
+                {saveAddressMessage && <p className={saveAddressMessageIsError ? "checkout-inline-error" : ""} role={saveAddressMessageIsError ? "alert" : "status"}>{saveAddressMessage}</p>}
+              </div>
+            )}
           </div>
 
           <div className="checkout-section">
@@ -780,7 +976,7 @@ export default function CheckoutPage() {
               {checkoutPaymentMethods.map((option) => (
                 <label key={option.id} className={`checkout-payment-option ${paymentMethod === option.id ? "is-selected" : ""}`}>
                   <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => { setPaymentMethod(option.id); setErrors((current) => ({ ...current, paymentMethod: "" })); }} />
-                  <span>{option.label} <small>{option.id === "cod" ? "Test order only; no payment collected" : "Test simulation only"}</small></span>
+                  <span>{option.label} <small>{option.id === "cod" ? "Pay when your order is delivered" : "Pay securely using Razorpay Checkout"}</small></span>
                 </label>
               ))}
             </div>

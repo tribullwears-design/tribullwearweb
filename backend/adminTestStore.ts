@@ -6,8 +6,8 @@ import { fullAdminPermissions } from "./adminPermissions.js";
 export type AdminTestAccountDocument = CustomerDocument & {
   _id: ObjectId;
   adminRole: "admin";
-  adminTitle: "Super Admin";
-  adminStatus: "Active";
+  adminTitle: "Super Admin" | "Admin" | "Manager" | "Staff";
+  adminStatus: "Active" | "Inactive";
 };
 
 export type AdminTestAccountInput = {

@@ -22,6 +22,8 @@ Set these Render environment variables:
 - `FRONTEND_URL` — exact allowed frontend origin(s), comma-separated if needed
 - `GOOGLE_CLIENT_ID` — required for Google sign-in
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` — required for password-reset email
+- `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` — required for online checkout; use test credentials until live mode is approved
+- `RAZORPAY_WEBHOOK_SECRET` — optional, required only when webhook reconciliation is configured
 
 Set `CATEGORY_API_URL` to the Render service's HTTPS base URL (without a trailing slash) for the Vite development proxy. Keep localhost URLs out of production configuration. Vercel production requests use the checked-in `/api/*` rewrite; the Vercel project is not changed automatically.
 
@@ -121,3 +123,38 @@ try {
 ```
 
 After successful setup, ensure the hosted backend has `ADMIN_TEST_EMAIL` and the separate existing `ADMIN_LOGIN_EMAIL`, then sign in at `/admin26` using either account's own password. Tests, builds, and application startup do not perform Atlas writes.
+
+## Razorpay Standard Checkout
+
+Online UPI, card, and net-banking checkout uses Razorpay Standard Checkout. The backend calculates totals from current catalog records, creates the Razorpay order, persists a pending order in the existing `orders` collection, verifies the checkout callback signature with HMAC-SHA256, and confirms the provider payment's order ID, amount, currency, and status before marking it paid. The `/api/razorpay/webhook` endpoint also verifies Razorpay's `x-razorpay-signature` against the exact raw request body using `RAZORPAY_WEBHOOK_SECRET`; it reconciles authorized and captured payment events and safely acknowledges duplicate events. Configure that webhook URL and the same dedicated webhook secret in the Razorpay Dashboard to enable asynchronous status reconciliation. Only the public key ID is sent to the browser. The key secret and webhook secret must be configured on the backend only; never use a `VITE_` variable for either. Razorpay requests are rate-limited, provider errors are returned without logging credentials, and invalid signatures do not change order records.
+
+Cash on Delivery is recorded as an order with payment status `Pending collection`; it does not mark the order paid or claim that money was collected. Existing development-only simulated checkout remains available only through its separate development route.
+
+For local testing, obtain a Razorpay **test-mode** key pair from the Razorpay Dashboard. Since credentials were included in a chat, rotate the exposed key secret before using the integration. Do not paste keys into source files or commit them. The following commands set the values only in the current PowerShell process and start the existing local dev stack; keep that window open while testing at `http://localhost:3001/checkout`.
+
+The backend loads `backend/.env.local` from the repository root (or `backend/.env.production`) before startup; `backend/.env.example` is documentation only and is never loaded. Put the rotated key ID and key secret in the ignored `backend/.env.local`, and set the webhook signing secret there only if webhook reconciliation is enabled. These values are read when the backend process starts, so restart the local backend after changing them. The dev launcher reuses an already-running backend and will not reload environment files until that backend is stopped and started again. Startup diagnostics report only whether each variable is present.
+
+```powershell
+Set-Location "D:\tribull"
+$env:RAZORPAY_KEY_ID = Read-Host "Razorpay test key ID"
+$secureRazorpaySecret = Read-Host -Prompt "Razorpay test key secret" -AsSecureString
+$env:RAZORPAY_KEY_SECRET = [System.Net.NetworkCredential]::new("", $secureRazorpaySecret).Password
+try {
+  corepack pnpm dev
+} finally {
+  Remove-Item Env:RAZORPAY_KEY_ID, Env:RAZORPAY_KEY_SECRET -ErrorAction SilentlyContinue
+  $secureRazorpaySecret.Dispose()
+}
+```
+
+Use Razorpay's documented test payment details in the modal; do not use real card or bank details for a test key. Online payment requires the backend to be running with both server-side variables. For webhook testing, configure a webhook in the Razorpay Dashboard pointing to a publicly reachable HTTPS URL ending in `/api/razorpay/webhook`, then securely configure the matching `RAZORPAY_WEBHOOK_SECRET` on the backend. Do not expose a local backend publicly without an approved secure tunnel. The frontend does not require a public key build variable because the API returns only the configured key ID when creating the order. For deployment, configure `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in the backend service's secret environment settings; this repository change does not alter Render settings or deploy anything. Configure `RAZORPAY_WEBHOOK_SECRET` only if webhook reconciliation is enabled. Rotate to live keys only through the approved deployment process.
+
+## Customer account data
+
+Customer addresses and wishlists are stored as additive `addresses` and `wishlist` fields in `user-datas`, keyed by the authenticated `user-credentials` MongoDB `_id` copied into the server-owned `userId` field. The collection also records creation and update timestamps; it does not contain passwords, session tokens, or payment secrets. Protected account endpoints use the existing `tribull_customer` HttpOnly session and never accept a browser-supplied customer ID:
+
+- `GET`, `POST /api/customer/addresses`; `PATCH`, `DELETE /api/customer/addresses/:id`
+- `GET /api/customer/wishlist`; `PUT`, `DELETE /api/customer/wishlist/:productId`; `POST /api/customer/wishlist/merge`
+- `GET /api/customer/orders?page=1` (20 orders per page)
+
+Authenticated checkout orders store the server-derived `customerId` in `orders` and an address/recipient snapshot in `shippingAddress`. The customer order-history endpoint filters by that ID and omits it from responses. Account order tracking refreshes while the section is open; there is no server push channel. Razorpay-captured payments are marked `Paid`, provider-reported failures are marked `Failed`, and pending/authorized and COD collection states remain distinct. Orders created before a stable customer ID was recorded are not assigned to an account by matching unverified browser-provided contact details.

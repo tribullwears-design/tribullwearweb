@@ -5,6 +5,7 @@ import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { fetchProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
+import { toggleWishlistItem } from "../lib/wishlist";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import "./ProductDetailPage.css";
@@ -314,18 +315,7 @@ export default function ProductDetailPage() {
 
   const toggleWishlist = () => {
     const productId = product.id || id || "";
-    let wishlist: string[] = [];
-    try {
-      wishlist = JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[];
-    } catch {
-      wishlist = [];
-    }
-    const nextWishlist = isWishlisted
-      ? wishlist.filter((item) => item !== productId)
-      : wishlist.includes(productId) ? wishlist : [...wishlist, productId];
-    window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
-    setIsWishlisted(!isWishlisted);
-    window.dispatchEvent(new Event("tribull-wishlist-updated"));
+    void toggleWishlistItem(productId, !isWishlisted).catch(() => undefined);
   };
 
   const handlePincodeSubmit = () => {

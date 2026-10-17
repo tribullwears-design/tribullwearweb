@@ -5,6 +5,7 @@ import type { AdminPermissions } from "./adminPermissions.js";
 export type CustomerDocument = {
   _id?: ObjectId;
   adminAccountSource?: "user-credentials" | "admin-datas";
+  adminAccountType?: "dedicated";
   name: string;
   email: string;
   mobile: string;

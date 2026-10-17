@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Request, Response } from "express";
+import bcrypt from "bcryptjs";
 import { findCustomerByEmail, findCustomerById } from "./authStore.js";
 import { authenticateAdminLoginPassword, authenticatePassword, adminCookieName, clearAdminSession, customerCookieName, getSessionAdmin, getSessionCustomer, hashPassword, issueAdminSession, issueCustomerSession } from "./authService.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
@@ -96,6 +97,30 @@ describe("password customer authentication", () => {
       expect(findCustomer).not.toHaveBeenCalled();
     });
 
+    it("authenticates a marked dedicated account independently of ADMIN_TEST_EMAIL", async () => {
+      vi.stubEnv("ADMIN_TEST_EMAIL", "legacy-test@example.test");
+      const password = "dedicated-account-password";
+      const dedicatedAdmin = {
+        ...adminCustomer,
+        email: "dedicated-admin@example.test",
+        adminAccountType: "dedicated" as const,
+        passwordHash: await hashPassword(password),
+      };
+      adminTestMocks.findByEmail.mockResolvedValue(dedicatedAdmin);
+
+      await expect(authenticateAdminLoginPassword(
+        "DEDICATED-ADMIN@example.test",
+        password,
+        "regular-admin@example.test",
+        "legacy-test@example.test",
+      )).resolves.toMatchObject({
+        customer: { email: "dedicated-admin@example.test", adminTitle: "Super Admin" },
+        reason: null,
+        source: "admin-datas",
+      });
+      expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("dedicated-admin@example.test");
+    });
+
     it("authenticates the regular admin through user-credentials with unchanged permissions", async () => {
       const regularAdmin = {
         ...adminCustomer,
@@ -116,19 +141,25 @@ describe("password customer authentication", () => {
       expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("regular-admin@example.test");
     });
 
-    it("rejects an email found in both account collections as ambiguous", async () => {
-      findCustomerByEmailMock.mockResolvedValue({ ...adminCustomer, email: "testing-admin@example.test" });
-      adminTestMocks.findByEmail.mockResolvedValue({ ...adminCustomer, email: "testing-admin@example.test" });
+    it("rejects a valid password when a normalized email exists in both account collections", async () => {
+      const password = "valid-but-ambiguous-password";
+      const passwordHash = await hashPassword(password);
+      const compare = vi.spyOn(bcrypt, "compare");
+      findCustomerByEmailMock.mockResolvedValue({ ...adminCustomer, email: "testing-admin@example.test", passwordHash });
+      adminTestMocks.findByEmail.mockResolvedValue({ ...adminCustomer, email: "testing-admin@example.test", passwordHash });
 
       await expect(authenticateAdminLoginPassword(
-        "testing-admin@example.test",
-        "any-password",
+        " TESTING-ADMIN@EXAMPLE.TEST ",
+        password,
         "regular-admin@example.test",
         "testing-admin@example.test",
       )).resolves.toEqual({ customer: null, reason: "ambiguous-account", source: null });
+      expect(findCustomerByEmailMock).toHaveBeenCalledWith("testing-admin@example.test");
+      expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("testing-admin@example.test");
+      expect(compare).not.toHaveBeenCalled();
     });
 
-    it("does not look up accounts outside both configured login emails", async () => {
+    it("checks both collections and still rejects an unknown email", async () => {
       await expect(authenticateAdminLoginPassword(
         "arbitrary@example.test",
         "password",
@@ -136,8 +167,8 @@ describe("password customer authentication", () => {
         "testing-admin@example.test",
       ))
         .resolves.toMatchObject({ customer: null, reason: "not-found" });
-      expect(adminTestMocks.findByEmail).not.toHaveBeenCalled();
-      expect(findCustomerByEmailMock).not.toHaveBeenCalled();
+      expect(adminTestMocks.findByEmail).toHaveBeenCalledWith("arbitrary@example.test");
+      expect(findCustomerByEmailMock).toHaveBeenCalledWith("arbitrary@example.test");
     });
   });
 

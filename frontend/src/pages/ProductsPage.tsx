@@ -7,6 +7,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
@@ -42,10 +43,6 @@ export default function ProductsPage() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-
-  useEffect(() => {
-    window.localStorage.setItem("tribull-wishlist", JSON.stringify(wishlist));
-  }, [wishlist]);
 
   useEffect(() => {
     let active = true;
@@ -100,14 +97,9 @@ export default function ProductsPage() {
   };
 
   const toggleWishlist = (productId: string, source?: HTMLElement) => {
-    setWishlist((current) => {
-      const isAdding = !current.includes(productId);
-      const nextWishlist = isAdding ? [...current, productId] : current.filter((id) => id !== productId);
-      if (isAdding && source) animateAddToWishlist(source);
-      window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
-      window.dispatchEvent(new Event("tribull-wishlist-updated"));
-      return nextWishlist;
-    });
+    const isAdding = !wishlist.includes(productId);
+    if (isAdding && source) animateAddToWishlist(source);
+    void toggleWishlistItem(productId, isAdding).catch(() => undefined);
   };
 
   const addToCart = (productId: string) => {

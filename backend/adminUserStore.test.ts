@@ -1,22 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import bcrypt from "bcryptjs";
 
 const mocks = vi.hoisted(() => ({
   countDocuments: vi.fn(),
   find: vi.fn(),
   findTest: vi.fn(),
   findOne: vi.fn(),
+  findOneDedicated: vi.fn(),
   findOneAndUpdate: vi.fn(),
+  insertOne: vi.fn(),
+  hashPassword: vi.fn(),
   getDatabase: vi.fn(),
 }));
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
+vi.mock("./authService.js", () => ({ hashPassword: mocks.hashPassword }));
 
 import {
   AdminUserConflictError,
   AdminUserValidationError,
   createAdminUser,
+  createDedicatedAdminAccount,
+  deactivateDedicatedAdminAccount,
+  listDedicatedAdminAccounts,
   listAdminUserRecords,
   listAdminUsers,
+  updateDedicatedAdminAccount,
   updateAdminUser,
   validateAdminPermissions,
 } from "./adminUserStore.js";
@@ -41,10 +50,16 @@ beforeEach(() => {
     collection: vi.fn((name: string) => ({
       countDocuments: mocks.countDocuments,
       find: name === "admin-datas" ? mocks.findTest : mocks.find,
-      findOne: mocks.findOne,
+      findOne: name === "admin-datas" ? mocks.findOneDedicated : mocks.findOne,
       findOneAndUpdate: mocks.findOneAndUpdate,
+      createIndex: vi.fn(),
+      insertOne: mocks.insertOne,
     })),
   });
+  mocks.findOne.mockResolvedValue(null);
+  mocks.findOneDedicated.mockResolvedValue(null);
+  mocks.insertOne.mockResolvedValue({ acknowledged: true });
+  mocks.hashPassword.mockImplementation(async (password: string) => bcrypt.hash(password, 12));
   mocks.find.mockReturnValue({ sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([customer]) }) });
   mocks.findTest.mockReturnValue({ sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) });
 });
@@ -111,6 +126,30 @@ describe("listAdminUserRecords", () => {
       }]) }),
     });
 
+    describe("listDedicatedAdminAccounts", () => {
+      it("returns actual admin-datas admins without credential fields", async () => {
+        mocks.findTest.mockReturnValue({
+          sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([{
+            ...customer,
+            passwordHash: "secret",
+            adminTokenVersion: 9,
+          }]) }),
+        });
+
+        await expect(listDedicatedAdminAccounts()).resolves.toMatchObject([{
+          id,
+          name: "Existing Customer",
+          email: "customer@example.com",
+          role: "Manager",
+          status: "Active",
+        }]);
+        expect(mocks.findTest).toHaveBeenCalledWith(
+          { adminRole: "admin" },
+          { projection: { _id: 1, name: 1, email: 1, mobile: 1, adminTitle: 1, adminStatus: 1, adminPermissions: 1 } },
+        );
+      });
+    });
+
     const groups = await listAdminUserRecords();
 
     expect(groups).toHaveLength(1);
@@ -175,6 +214,8 @@ describe("createAdminUser", () => {
   it("rejects an invalid role before database changes", async () => {
     await expect(createAdminUser({ ...input, role: "Owner" }, superAdmin)).rejects.toBeInstanceOf(AdminUserValidationError);
     expect(mocks.findOne).not.toHaveBeenCalled();
+    await expect(createAdminUser({ ...input, role: "Staff" }, superAdmin)).rejects.toThrow("exceed the selected role");
+    expect(mocks.findOne).not.toHaveBeenCalled();
   });
 
   it("rejects an operator without settings edit before customer lookup", async () => {
@@ -190,12 +231,86 @@ describe("createAdminUser", () => {
   });
 });
 
+describe("createDedicatedAdminAccount", () => {
+  const input = {
+    name: "New Admin",
+    email: " New.Admin@Example.com ",
+    password: "a-secure-test-password",
+    role: "Manager",
+    status: "Active",
+    permissions: getEffectiveAdminPermissions("Manager"),
+  };
+
+  it("hashes the password and stores a dedicated account in admin-datas with safe response fields", async () => {
+    const result = await createDedicatedAdminAccount(input, superAdmin);
+    const stored = mocks.insertOne.mock.calls[0]?.[0] as Record<string, unknown>;
+
+    expect(result).toMatchObject({
+      name: "New Admin",
+      email: "new.admin@example.com",
+      role: "Manager",
+      status: "Active",
+      permissions: getEffectiveAdminPermissions("Manager"),
+    });
+    expect(result).not.toHaveProperty("passwordHash");
+    expect(stored).toMatchObject({
+      name: "New Admin",
+      email: "new.admin@example.com",
+      adminRole: "admin",
+      adminTitle: "Manager",
+      adminStatus: "Active",
+      adminAccountType: "dedicated",
+      authProviders: ["password"],
+      isProfileComplete: true,
+      tokenVersion: 0,
+      adminTokenVersion: 0,
+    });
+    expect(stored.passwordHash).not.toBe(input.password);
+    expect(await bcrypt.compare(input.password, stored.passwordHash as string)).toBe(true);
+  });
+
+  it.each(["user-credentials", "admin-datas"] as const)("rejects case-insensitive collisions in %s", async (collection) => {
+    if (collection === "user-credentials") mocks.findOne.mockResolvedValue({ _id: customer._id });
+    else mocks.findOneDedicated.mockResolvedValue({ _id: customer._id });
+
+    await expect(createDedicatedAdminAccount(input, superAdmin)).rejects.toBeInstanceOf(AdminUserConflictError);
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid roles and permission grants above the role ceiling", async () => {
+    await expect(createDedicatedAdminAccount({ ...input, role: "Owner" }, superAdmin))
+      .rejects.toBeInstanceOf(AdminUserValidationError);
+    await expect(createDedicatedAdminAccount({
+      ...input,
+      role: "Staff",
+      permissions: fullAdminPermissions,
+    }, superAdmin)).rejects.toThrow("exceed the selected role");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("requires Super Admin permissions to match its effective full-access role", async () => {
+    const restrictedPermissions = { ...fullAdminPermissions, products: { view: true, edit: false } };
+    await expect(createDedicatedAdminAccount({
+      ...input,
+      role: "Super Admin",
+      permissions: restrictedPermissions,
+    }, superAdmin)).rejects.toThrow("Super Admin accounts must have all permissions");
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("requires a Super Admin and valid passwords before checking or writing accounts", async () => {
+    const manager: AdminUserActor = { role: "Manager", permissions: getEffectiveAdminPermissions("Manager") };
+    await expect(createDedicatedAdminAccount(input, manager)).rejects.toThrow("Only a Super Admin");
+    await expect(createDedicatedAdminAccount({ ...input, password: "short" }, superAdmin))
+      .rejects.toThrow("12 and 72 UTF-8 bytes");
+    expect(mocks.findOne).not.toHaveBeenCalled();
+    expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+});
+
 describe("updateAdminUser", () => {
   it("persists role, status, and validated permissions for an existing admin", async () => {
-    const permissions = {
-      ...fullAdminPermissions,
-      products: { view: true, edit: false },
-    };
+    const permissions = getEffectiveAdminPermissions("Manager");
     mocks.findOne.mockResolvedValue({ adminStatus: "Active", adminTitle: "Manager" });
     mocks.findOneAndUpdate.mockResolvedValue({ ...customer, adminTitle: "Manager", adminPermissions: permissions });
 
@@ -209,6 +324,141 @@ describe("updateAdminUser", () => {
       { $set: { adminTitle: "Manager", adminStatus: "Active", adminPermissions: permissions, updatedAt: expect.any(Date) } },
       expect.objectContaining({ returnDocument: "after" }),
     );
+  });
+
+  describe("updateDedicatedAdminAccount", () => {
+    const input = {
+      name: "Updated Admin",
+      email: "updated@example.com",
+      role: "Manager",
+      status: "Active",
+      permissions: getEffectiveAdminPermissions("Manager"),
+    };
+    const dedicatedAdmin = {
+      ...customer,
+      email: "existing-admin@example.com",
+      adminAccountType: "dedicated" as const,
+      adminTitle: "Manager" as const,
+    };
+
+    it("updates only admin-datas and invalidates sessions after auth changes", async () => {
+      mocks.findOneDedicated.mockResolvedValueOnce(dedicatedAdmin).mockResolvedValueOnce(null);
+      mocks.findOneAndUpdate.mockResolvedValue({
+        ...dedicatedAdmin,
+        ...input,
+        adminTitle: input.role,
+        adminStatus: input.status,
+        adminPermissions: input.permissions,
+      });
+
+      await expect(updateDedicatedAdminAccount(id, input, superAdmin)).resolves.toMatchObject({
+        name: "Updated Admin",
+        email: "updated@example.com",
+        role: "Manager",
+      });
+      expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: expect.any(Object), adminRole: "admin" },
+        {
+          $set: {
+            name: "Updated Admin",
+            email: "updated@example.com",
+            adminTitle: "Manager",
+            adminStatus: "Active",
+            adminPermissions: input.permissions,
+            updatedAt: expect.any(Date),
+          },
+          $inc: { adminTokenVersion: 1 },
+        },
+        expect.objectContaining({ returnDocument: "after" }),
+      );
+      expect(mocks.findOne).toHaveBeenCalledWith(
+        { email: "updated@example.com" },
+        expect.objectContaining({ collation: { locale: "en", strength: 2 } }),
+      );
+    });
+
+    it("hashes a replacement password and invalidates existing sessions", async () => {
+      const password = "another-secure-password";
+      mocks.findOneDedicated.mockResolvedValue(dedicatedAdmin);
+      mocks.findOneAndUpdate.mockResolvedValue(dedicatedAdmin);
+
+      await updateDedicatedAdminAccount(id, { ...input, email: dedicatedAdmin.email, password }, superAdmin);
+
+      const update = mocks.findOneAndUpdate.mock.calls[0]?.[1] as {
+        $set: Record<string, unknown>;
+        $inc: { adminTokenVersion: number };
+      };
+      expect(update.$set.passwordHash).toEqual(expect.any(String));
+      expect(await bcrypt.compare(password, update.$set.passwordHash as string)).toBe(true);
+      expect(update.$inc).toEqual({ adminTokenVersion: 1 });
+    });
+
+    it("rejects an invalid replacement password without changing the account", async () => {
+      mocks.findOneDedicated.mockResolvedValue(dedicatedAdmin);
+      await expect(updateDedicatedAdminAccount(id, { ...input, password: "short" }, superAdmin))
+        .rejects.toThrow("12 and 72 UTF-8 bytes");
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("rejects customer and dedicated email collisions", async () => {
+      mocks.findOneDedicated.mockResolvedValue(dedicatedAdmin);
+      mocks.findOne.mockResolvedValue({ _id: customer._id });
+      await expect(updateDedicatedAdminAccount(id, input, superAdmin)).rejects.toBeInstanceOf(AdminUserConflictError);
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+
+      mocks.findOne.mockResolvedValue(null);
+      mocks.findOneDedicated.mockResolvedValueOnce(dedicatedAdmin).mockResolvedValueOnce({ _id: customer._id });
+      await expect(updateDedicatedAdminAccount(id, input, superAdmin)).rejects.toBeInstanceOf(AdminUserConflictError);
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("rejects unauthorized and self role, status, or permission changes", async () => {
+      mocks.findOneDedicated.mockResolvedValue(dedicatedAdmin);
+      const manager: AdminUserActor = { role: "Manager", permissions: getEffectiveAdminPermissions("Manager") };
+      await expect(updateDedicatedAdminAccount(id, input, manager)).rejects.toThrow("Only a Super Admin");
+      await expect(updateDedicatedAdminAccount(id, { ...input, status: "Inactive" }, { ...superAdmin, id }))
+        .rejects.toThrow("own role, status, or permissions");
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("protects the last active Super Admin from demotion or deactivation", async () => {
+      mocks.findOneDedicated.mockResolvedValue({ ...dedicatedAdmin, adminTitle: "Super Admin" });
+      mocks.countDocuments.mockResolvedValue(0);
+      await expect(updateDedicatedAdminAccount(id, {
+        ...input,
+        role: "Admin",
+        permissions: getEffectiveAdminPermissions("Admin"),
+      }, superAdmin)).rejects.toBeInstanceOf(AdminUserConflictError);
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("deactivateDedicatedAdminAccount", () => {
+    it("rejects self-deactivation and unauthorized callers", async () => {
+      const manager: AdminUserActor = { role: "Manager", permissions: getEffectiveAdminPermissions("Manager") };
+      await expect(deactivateDedicatedAdminAccount(id, manager)).rejects.toThrow("Only a Super Admin");
+      await expect(deactivateDedicatedAdminAccount(id, { ...superAdmin, id })).rejects.toThrow("own admin account");
+      expect(mocks.findOneDedicated).not.toHaveBeenCalled();
+    });
+
+    it("refuses to deactivate the last active Super Admin", async () => {
+      mocks.findOneDedicated.mockResolvedValue({ ...customer, adminTitle: "Super Admin", adminStatus: "Active" });
+      mocks.countDocuments.mockResolvedValue(0);
+      await expect(deactivateDedicatedAdminAccount(id, superAdmin)).rejects.toBeInstanceOf(AdminUserConflictError);
+      expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it("deactivates the selected record and invalidates its admin sessions", async () => {
+      mocks.findOneDedicated.mockResolvedValue({ ...customer, adminTitle: "Manager", adminStatus: "Active" });
+      mocks.findOneAndUpdate.mockResolvedValue({ ...customer, adminTitle: "Manager", adminStatus: "Inactive" });
+
+      await expect(deactivateDedicatedAdminAccount(id, superAdmin)).resolves.toMatchObject({ id, status: "Inactive" });
+      expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: expect.any(Object), adminRole: "admin", adminStatus: { $ne: "Inactive" } },
+        { $set: { adminStatus: "Inactive", updatedAt: expect.any(Date) }, $inc: { adminTokenVersion: 1 } },
+        expect.objectContaining({ returnDocument: "after" }),
+      );
+    });
   });
 
   it("does not deactivate the only active administrator", async () => {
@@ -243,6 +493,16 @@ describe("updateAdminUser", () => {
       status: "Active",
       permissions: fullAdminPermissions,
     }, admin)).rejects.toThrow("not authorized");
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it("does not let a Super Admin change their own role or permissions", async () => {
+    mocks.findOne.mockResolvedValue({ adminStatus: "Active", adminTitle: "Super Admin" });
+    await expect(updateAdminUser(id, {
+      role: "Admin",
+      status: "Active",
+      permissions: getEffectiveAdminPermissions("Admin"),
+    }, { ...superAdmin, id })).rejects.toThrow("not authorized");
     expect(mocks.findOneAndUpdate).not.toHaveBeenCalled();
   });
 

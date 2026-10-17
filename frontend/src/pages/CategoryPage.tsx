@@ -5,6 +5,7 @@ import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { toggleWishlistItem } from "../lib/wishlist";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
@@ -368,7 +369,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
       <div className="category-page__grid category-page__grid--products">
         {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {
           const key = productKey(item);
-          return <ProductCard key={item.id} item={item} delay={0.04 * index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => setWishlist((current) => { const isAdding = !current.includes(key); const nextWishlist = isAdding ? [...current, key] : current.filter((id) => id !== key); if (isAdding) animateAddToWishlist(source); window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist)); window.dispatchEvent(new Event("tribull-wishlist-updated")); return nextWishlist; })} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={item.id} item={item} delay={0.04 * index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>

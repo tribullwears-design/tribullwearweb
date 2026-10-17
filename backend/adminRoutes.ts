@@ -1,13 +1,17 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { requireAdminPermission, requireSuperAdmin } from "./adminAuth.js";
-import { getConfiguredAdminLoginEmail, getConfiguredAdminTestEmail, isAllowedAdminLoginEmail } from "./adminLoginConfig.js";
+import { getConfiguredAdminLoginEmail, getConfiguredAdminTestEmail } from "./adminLoginConfig.js";
 import {
   AdminUserConflictError,
   AdminUserValidationError,
   createAdminUser,
+  createDedicatedAdminAccount,
+  deactivateDedicatedAdminAccount,
+  listDedicatedAdminAccounts,
   listAdminUserRecords,
   listAdminUsers,
+  updateDedicatedAdminAccount,
   updateAdminUser,
   type AdminUserActor,
 } from "./adminUserStore.js";
@@ -21,9 +25,14 @@ import {
   validateCustomerAuthConfiguration,
 } from "./authService.js";
 
+export const adminLoginRateLimit = {
+  windowMs: 15 * 60 * 1000,
+  limit: 8,
+} as const;
+
 export function createAdminRouter() {
   const router = Router();
-  const adminLoginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 8, standardHeaders: "draft-8", legacyHeaders: false });
+  const adminLoginLimiter = rateLimit({ ...adminLoginRateLimit, standardHeaders: "draft-8", legacyHeaders: false });
 
   router.use("/api/admin/auth", (_req, res, next) => {
     try {
@@ -44,9 +53,6 @@ export function createAdminRouter() {
     }
     const regularAdminEmail = getConfiguredAdminLoginEmail();
     const testAdminEmail = getConfiguredAdminTestEmail();
-    if (!isAllowedAdminLoginEmail(email, regularAdminEmail, testAdminEmail)) {
-      return res.status(401).json({ error: "Email or password is incorrect" });
-    }
     try {
       const result = await authenticateAdminLoginPassword(email, password, regularAdminEmail, testAdminEmail);
       if (!result.customer) {
@@ -124,9 +130,51 @@ export function createAdminRouter() {
       sendAdminUserError(res, error);
     }
   });
+  router.get("/api/admin/users/dedicated", requireSuperAdmin, async (_req, res) => {
+    try {
+      res.json(await listDedicatedAdminAccounts());
+    } catch (error) {
+      sendAdminUserError(res, error);
+    }
+  });
   router.post("/api/admin/users", requireAdminPermission("settings", "edit"), requireAdminPermission("adminUsers", "edit"), async (req, res) => {
     try {
       res.status(201).json(await createAdminUser(req.body, res.locals.adminActor as AdminUserActor));
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
+      sendAdminUserError(res, error);
+    }
+  });
+  router.post("/api/admin/users/dedicated", requireSuperAdmin, async (req, res) => {
+    try {
+      const account = await createDedicatedAdminAccount(req.body, res.locals.adminActor as AdminUserActor);
+      console.info("Dedicated admin account created", { category: "dedicated_admin_created" });
+      res.status(201).json(account);
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
+      sendAdminUserError(res, error);
+    }
+  });
+  router.patch("/api/admin/users/dedicated/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const user = await updateDedicatedAdminAccount(req.params.id, req.body, res.locals.adminActor as AdminUserActor);
+      if (!user) return res.status(404).json({ error: "Dedicated admin account not found" });
+      console.info("Dedicated admin account updated", { category: "dedicated_admin_updated" });
+      res.json(user);
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
+      sendAdminUserError(res, error);
+    }
+  });
+  router.delete("/api/admin/users/dedicated/:id", requireSuperAdmin, async (req, res) => {
+    try {
+      const user = await deactivateDedicatedAdminAccount(req.params.id, res.locals.adminActor as AdminUserActor);
+      if (!user) return res.status(404).json({ error: "Dedicated admin account not found" });
+      console.info("Dedicated admin account deactivated", { category: "dedicated_admin_deactivated" });
+      res.json(user);
     } catch (error) {
       if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
       if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });

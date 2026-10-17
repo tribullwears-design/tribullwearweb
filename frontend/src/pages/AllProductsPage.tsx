@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
+import { toggleWishlistItem } from "../lib/wishlist";
 import type { AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { fetchProducts, refreshProducts } from "../lib/products";
@@ -74,11 +75,8 @@ export default function AllProductsPage() {
 
   const toggleWishlist = (productId: string, source: HTMLElement) => {
     const isAdding = !wishlist.includes(productId);
-    const nextWishlist = isAdding ? [...wishlist, productId] : wishlist.filter((id) => id !== productId);
     if (isAdding) animateAddToWishlist(source);
-    window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
-    setWishlist(nextWishlist);
-    window.dispatchEvent(new Event("tribull-wishlist-updated"));
+    void toggleWishlistItem(productId, isAdding).catch(() => undefined);
   };
 
   const addToCart = (productId: string) => {

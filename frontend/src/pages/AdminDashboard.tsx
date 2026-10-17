@@ -1,5 +1,5 @@
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Bell, Box, Boxes, ChevronDown, ChevronRight,
+  Activity, AlertTriangle, Archive, BarChart3, Bell, Box, Boxes, ChevronDown, ChevronRight, Eye, EyeOff,
   ClipboardList, DollarSign, FileText, Gift, Globe2, Image, LayoutDashboard,
   LifeBuoy, Menu, MoreHorizontal, PackageCheck, PackageOpen, PanelLeftClose, PanelLeftOpen,
   Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Store, Tag, Truck,
@@ -12,7 +12,7 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import { saveAdminUserAndRefresh } from "../lib/adminUsers";
-import { adminPermissionSections, adminRoleTitles, defaultRolePermissions, hasAdminPermission, type AdminPermissions, type AdminRoleTitle, type AdminPermissionSection } from "../lib/adminAccess";
+import { adminPermissionSections, adminRoleTitles, defaultRolePermissions, getEffectiveAdminPermissions, hasAdminPermission, type AdminPermissions, type AdminRoleTitle, type AdminPermissionSection } from "../lib/adminAccess";
 import { getAdminProductLoadError } from "../lib/adminProductError";
 import { getCheckoutPaymentLabel } from "../../../shared/checkout";
 import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, type DashboardRange } from "../lib/adminDashboardData";
@@ -55,8 +55,8 @@ type StoredProduct = {
 };
 type OrderStatus = "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
 type AdminOrderItem = { id: string; name: string; price: number; image: string; quantity: number; variant?: string; lineTotal: number };
-type AdminOrder = { id: string; customer: { name: string; email: string; phone: string }; shippingAddress: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string }; items: AdminOrderItem[]; subtotal: number; shipping: number; discount: number; total: number; payment: { method: string; status: string }; paymentMode?: "test"; status: OrderStatus; createdAt: string };
-type AdminUser = { id: string; name: string; email: string; phone?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
+type AdminOrder = { id: string; customer: { name: string; email: string; phone: string }; shippingAddress: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string }; items: AdminOrderItem[]; subtotal: number; shipping: number; discount: number; total: number; payment: { method: string; status: string }; paymentMode?: "test" | "razorpay" | "cod"; razorpayOrderId?: string; razorpayPaymentId?: string; status: OrderStatus; createdAt: string };
+type AdminUser = { id: string; name: string; email: string; phone?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions; source?: "user-credentials" | "admin-datas" };
 type AdminUserRecord = Omit<AdminUser, "email" | "phone"> & { source: "user-credentials" | "admin-datas" };
 type AdminUserRecordGroup = { email: string; records: AdminUserRecord[] };
 type AdminCustomerRecord = { id: string; name: string; username: string; email: string; mobile: string; isProfileComplete: boolean };
@@ -107,6 +107,12 @@ const permissionSections: { key: AdminPermissionSection; label: string }[] = [
   { key: "customers", label: "Customers" }, { key: "marketing", label: "Marketing" }, { key: "content", label: "Content" },
   { key: "analytics", label: "Analytics" }, { key: "settings", label: "Settings" }, { key: "adminUsers", label: "Admin Users" },
 ];
+function summarizeAdminPermissions(permissions: AdminPermissions) {
+  return permissionSections
+    .filter(({ key }) => permissions[key].view || permissions[key].edit)
+    .map(({ key, label }) => `${label} (${permissions[key].edit ? "edit" : "view"})`)
+    .join(", ") || "None";
+}
 type ProductTypeCategory = { label: string; image?: string };
 const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Neck" }, { label: "Oversized" }, { label: "Acid Oversized" }, { label: "Hoodie" }];
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
@@ -131,7 +137,21 @@ function EmptyState({ title, message, action, onAction }: { title: string; messa
 function ProductTable({ products, onSelect, onEdit, onAdjustStock, alignActionsRight = false }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void; onEdit?: (product: AdminProduct) => void; onAdjustStock?: (product: AdminProduct) => void; alignActionsRight?: boolean }) {
   return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div>{onSelect && <button className="admin-small-button" type="button" onClick={() => onSelect(product)}>View</button>}{onEdit && <button className="admin-small-button" type="button" onClick={() => onEdit(product)}>Edit</button>}{onAdjustStock && <button className="admin-small-button" type="button" onClick={() => onAdjustStock(product)}>Adjust</button>}</div></td></tr>)}</tbody></table></div>;
 }
-function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) { return orders.length ? <div className="admin-table-scroll"><table className="admin-table"><thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead><tbody>{orders.map((order) => <tr key={order.id}><td><strong className="admin-order-id">{order.id}</strong></td><td><strong>{order.customer.name}</strong><br /><span>{order.customer.email}</span></td><td>{new Date(order.createdAt).toLocaleString("en-IN")}</td><td>{order.items.reduce((count, item) => count + item.quantity, 0)}</td><td><strong>₹{order.total.toLocaleString("en-IN")}</strong></td><td>{getCheckoutPaymentLabel(order.payment.method)} ({order.payment.status})</td><td><StatusPill status={order.status} /></td><td><button className="admin-more-button" type="button" aria-label={`View order ${order.id}`} onClick={() => onSelect(order)}><MoreHorizontal size={18} /></button></td></tr>)}</tbody></table></div> : <EmptyState title="No orders found." message="Orders will appear here when customers place an order." />; }
+function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) {
+  return orders.length ? <div className="admin-table-scroll"><table className="admin-table">
+    <thead><tr><th>Order ID</th><th>Customer</th><th>Date</th><th>Items</th><th>Total</th><th>Payment</th><th>Status</th><th /></tr></thead>
+    <tbody>{orders.map((order) => <tr key={order.id}>
+      <td><strong className="admin-order-id">{order.id}</strong></td>
+      <td><strong>{order.customer.name}</strong><br /><span>{order.customer.email}</span></td>
+      <td>{new Date(order.createdAt).toLocaleString("en-IN")}</td>
+      <td>{order.items.reduce((count, item) => count + item.quantity, 0)}</td>
+      <td><strong>₹{order.total.toLocaleString("en-IN")}</strong></td>
+      <td>{getCheckoutPaymentLabel(order.payment.method)} ({order.payment.status}){order.paymentMode === "razorpay" && <small className="admin-order-payment-reference">Gateway order: {order.razorpayOrderId || "—"}<br />Payment ID: {order.razorpayPaymentId || "—"}</small>}</td>
+      <td><StatusPill status={order.status} /></td>
+      <td><button className="admin-more-button" type="button" aria-label={`View order ${order.id}`} onClick={() => onSelect(order)}><MoreHorizontal size={18} /></button></td>
+    </tr>)}</tbody>
+  </table></div> : <EmptyState title="No orders found." message="Orders will appear here when customers place an order." />;
+}
 function PaginationControls({ page, totalPages, totalItems, pageSize, onPageChange }: { page: number; totalPages: number; totalItems: number; pageSize: number; onPageChange: (page: number) => void }) {
   const firstItem = totalItems ? (page - 1) * pageSize + 1 : 0;
   const lastItem = Math.min(page * pageSize, totalItems);
@@ -815,18 +835,20 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [screen, setScreen] = useState(initialScreen);
   const [currentAdmin, setCurrentAdmin] = useState<CurrentAdmin | null>(null);
   const [currentAdminName, setCurrentAdminName] = useState("");
+  const [currentAdminEmail, setCurrentAdminEmail] = useState("");
   const [identityLoading, setIdentityLoading] = useState(true);
   const [identityError, setIdentityError] = useState("");
   const [, setLocation] = useLocation();
   useEffect(() => {
     let active = true;
     void apiFetch("/api/admin/auth/me", { cache: "no-store" }).then(async (response) => {
-      const payload = await response.json().catch(() => undefined) as { user?: { id?: string; name?: string }; admin?: CurrentAdmin | null; error?: string } | undefined;
+      const payload = await response.json().catch(() => undefined) as { user?: { id?: string; name?: string; email?: string }; admin?: CurrentAdmin | null; error?: string } | undefined;
       if (!response.ok || !payload?.admin) throw new Error(payload?.error || "Sign in with an authorized admin account.");
       if (payload.admin.status !== "Active") throw new Error("This admin account is inactive.");
       if (active) {
         setCurrentAdmin({ ...payload.admin, id: payload.user?.id });
-        setCurrentAdminName(payload.user?.name || "Admin");
+        setCurrentAdminName(payload.user?.name || "");
+        setCurrentAdminEmail(payload.user?.email || "");
       }
     }).catch((error: unknown) => {
       if (active) setIdentityError(error instanceof Error ? error.message : "Unable to verify admin access.");
@@ -1110,9 +1132,13 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
   const [adminUsersError, setAdminUsersError] = useState("");
   const [adminUserSaving, setAdminUserSaving] = useState(false);
-  const [adminModal, setAdminModal] = useState<"add" | "view-permissions" | "edit-permissions" | null>(null);
+  const [adminModal, setAdminModal] = useState<"add" | "create-dedicated" | "view-permissions" | "edit-permissions" | null>(null);
   const [selectedAdmin, setSelectedAdmin] = useState<AdminUser | null>(null);
   const [adminForm, setAdminForm] = useState({ email: "", role: "Admin" as AdminRoleTitle, status: "Active" as "Active" | "Inactive" });
+  const [dedicatedAdminForm, setDedicatedAdminForm] = useState({ name: "", email: "", password: "", role: "Admin" as AdminRoleTitle, status: "Active" as "Active" | "Inactive" });
+  const [showDedicatedAdminPassword, setShowDedicatedAdminPassword] = useState(false);
+  const [dedicatedAdminPassword, setDedicatedAdminPassword] = useState("");
+  const dedicatedAdminRolePermissions = getEffectiveAdminPermissions(dedicatedAdminForm.role);
   const [permissionDraft, setPermissionDraft] = useState<AdminPermissions>(defaultRolePermissions.Admin);
   const [adminEditRole, setAdminEditRole] = useState<AdminUser["role"]>("Admin");
   const [adminEditStatus, setAdminEditStatus] = useState<AdminUser["status"]>("Active");
@@ -1537,6 +1563,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   };
   const openPermissions = (admin: AdminUser, mode: "view-permissions" | "edit-permissions") => {
     setSelectedAdmin(admin);
+    setDedicatedAdminPassword("");
     setPermissionDraft(admin.permissions);
     setAdminEditRole(admin.role);
     setAdminEditStatus(admin.status);
@@ -1576,34 +1603,121 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setAdminUserSaving(false);
     }
   };
+  const saveDedicatedAdmin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (currentAdmin?.role !== "Super Admin" || adminUserSaving) return;
+    if (new TextEncoder().encode(dedicatedAdminForm.password).length < 12
+      || new TextEncoder().encode(dedicatedAdminForm.password).length > 72) {
+      setAdminUsersError("Password must be between 12 and 72 UTF-8 bytes.");
+      return;
+    }
+    setAdminUserSaving(true);
+    setAdminUsersError("");
+    try {
+      const response = await apiFetch("/api/admin/users/dedicated", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...dedicatedAdminForm,
+          permissions: permissionDraft,
+        }),
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(details?.error || "Dedicated admin account could not be created.");
+      }
+      await response.json() as AdminUser;
+      setDedicatedAdminForm({ name: "", email: "", password: "", role: "Admin", status: "Active" });
+      setShowDedicatedAdminPassword(false);
+      setAdminModal(null);
+      await refreshAdminUsers();
+      toast.success("Dedicated admin account created.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Dedicated admin account could not be created.";
+      setAdminUsersError(message);
+      toast.error("Admin account was not created.", { description: message });
+    } finally {
+      setAdminUserSaving(false);
+    }
+  };
+  const closeAdminModal = () => {
+    if (adminUserSaving) return;
+    setAdminModal(null);
+    setDedicatedAdminForm({ name: "", email: "", password: "", role: "Admin", status: "Active" });
+    setDedicatedAdminPassword("");
+    setShowDedicatedAdminPassword(false);
+  };
   const savePermissions = async () => {
     if (!selectedAdmin || adminUserSaving) return;
     setAdminUserSaving(true);
     setAdminUsersError("");
     try {
-      const response = await apiFetch(`/api/admin/users/${encodeURIComponent(selectedAdmin.id)}`, {
+      const dedicated = selectedAdmin.source === "admin-datas";
+      const response = await apiFetch(dedicated
+        ? `/api/admin/users/dedicated/${encodeURIComponent(selectedAdmin.id)}`
+        : `/api/admin/users/${encodeURIComponent(selectedAdmin.id)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: adminEditRole, status: adminEditStatus, permissions: permissionDraft }),
+        body: JSON.stringify({
+          ...(dedicated ? { name: selectedAdmin.name, email: selectedAdmin.email } : {}),
+          ...(dedicatedAdminPassword ? { password: dedicatedAdminPassword } : {}),
+          role: adminEditRole,
+          status: adminEditStatus,
+          permissions: permissionDraft,
+        }),
       });
       if (!response.ok) {
         const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
         throw new Error(details?.error || "Admin permissions could not be saved.");
       }
       const saved = await response.json() as AdminUser;
-      setAdminUsers((current) => current.map((group) => ({
-        ...group,
-        records: group.records.map((admin) => admin.id === saved.id
-          ? { ...admin, role: saved.role, status: saved.status, permissions: saved.permissions }
-          : admin),
-      })));
-      setSelectedAdmin(saved);
+      const requiresReauthentication = dedicated && selectedAdmin.id === currentAdmin?.id
+        && (Boolean(dedicatedAdminPassword) || selectedAdmin.email.trim().toLowerCase() !== currentAdminEmail.trim().toLowerCase());
+      if (selectedAdmin.id === currentAdmin?.id) {
+        setCurrentAdminName(saved.name);
+        setCurrentAdminEmail(saved.email);
+      }
+      if (requiresReauthentication) {
+        setDedicatedAdminPassword("");
+        setAdminModal(null);
+        toast.success("Admin account updated. Sign in again to continue.");
+        await signOut();
+        return;
+      }
+      await refreshAdminUsers();
+      setSelectedAdmin({ ...saved, source: selectedAdmin.source });
+      setDedicatedAdminPassword("");
       setAdminModal("view-permissions");
       toast.success("Admin access updated.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Admin permissions could not be saved.";
       setAdminUsersError(message);
       toast.error("Admin access was not updated.", { description: message });
+    } finally {
+      setAdminUserSaving(false);
+    }
+  };
+  const deactivateDedicatedAdmin = async (admin: AdminUser) => {
+    if (admin.source !== "admin-datas" || currentAdmin?.role !== "Super Admin" || adminUserSaving) return;
+    if (admin.id === currentAdmin.id) {
+      setAdminUsersError("You cannot deactivate the currently signed-in Super Admin.");
+      return;
+    }
+    if (!window.confirm(`Deactivate ${admin.name} (${admin.email})?\nAccount ID: ${admin.id}\nThey will lose admin access and their current sessions will be invalidated.`)) return;
+    setAdminUserSaving(true);
+    setAdminUsersError("");
+    try {
+      const response = await apiFetch(`/api/admin/users/dedicated/${encodeURIComponent(admin.id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(details?.error || "Dedicated admin account could not be deactivated.");
+      }
+      await refreshAdminUsers();
+      toast.success("Dedicated admin account deactivated.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Dedicated admin account could not be deactivated.";
+      setAdminUsersError(message);
+      toast.error("Admin account was not deactivated.", { description: message });
     } finally {
       setAdminUserSaving(false);
     }
@@ -1783,20 +1897,34 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         {generalSettingsNotice && <p className="admin-form-success" role="status">{generalSettingsNotice}</p>}
       </form>}
     </AdminPanel>;
-    if (screen === "admin-users") return <AdminPanel title="Admin Users" action={canManageAdmins && grantableRoles.length ? "+ Add Admin" : undefined} onAction={canManageAdmins && grantableRoles.length ? () => { setAdminUsersError(""); setAdminModal("add"); } : undefined}>
+    if (screen === "admin-users") return <AdminPanel title="Admin Users" action={canManageAdmins && grantableRoles.length ? "+ Grant Customer Admin Access" : undefined} onAction={canManageAdmins && grantableRoles.length ? () => { setAdminUsersError(""); setAdminModal("add"); } : undefined}>
       <p className="admin-data-caption">{currentAdmin?.role === "Super Admin" ? "Admin records from customer accounts and the dedicated Super Admin account collection." : "Admin access is managed through existing customer accounts."} Credentials remain managed by authentication.</p>
+      {currentAdmin?.role === "Super Admin" && <button className="admin-primary-button" type="button" disabled={adminUserSaving} onClick={() => {
+        setAdminUsersError("");
+        setPermissionDraft(defaultRolePermissions.Admin);
+        setShowDedicatedAdminPassword(false);
+        setAdminModal("create-dedicated");
+      }}>Create Admin Account</button>}
       {adminUsersError && <><p className="admin-image-error" role="alert">{adminUsersError}</p><button className="admin-secondary-button" type="button" disabled={adminUsersLoading} onClick={() => void refreshAdminUsers()}>Retry loading admins</button></>}
-      {adminUsersLoading ? <p role="status">Loading admin users...</p> : adminUsers.length ? <div className="admin-admin-list">{adminUsers.map((group) => <section className="admin-management-row" key={group.email}><div><strong>{group.email}</strong>{group.records.length > 1 && <span role="status">Email appears in both account collections. Records are shown separately; no account was changed.</span>}{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><span>{admin.name} · {admin.role}</span><span>{admin.source === "admin-datas" ? "Super Admin account collection" : "Customer account admin"}</span></div>)}</div><div className="admin-admin-actions">{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><StatusPill status={admin.status} /><button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "view-permissions")}>View {admin.source === "admin-datas" ? "Super Admin" : "Admin"} Permissions</button>{admin.source === "user-credentials" && canManageAdmins && (currentAdmin?.role === "Super Admin" || (admin.role !== "Super Admin" && admin.id !== currentAdmin?.id)) && <button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Manage Access</button>}</div>)}</div></section>)}</div> : !adminUsersError && <EmptyState title="No admin users found." message="Grant admin access to an existing customer account to get started." />}
-      {adminModal && <div className="admin-modal-backdrop" onClick={() => { if (!adminUserSaving) setAdminModal(null); }}><div className="admin-modal admin-admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" disabled={adminUserSaving} onClick={() => setAdminModal(null)}><X size={17} /></button>{adminUsersError && <p className="admin-image-error" role="alert">{adminUsersError}</p>}
+      {adminUsersLoading ? <p role="status">Loading admin users...</p> : adminUsers.length ? <div className="admin-admin-list">{adminUsers.map((group) => <section className="admin-management-row" key={group.email}><div><strong>{group.email}</strong>{group.records.length > 1 && <span role="status">Email appears in both account collections. Records are shown separately; no account was changed.</span>}{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><span>{admin.name} · {admin.role}</span><span>{admin.source === "admin-datas" ? "Dedicated admin collection" : "Customer account admin"}</span><span>Account ID: {admin.id}</span><span>Permissions: {summarizeAdminPermissions(admin.permissions)}</span></div>)}</div><div className="admin-admin-actions">{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><StatusPill status={admin.status} /><button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "view-permissions")}>View {admin.source === "admin-datas" ? "Dedicated Admin" : "Admin"} Permissions</button>{admin.source === "user-credentials" && canManageAdmins && (currentAdmin?.role === "Super Admin" || (admin.role !== "Super Admin" && admin.id !== currentAdmin?.id)) && <button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Manage Access</button>}{admin.source === "admin-datas" && currentAdmin?.role === "Super Admin" && <><button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Edit Dedicated Admin</button>{admin.id !== currentAdmin.id && admin.status !== "Inactive" && <button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => void deactivateDedicatedAdmin({ ...admin, email: group.email })}>Deactivate</button>}</>}</div>)}</div></section>)}</div> : !adminUsersError && <EmptyState title="No admin users found." message="Grant access to an existing customer account or create a dedicated admin account." />}
+      {adminModal && <div className="admin-modal-backdrop" onClick={closeAdminModal}><div className="admin-modal admin-admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" disabled={adminUserSaving} onClick={closeAdminModal}><X size={17} /></button>{adminUsersError && <p className="admin-image-error" role="alert">{adminUsersError}</p>}
         {adminModal === "add" ? <><h2>Grant Admin Access</h2><form className="admin-form admin-admin-form" onSubmit={saveAdmin}>
           <label><span>Existing customer email</span><input required type="email" maxLength={254} value={adminForm.email} disabled={adminUserSaving} onChange={(event) => setAdminForm({ ...adminForm, email: event.target.value })} /></label>
           <label><span>Role</span><select value={adminForm.role} disabled={adminUserSaving} onChange={(event) => setAdminForm({ ...adminForm, role: event.target.value as AdminRoleTitle })}>{grantableRoles.map((role) => <option key={role}>{role}</option>)}</select></label>
           <label><span>Status</span><select value={adminForm.status} disabled={adminUserSaving} onChange={(event) => setAdminForm({ ...adminForm, status: event.target.value as "Active" | "Inactive" })}><option>Active</option><option>Inactive</option></select></label>
           <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={adminUserSaving}>{adminUserSaving ? "Saving..." : "Grant Access"}</button><button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={() => setAdminModal(null)}>Cancel</button></div>
+        </form></> : adminModal === "create-dedicated" ? <><h2>Create Admin Account</h2><p className="admin-data-caption">Creates a separate password-based account in the dedicated admin collection. Email must not belong to an existing customer or admin.</p><form className="admin-form admin-admin-form" onSubmit={saveDedicatedAdmin}>
+          <label><span>Full name</span><input required minLength={2} maxLength={80} autoComplete="name" value={dedicatedAdminForm.name} disabled={adminUserSaving} onChange={(event) => setDedicatedAdminForm({ ...dedicatedAdminForm, name: event.target.value })} /></label>
+          <label><span>Email</span><input required type="email" maxLength={254} autoComplete="email" value={dedicatedAdminForm.email} disabled={adminUserSaving} onChange={(event) => setDedicatedAdminForm({ ...dedicatedAdminForm, email: event.target.value })} /></label>
+          <label><span>Password (12–72 UTF-8 bytes)</span><div className="admin-password-wrap"><input required type={showDedicatedAdminPassword ? "text" : "password"} minLength={12} maxLength={72} autoComplete="new-password" value={dedicatedAdminForm.password} disabled={adminUserSaving} onChange={(event) => setDedicatedAdminForm({ ...dedicatedAdminForm, password: event.target.value })} /><button type="button" disabled={adminUserSaving} aria-label={showDedicatedAdminPassword ? "Hide password" : "Show password"} onClick={() => setShowDedicatedAdminPassword((shown) => !shown)}>{showDedicatedAdminPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
+          <label><span>Role</span><select required value={dedicatedAdminForm.role} disabled={adminUserSaving} onChange={(event) => { const role = event.target.value as AdminRoleTitle; setDedicatedAdminForm({ ...dedicatedAdminForm, role }); setPermissionDraft(defaultRolePermissions[role]); }}>{grantableRoles.map((role) => <option key={role}>{role}</option>)}</select></label>
+          <label><span>Status</span><select required value={dedicatedAdminForm.status} disabled={adminUserSaving} onChange={(event) => setDedicatedAdminForm({ ...dedicatedAdminForm, status: event.target.value as "Active" | "Inactive" })}><option>Active</option><option>Inactive</option></select></label>
+          <div><strong>Permissions</strong>{dedicatedAdminForm.role === "Super Admin" && <p className="admin-data-caption">Super Admin accounts always have full permissions.</p>}<div className="admin-permission-table"><div className="admin-permission-row admin-permission-row--header"><strong>Permission</strong><strong>View</strong><strong>Edit</strong></div>{permissionSections.map(({ key, label }) => <div className="admin-permission-row" key={`dedicated-${key}`}><span>{label}</span><input aria-label={`${label} view permission`} type="checkbox" checked={permissionDraft[key].view} disabled={adminUserSaving || !dedicatedAdminRolePermissions[key].view || dedicatedAdminForm.role === "Super Admin"} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: event.target.checked, edit: event.target.checked && current[key].edit } }))} /><input aria-label={`${label} edit permission`} type="checkbox" checked={permissionDraft[key].edit} disabled={adminUserSaving || !dedicatedAdminRolePermissions[key].edit || dedicatedAdminForm.role === "Super Admin"} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: current[key].view || event.target.checked, edit: event.target.checked } }))} /></div>)}</div></div>
+          <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={adminUserSaving}>{adminUserSaving ? "Creating..." : "Create Account"}</button><button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={closeAdminModal}>Cancel</button></div>
         </form></> : selectedAdmin && <><h2>{adminModal === "view-permissions" ? "Admin Permissions" : "Manage Admin Access"}</h2><p className="admin-permission-owner">{selectedAdmin.name} · {selectedAdmin.email}</p>
-          {adminModal === "edit-permissions" && <div className="admin-form admin-admin-form"><label><span>Role</span><select value={adminEditRole} disabled={adminUserSaving} onChange={(event) => { const role = event.target.value as AdminRoleTitle; setAdminEditRole(role); setPermissionDraft(defaultRolePermissions[role]); }}>{grantableRoles.includes(adminEditRole) ? grantableRoles.map((role) => <option key={role}>{role}</option>) : <option>{adminEditRole}</option>}</select></label><label><span>Status</span><select value={adminEditStatus} disabled={adminUserSaving} onChange={(event) => setAdminEditStatus(event.target.value as AdminUser["status"])}><option>Active</option><option>Inactive</option></select></label></div>}
-          <div className="admin-permission-table"><div className="admin-permission-row admin-permission-row--header"><strong>Permission</strong><strong>View</strong><strong>Edit</strong></div>{permissionSections.map(({ key, label }) => <div className="admin-permission-row" key={key}><span>{label}</span><input aria-label={`${label} view permission`} type="checkbox" checked={permissionDraft[key].view} disabled={adminModal === "view-permissions" || adminUserSaving} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: event.target.checked, edit: event.target.checked && current[key].edit } }))} /><input aria-label={`${label} edit permission`} type="checkbox" checked={permissionDraft[key].edit} disabled={adminModal === "view-permissions" || adminUserSaving} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: current[key].view || event.target.checked, edit: event.target.checked } }))} /></div>)}</div>
-          {adminModal === "edit-permissions" && <div className="admin-form-actions"><button className="admin-primary-button" type="button" disabled={adminUserSaving} onClick={() => void savePermissions()}>{adminUserSaving ? "Saving..." : "Save Access"}</button><button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={() => setAdminModal(null)}>Cancel</button></div>}
+          {adminModal === "edit-permissions" && <div className="admin-form admin-admin-form">{selectedAdmin.source === "admin-datas" && <><label><span>Full name</span><input required minLength={2} maxLength={80} value={selectedAdmin.name} disabled={adminUserSaving} onChange={(event) => setSelectedAdmin({ ...selectedAdmin, name: event.target.value })} /></label><label><span>Email</span><input required type="email" maxLength={254} value={selectedAdmin.email} disabled={adminUserSaving} onChange={(event) => setSelectedAdmin({ ...selectedAdmin, email: event.target.value })} /></label><label><span>New password (optional, 12–72 UTF-8 bytes)</span><input type="password" autoComplete="new-password" placeholder="Leave blank to keep current password" value={dedicatedAdminPassword} disabled={adminUserSaving} onChange={(event) => setDedicatedAdminPassword(event.target.value)} /></label></>}<label><span>Role</span><select value={adminEditRole} disabled={adminUserSaving || (selectedAdmin.source === "admin-datas" && selectedAdmin.id === currentAdmin?.id)} onChange={(event) => { const role = event.target.value as AdminRoleTitle; setAdminEditRole(role); setPermissionDraft(defaultRolePermissions[role]); }}>{grantableRoles.includes(adminEditRole) ? grantableRoles.map((role) => <option key={role}>{role}</option>) : <option>{adminEditRole}</option>}</select></label><label><span>Status</span><select value={adminEditStatus} disabled={adminUserSaving || (selectedAdmin.source === "admin-datas" && selectedAdmin.id === currentAdmin?.id)} onChange={(event) => setAdminEditStatus(event.target.value as AdminUser["status"])}><option>Active</option><option>Inactive</option></select></label></div>}
+          <div className="admin-permission-table"><div className="admin-permission-row admin-permission-row--header"><strong>Permission</strong><strong>View</strong><strong>Edit</strong></div>{permissionSections.map(({ key, label }) => <div className="admin-permission-row" key={key}><span>{label}</span><input aria-label={`${label} view permission`} type="checkbox" checked={permissionDraft[key].view} disabled={adminModal === "view-permissions" || adminUserSaving || (selectedAdmin.source === "admin-datas" && selectedAdmin.id === currentAdmin?.id)} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: event.target.checked, edit: event.target.checked && current[key].edit } }))} /><input aria-label={`${label} edit permission`} type="checkbox" checked={permissionDraft[key].edit} disabled={adminModal === "view-permissions" || adminUserSaving || (selectedAdmin.source === "admin-datas" && selectedAdmin.id === currentAdmin?.id)} onChange={(event) => setPermissionDraft((current) => ({ ...current, [key]: { view: current[key].view || event.target.checked, edit: event.target.checked } }))} /></div>)}</div>
+          {adminModal === "edit-permissions" && <div className="admin-form-actions"><button className="admin-primary-button" type="button" disabled={adminUserSaving} onClick={() => void savePermissions()}>{adminUserSaving ? "Saving..." : "Save Access"}</button><button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={closeAdminModal}>Cancel</button></div>}
         </>}
       </div></div>}
     </AdminPanel>;
@@ -1818,7 +1946,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     </aside>
     {mobileOpen && <button className="admin-drawer-overlay" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
     <div className="admin-main-wrap">
-      <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>{currentAdmin.role}</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders and products..." value={adminSearch} onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); setOrderPage(1); }} /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">{currentAdminName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="admin-profile-name">{currentAdminName}</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>{currentAdminName}</strong><span>{currentAdmin.role}</span><button type="button"><UserRound size={15} /> Account settings</button><button type="button"><LifeBuoy size={15} /> Help center</button><button type="button" onClick={() => void signOut()}>Sign out</button></div>}</div></div></header>
+      <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>{currentAdmin.role}</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders and products..." value={adminSearch} onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); setOrderPage(1); }} /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">{currentAdminName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="admin-profile-name">{currentAdminName}</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>{currentAdminName}</strong><span>{currentAdminEmail}</span><span>{currentAdmin.role}</span><button type="button"><UserRound size={15} /> Account settings</button><button type="button"><LifeBuoy size={15} /> Help center</button><button type="button" onClick={() => void signOut()}>Sign out</button></div>}</div></div></header>
       <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{screen === "products" && isProductEditorOpen && <div className="admin-modal-backdrop admin-product-edit-backdrop" onClick={closeProductEditor}><section className="admin-modal admin-product-edit-modal" role="dialog" aria-modal="true" aria-labelledby="admin-product-edit-title" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" aria-label="Close editor" onClick={closeProductEditor}><X size={17} /></button><h2 id="admin-product-edit-title">Edit Product</h2>{editProductLoading ? <p>Loading product...</p> : editProductError && !editingProduct ? <><p className="admin-image-error" role="alert">Unable to load product details. Please try again.</p><div className="admin-form-actions">{editingProductTarget && <button className="admin-primary-button" type="button" onClick={() => void editProduct(editingProductTarget)}>Retry</button>}<button className="admin-secondary-button" type="button" onClick={closeProductEditor}>Close</button></div></> : editingProduct && <AddProductForm productForm={editingProductForm} setProductForm={setEditingProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveEditedProduct} onCancel={closeProductEditor} imageError={imageError} onImageChange={(event) => handleProductImageChange(event, setEditingProductForm)} savedNotice={editProductError} productSaving={productSaving} submitLabel="Save Changes" />}</section></div>}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.mainCategory && selectedProduct.subcategory ? `${selectedProduct.mainCategory} · ${selectedProduct.subcategory}` : selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : selectedProduct.status} />{selectedProduct.mainCategoryId && <div className="admin-form"><label><span>Main Category</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductCategory} onChange={(event) => { const value = event.target.value; setEditingProductCategory(value); setEditingProductSubcategory(categoryHierarchy.subcategories[value]?.[0]?.value || ""); }}>{categoryHierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label><label><span>Subcategory / Industry</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductSubcategory} onChange={(event) => setEditingProductSubcategory(event.target.value)}>{(categoryHierarchy.subcategories[editingProductCategory] || []).map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>{(productUpdateError || categoryHierarchyError) && <p className="admin-image-error" role="alert">{productUpdateError || categoryHierarchyError}</p>}<div className="admin-form-actions"><button type="button" className="admin-primary-button" disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} onClick={() => void saveProductCategory()}>Save Category</button></div></div>}</div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p><p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p><div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div><p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p>      <p>Payment: {getCheckoutPaymentLabel(selectedOrder.payment.method)} ({selectedOrder.payment.status})</p><label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label><StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
     </div>
   </div>;

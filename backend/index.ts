@@ -5,17 +5,19 @@ import { randomUUID } from "node:crypto";
 import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
-import { createOrder, findOrderByIdempotencyKey, listOrders, orderStatuses, updateOrderStatus, type OrderStatus } from "./orderStore.js";
+import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, getProduct, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
 import { createAdminRouter } from "./adminRoutes.js";
+import { createRazorpayCheckoutRouter } from "./razorpayRoutes.js";
+import { createAdminOrderRouter } from "./orderRoutes.js";
+import { createCustomerRouter } from "./customerRoutes.js";
+import { logRazorpayConfigurationStatus } from "./razorpayService.js";
 import { requireAdminPermission } from "./adminAuth.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
-import type { AdminUserActor } from "./adminUserStore.js";
-import { redactAdminOrderPersonalInformation } from "./adminPrivacy.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
 import { rateLimit } from "express-rate-limit";
@@ -66,11 +68,18 @@ async function startServer() {
   for (const envPath of envPaths) {
     if (existsSync(envPath)) process.loadEnvFile(envPath);
   }
+  logRazorpayConfigurationStatus();
   validateCustomerAuthConfiguration();
 
   const app = express();
   const server = createServer(app);
-  app.use(express.json({ limit: "10mb" }));
+  app.use(express.json({
+    limit: "10mb",
+    verify: (req, _res, buffer) => {
+      const request = req as express.Request;
+      if (request.path === "/api/razorpay/webhook") request.rawBody = Buffer.from(buffer);
+    },
+  }));
 
   const allowedOrigins = new Set(process.env.NODE_ENV === "production" ? [] : [
     "http://localhost:3000",
@@ -103,6 +112,9 @@ async function startServer() {
     next();
   });
   app.use(createAdminRouter());
+  app.use(createRazorpayCheckoutRouter());
+  app.use(createAdminOrderRouter());
+  app.use(createCustomerRouter());
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
   });
@@ -656,16 +668,6 @@ async function startServer() {
       sendError(res, error);
     }
   });
-  app.get("/api/orders", requireAdminPermission("orders", "view"), async (req, res) => {
-    try {
-      const orders = await listOrders(typeof req.query.status === "string" ? req.query.status : undefined);
-      const actor = res.locals.adminActor as AdminUserActor;
-      if (actor.role === "Manager" || actor.role === "Staff") {
-        return res.json(orders.map(redactAdminOrderPersonalInformation));
-      }
-      res.json(orders);
-    } catch (error) { sendError(res, error); }
-  });
   app.post("/api/orders", (_req, res) => {
     return res.status(410).json({ error: "Client-priced order creation is disabled. Use the validated checkout endpoint." });
   });
@@ -678,8 +680,16 @@ async function startServer() {
       return res.status(400).json({ error: "A valid checkout request key is required" });
     }
     try {
+      const sessionCustomer = await getSessionCustomer(req);
+      const customerId = sessionCustomer?._id?.toString();
       const existingOrder = await findOrderByIdempotencyKey(idempotencyKey);
-      if (existingOrder) return res.json(existingOrder);
+      if (existingOrder) {
+        if ((existingOrder.customerId || undefined) !== customerId) {
+          return res.status(409).json({ error: "This checkout request key is already in use" });
+        }
+        const { customerId: _customerId, ...safeOrder } = existingOrder;
+        return res.json(safeOrder);
+      }
 
       if (!customer || typeof customer.name !== "string" || customer.name.trim().length < 2 || customer.name.trim().length > 80
         || typeof customer.email !== "string" || !isValidCustomerEmail(normalizeCustomerEmail(customer.email))
@@ -687,7 +697,8 @@ async function startServer() {
         return res.status(400).json({ error: "Enter a valid name, email address, and mobile number" });
       }
       if (!shippingAddress || typeof shippingAddress.address !== "string" || shippingAddress.address.trim().length < 5
-        || typeof shippingAddress.apartment !== "string" || typeof shippingAddress.city !== "string" || !shippingAddress.city.trim()
+        || (shippingAddress.apartment !== undefined && typeof shippingAddress.apartment !== "string")
+        || typeof shippingAddress.city !== "string" || !shippingAddress.city.trim()
         || !isIndianState(shippingAddress.state)
         || typeof shippingAddress.pinCode !== "string" || !/^\d{6}$/.test(shippingAddress.pinCode)
         || typeof shippingAddress.country !== "string" || shippingAddress.country !== "India") {
@@ -754,6 +765,7 @@ async function startServer() {
       const order = {
         id: orderId,
         idempotencyKey,
+        ...(customerId ? { customerId } : {}),
         customer: {
           name: customer.name.trim(),
           email: normalizeCustomerEmail(customer.email),
@@ -761,11 +773,13 @@ async function startServer() {
         },
         shippingAddress: {
           address: shippingAddress.address.trim(),
-          apartment: shippingAddress.apartment.trim(),
+          apartment: typeof shippingAddress.apartment === "string" ? shippingAddress.apartment.trim() : "",
           city: shippingAddress.city.trim(),
           state: normalizeIndianState(shippingAddress.state),
           pinCode: shippingAddress.pinCode,
           country: "India",
+          recipientName: customer.name.trim(),
+          phone: customer.phone.trim(),
         },
         items: orderItems,
         subtotal,
@@ -777,11 +791,19 @@ async function startServer() {
         status: "Pending" as const,
       };
       try {
-        return res.status(201).json(await createOrder(order));
+        const createdOrder = await createOrder(order);
+        const { customerId: _customerId, ...safeOrder } = createdOrder;
+        return res.status(201).json(safeOrder);
       } catch (error) {
         if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
           const duplicate = await findOrderByIdempotencyKey(idempotencyKey);
-          if (duplicate) return res.json(duplicate);
+          if (duplicate && (duplicate.customerId || undefined) !== customerId) {
+            return res.status(409).json({ error: "This checkout request key is already in use" });
+          }
+          if (duplicate) {
+            const { customerId: _customerId, ...safeOrder } = duplicate;
+            return res.json(safeOrder);
+          }
         }
         throw error;
       }
@@ -790,16 +812,6 @@ async function startServer() {
       return res.status(500).json({ error: "Unable to place the test order right now" });
     }
   });
-  app.patch("/api/orders/:id", requireAdminPermission("orders", "edit"), async (req, res) => {
-    try {
-      const status = req.body?.status;
-      if (!orderStatuses.includes(status as OrderStatus)) return res.status(400).json({ error: "Invalid order status" });
-      const order = await updateOrderStatus(req.params.id, status);
-      if (!order) return res.status(404).json({ error: "Order not found" });
-      res.json(order);
-    } catch (error) { sendError(res, error); }
-  });
-
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
   });

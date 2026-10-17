@@ -2,6 +2,9 @@ import { ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Searc
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
+import { validateCustomerAddress } from "../lib/customerAddress";
+import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, toggleWishlistItem } from "../lib/wishlist";
+import { getCheckoutPaymentLabel } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -26,19 +29,32 @@ type AddressEntry = {
   fullName: string;
   phone: string;
   address: string;
+  apartment?: string;
   city: string;
   state: string;
   pinCode: string;
   isDefault?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 type OrderEntry = {
   id: string;
-  orderNumber: string;
-  date: string;
+  createdAt: string;
   total: number;
   status: string;
-  items: { name: string; quantity: number }[];
+  statusUpdatedAt?: string;
+  payment: { method: string; status: string };
+  items: { id: string; name: string; image?: string; quantity: number; variant?: string; price: number; originalPrice?: number; lineTotal: number }[];
+  shippingAddress: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string; recipientName?: string; phone?: string };
+  tracking?: { carrier?: string; trackingNumber?: string; trackingUrl?: string; shippedAt?: string; deliveredAt?: string };
 };
+
+const orderProgressLabels = ["Order Placed", "Processing", "Shipped", "Delivered"];
+
+function getOrderProgressStatus(status: string) {
+  if (status === "Pending") return "Order Placed";
+  return orderProgressLabels.includes(status) ? status : null;
+}
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -100,6 +116,18 @@ function saveCartItems(items: CartItems) {
   window.localStorage.setItem("tribull-cart-items", JSON.stringify(items));
 }
 
+async function fetchCustomerAddresses(): Promise<AddressEntry[]> {
+  const response = await apiFetch("/api/customer/addresses", { cache: "no-store" });
+  const data = await response.json().catch(() => undefined) as AddressEntry[] | { error?: string } | undefined;
+  if (!response.ok || !Array.isArray(data)) {
+    throw new Error(!Array.isArray(data) && data?.error ? data.error : "Unable to load saved addresses.");
+  }
+  if (data.some((entry) => !entry || typeof entry.id !== "string" || !entry.id.trim())) {
+    throw new Error("Saved address data is missing an address ID. Please contact support.");
+  }
+  return data;
+}
+
 export default function HeaderActions() {
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -118,8 +146,20 @@ export default function HeaderActions() {
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
-  const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", address: "", city: "", state: "", pinCode: "" });
+  const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", address: "", apartment: "", city: "", state: "", pinCode: "" });
   const [addressEditId, setAddressEditId] = useState<string | null>(null);
+  const [addresses, setAddresses] = useState<AddressEntry[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(false);
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [addressError, setAddressError] = useState("");
+  const [addressSuccess, setAddressSuccess] = useState("");
+  const addressRequestIdRef = useRef<string | null>(null);
+  const addressFetchVersionRef = useRef(0);
+  const [orders, setOrders] = useState<OrderEntry[]>([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersTotal, setOrdersTotal] = useState(0);
   const [loginStep, setLoginStep] = useState<LoginStep>("login");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -169,6 +209,7 @@ export default function HeaderActions() {
         if (!active) return;
         if (!response.ok) {
           if (response.status === 401) {
+            preserveGuestWishlist();
             const signedOut: AuthUser = { username: "", isAuthenticated: false };
             setAuthUser(signedOut);
             window.localStorage.removeItem("tribull-user");
@@ -208,6 +249,81 @@ export default function HeaderActions() {
       window.removeEventListener("storage", syncStores);
     };
   }, []);
+
+  useEffect(() => {
+    if (!authUser.isAuthenticated) return;
+    void syncCustomerWishlist().catch(() => undefined);
+  }, [authUser.isAuthenticated]);
+
+  useEffect(() => {
+    if (overlay !== "account" || !authUser.isAuthenticated) return;
+    let active = true;
+    let timer: number | undefined;
+
+    if (accountSection === "addresses") {
+      const requestVersion = ++addressFetchVersionRef.current;
+      setAddresses([]);
+      setAddressesLoading(true);
+      setAddressError("");
+      void fetchCustomerAddresses()
+        .then((data) => {
+          if (active && requestVersion === addressFetchVersionRef.current) setAddresses(data);
+        })
+        .catch((error: unknown) => {
+          if (active && requestVersion === addressFetchVersionRef.current) {
+            setAddresses([]);
+            setAddressError(error instanceof Error ? error.message : "Unable to load saved addresses.");
+          }
+        })
+        .finally(() => {
+          if (active && requestVersion === addressFetchVersionRef.current) setAddressesLoading(false);
+        });
+    }
+
+    if (accountSection === "orders") {
+      const loadOrders = (page: number, append: boolean) => {
+        setOrdersLoading(true);
+        setOrdersError("");
+        if (page === 1 && !append) {
+          setOrders([]);
+          setOrdersTotal(0);
+        }
+        void apiFetch(`/api/customer/orders?page=${page}`, { cache: "no-store" })
+          .then(async (response) => {
+            const data = await response.json().catch(() => undefined) as { orders?: OrderEntry[]; total?: number; error?: string } | undefined;
+            if (!response.ok || !data || !Array.isArray(data.orders) || typeof data.total !== "number" || !Number.isInteger(data.total) || data.total < 0) {
+              throw new Error(data?.error || "The order service returned an invalid response.");
+            }
+            if (active) {
+              setOrders((current) => {
+                if (!append) return data.orders!;
+                const refreshed = new Map(current.map((order) => [order.id, order]));
+                for (const order of data.orders!) refreshed.set(order.id, order);
+                return Array.from(refreshed.values());
+              });
+              setOrdersTotal(data.total);
+            }
+          })
+          .catch((error: unknown) => {
+            if (active) {
+              if (page === 1 && !append) {
+                setOrders([]);
+                setOrdersTotal(0);
+              }
+              setOrdersError(error instanceof Error ? error.message : "Unable to load your orders.");
+            }
+          })
+          .finally(() => { if (active) setOrdersLoading(false); });
+      };
+      loadOrders(ordersPage, ordersPage > 1);
+      timer = window.setInterval(() => loadOrders(1, true), 20_000);
+    }
+
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  }, [overlay, accountSection, authUser.isAuthenticated, ordersPage]);
 
   useEffect(() => {
     document.body.classList.toggle("header-overlay-open", overlay !== null);
@@ -820,6 +936,7 @@ export default function HeaderActions() {
         return;
       }
       persistUser({ username: "", isAuthenticated: false });
+      restoreGuestWishlist();
       setLoginStep("login");
       setAccountSection("main");
       setOverlay("account");
@@ -832,52 +949,116 @@ export default function HeaderActions() {
     }
   };
 
-  const orders = readStorage<OrderEntry[]>("tribull-orders", []);
-  const addresses = readStorage<AddressEntry[]>("tribull-addresses", []);
-
-  const saveAddresses = (nextAddresses: AddressEntry[]) => {
-    window.localStorage.setItem("tribull-addresses", JSON.stringify(nextAddresses));
+  const cancelAddressEdit = () => {
+    setAddressEditId(null);
+    setAddressForm({ fullName: "", phone: "", address: "", apartment: "", city: "", state: "", pinCode: "" });
+    addressRequestIdRef.current = null;
+    window.sessionStorage.removeItem("tribull-address-request-id");
+    setAddressError("");
+    setAddressSuccess("");
   };
 
-  const submitAddress = () => {
-    const normalizedAddress = {
-      fullName: addressForm.fullName.trim(),
-      phone: addressForm.phone.trim(),
-      address: addressForm.address.trim(),
-      city: addressForm.city.trim(),
-      state: addressForm.state.trim(),
-      pinCode: addressForm.pinCode.trim(),
-    };
+  const reloadAddresses = async () => {
+    const requestVersion = ++addressFetchVersionRef.current;
+    setAddresses([]);
+    setAddressesLoading(true);
+    setAddressError("");
+    try {
+      const data = await fetchCustomerAddresses();
+      if (requestVersion === addressFetchVersionRef.current) setAddresses(data);
+      return data;
+    } catch (error) {
+      if (requestVersion === addressFetchVersionRef.current) setAddresses([]);
+      throw error;
+    } finally {
+      if (requestVersion === addressFetchVersionRef.current) setAddressesLoading(false);
+    }
+  };
 
-    if (!normalizedAddress.fullName || !normalizedAddress.phone || !normalizedAddress.address || !normalizedAddress.city || !normalizedAddress.state || !normalizedAddress.pinCode) {
+  const submitAddress = async () => {
+    if (addressSaving) return;
+    setAddressError("");
+    setAddressSuccess("");
+    const validation = validateCustomerAddress(addressForm);
+    setAddressForm(validation.value);
+    if (validation.error) {
+      setAddressError(validation.error);
       return;
     }
+    const normalizedAddress = validation.value;
 
-    const nextAddresses = [...addresses];
-    if (addressEditId) {
-      const index = nextAddresses.findIndex((entry) => entry.id === addressEditId);
-      if (index >= 0) {
-        nextAddresses[index] = { ...nextAddresses[index], ...normalizedAddress };
+    setAddressSaving(true);
+    try {
+      const editing = addressEditId ? addresses.find((entry) => entry.id === addressEditId) : undefined;
+      if (addressEditId && !editing) throw new Error("This address is no longer available. Reload your addresses and try again.");
+      addressRequestIdRef.current ||= window.sessionStorage.getItem("tribull-address-request-id")
+        || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `address-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      window.sessionStorage.setItem("tribull-address-request-id", addressRequestIdRef.current);
+      const response = await apiFetch(
+        addressEditId ? `/api/customer/addresses/${encodeURIComponent(addressEditId)}` : "/api/customer/addresses",
+        {
+          method: addressEditId ? "PATCH" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...normalizedAddress,
+            isDefault: editing?.isDefault || false,
+            ...(!addressEditId ? { requestId: addressRequestIdRef.current } : {}),
+          }),
+        },
+      );
+      const data = await response.json().catch(() => undefined) as AddressEntry | { error?: string } | undefined;
+      if (!response.ok || !data || !("id" in data) || typeof data.id !== "string" || !data.id.trim()) {
+        throw new Error(data && "error" in data && data.error ? data.error : "Unable to save this address.");
       }
-    } else {
-      nextAddresses.push({ id: crypto.randomUUID ? crypto.randomUUID() : `address-${Date.now()}`, ...normalizedAddress, isDefault: nextAddresses.length === 0 });
+      const savedAddressId = data.id;
+      const refreshedAddresses = await reloadAddresses();
+      if (!refreshedAddresses.some((entry) => entry.id === savedAddressId)) {
+        throw new Error("The address was accepted but could not be found when reloading your saved addresses. Please refresh and try again.");
+      }
+      const wasEditing = Boolean(addressEditId);
+      cancelAddressEdit();
+      setAddressSuccess(wasEditing ? "Address changes saved." : "Address saved to your account.");
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : "Unable to save this address.");
+    } finally {
+      setAddressSaving(false);
     }
-
-    saveAddresses(nextAddresses);
-    setAddressForm({ fullName: "", phone: "", address: "", city: "", state: "", pinCode: "" });
-    setAddressEditId(null);
   };
 
-  const deleteAddress = (id: string) => {
-    const nextAddresses = addresses.filter((entry) => entry.id !== id);
-    const defaultEntry = nextAddresses[0];
-    if (defaultEntry) defaultEntry.isDefault = true;
-    saveAddresses(nextAddresses);
+  const deleteAddress = async (id: string) => {
+    if (!window.confirm("Delete this saved address? This cannot be undone.")) return;
+    setAddressError("");
+    setAddressSuccess("");
+    try {
+      const response = await apiFetch(`/api/customer/addresses/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const data = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(data?.error || "Unable to delete this address.");
+      }
+      await reloadAddresses();
+      if (addressEditId === id) cancelAddressEdit();
+      setAddressSuccess("Address deleted.");
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : "Unable to delete this address.");
+    }
   };
 
-  const setDefaultAddress = (id: string) => {
-    const nextAddresses = addresses.map((entry) => ({ ...entry, isDefault: entry.id === id }));
-    saveAddresses(nextAddresses);
+  const setDefaultAddress = async (id: string) => {
+    const selected = addresses.find((entry) => entry.id === id);
+    if (!selected) return;
+    setAddressError("");
+    try {
+      const response = await apiFetch(`/api/customer/addresses/${encodeURIComponent(id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...selected, isDefault: true }),
+      });
+      const data = await response.json().catch(() => undefined) as AddressEntry | { error?: string } | undefined;
+      if (!response.ok || !data || !("id" in data) || typeof data.id !== "string" || !data.id.trim()) throw new Error(data && "error" in data && data.error ? data.error : "Unable to update the default address.");
+      await reloadAddresses();
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : "Unable to update the default address.");
+    }
   };
 
   const updateCart = (productId: string, quantity: number, item?: CartItem, source?: HTMLElement) => {
@@ -897,12 +1078,7 @@ export default function HeaderActions() {
   };
 
   const toggleWishlist = (productId: string) => {
-    const nextWishlist = wishlist.includes(productId)
-      ? wishlist.filter((id) => id !== productId)
-      : [...wishlist, productId];
-    setWishlist(nextWishlist);
-    window.localStorage.setItem("tribull-wishlist", JSON.stringify(nextWishlist));
-    window.dispatchEvent(new Event("tribull-wishlist-updated"));
+    void toggleWishlistItem(productId, !wishlist.includes(productId)).catch(() => undefined);
   };
 
   const addSearchProductToCart = (product: Product, source?: HTMLElement) => updateCart(product.id, (cart[product.id] || 0) + 1, product, source);
@@ -949,7 +1125,7 @@ export default function HeaderActions() {
 
                   <nav className="header-account-drawer__nav" aria-label="Account navigation">
                     <button type="button" onClick={() => setAccountSection("profile")}>My Profile</button>
-                    <button type="button" onClick={() => setAccountSection("orders")}>My Orders</button>
+                    <button type="button" onClick={() => { setOrders([]); setOrdersTotal(0); setOrdersPage(1); setAccountSection("orders"); }}>My Orders</button>
                     <button type="button" onClick={() => setAccountSection("wishlist")}>Wishlist</button>
                     <button type="button" onClick={() => setAccountSection("addresses")}>Addresses</button>
                     <button type="button" className="header-account-drawer__signout" onClick={handleSignOut}>Sign Out</button>
@@ -1015,32 +1191,61 @@ export default function HeaderActions() {
                   <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
                   <div className="header-account-section__content">
                     <h3>My Orders</h3>
-                    {orders.length ? orders.map((order) => (
-                      <div className="header-account-card" key={order.id}>
-                        <div className="header-account-card__row header-account-card__row--split">
-                          <strong>Order #{order.orderNumber}</strong>
-                          <span>{order.date}</span>
-                        </div>
-                        <div className="header-account-card__body">
-                          {order.items.map((item, index) => (
-                            <div key={`${order.id}-${index}`} className="header-account-card__item">
-                              <span>{item.name}</span>
-                              <small>Qty: {item.quantity}</small>
+                    {ordersError && <p className="header-form-error" role="alert">{ordersError}</p>}
+                    {ordersLoading && <p role="status">Loading your orders…</p>}
+                    {orders.length ? orders.map((order) => {
+                      const progressStatus = getOrderProgressStatus(order.status);
+                      const currentStep = progressStatus ? orderProgressLabels.indexOf(progressStatus) : -1;
+                      return (
+                        <div className="header-account-card" key={order.id}>
+                          <div className="header-account-card__row header-account-card__row--split">
+                            <strong>Order {order.id}</strong>
+                            <span>Placed {new Date(order.createdAt).toLocaleDateString("en-IN")}</span>
+                          </div>
+                          <p>Fulfilment: <strong>{order.status === "Cancelled" ? "Cancelled" : progressStatus || order.status || "Status unavailable"}</strong></p>
+                          {order.status === "Cancelled" ? <p>This order was cancelled.</p> : progressStatus ? (
+                            <ol aria-label="Order progress">
+                              {orderProgressLabels.map((label, index) => (
+                                <li key={label} aria-current={index === currentStep ? "step" : undefined}>{label}{index < currentStep ? " ✓" : ""}</li>
+                              ))}
+                            </ol>
+                          ) : null}
+                          {order.statusUpdatedAt && <p>Status updated: {new Date(order.statusUpdatedAt).toLocaleString("en-IN")}</p>}
+                          <div className="header-account-card__body">
+                            {order.items.map((item, index) => (
+                              <div key={`${order.id}-${index}`} className="header-account-card__item">
+                                {item.image && <img src={item.image} alt="" loading="lazy" />}
+                                <span>{item.name}{item.variant ? ` · ${item.variant}` : ""}<small>Qty: {item.quantity} · {formatPrice(item.lineTotal)}</small></span>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="header-account-card__row header-account-card__row--split">
+                            <span>Total: {formatPrice(order.total)}</span>
+                            <strong>Payment: {order.payment.status}</strong>
+                          </div>
+                          <p>Payment method: {getCheckoutPaymentLabel(order.payment.method)}</p>
+                          {order.shippingAddress.recipientName && <p>Recipient: {order.shippingAddress.recipientName}{order.shippingAddress.phone ? ` · ${order.shippingAddress.phone}` : ""}</p>}
+                          <p>Delivering to: {order.shippingAddress.address}{order.shippingAddress.apartment ? `, ${order.shippingAddress.apartment}` : ""}, {order.shippingAddress.city}, {order.shippingAddress.state} {order.shippingAddress.pinCode}</p>
+                          {order.tracking && (order.tracking.carrier || order.tracking.trackingNumber || order.tracking.trackingUrl || order.tracking.shippedAt || order.tracking.deliveredAt) && (
+                            <div className="header-account-order-tracking">
+                              <strong>Tracking</strong>
+                              {order.tracking.carrier && <span>Carrier: {order.tracking.carrier}</span>}
+                              {order.tracking.trackingNumber && <span>Tracking number: {order.tracking.trackingNumber}</span>}
+                              {order.tracking.trackingUrl && <a href={order.tracking.trackingUrl} target="_blank" rel="noreferrer">Track shipment</a>}
+                              {order.tracking.shippedAt && <span>Shipped: {new Date(order.tracking.shippedAt).toLocaleString("en-IN")}</span>}
+                              {order.tracking.deliveredAt && <span>Delivered: {new Date(order.tracking.deliveredAt).toLocaleString("en-IN")}</span>}
                             </div>
-                          ))}
+                          )}
                         </div>
-                        <div className="header-account-card__row header-account-card__row--split">
-                          <span>Total: {formatPrice(order.total)}</span>
-                          <strong>{order.status}</strong>
-                        </div>
-                      </div>
-                    )) : (
+                      );
+                    }) : !ordersLoading && !ordersError ? (
                       <div className="header-account-empty">
                         <p>No Orders Yet</p>
                         <span>Your orders will appear here after you place an order.</span>
                         <button type="button" className="header-account-drawer__cta" onClick={closeOverlay}>Start Shopping</button>
                       </div>
-                    )}
+                    ) : null}
+                    {orders.length < ordersTotal && <button type="button" className="header-profile-cancel" disabled={ordersLoading} onClick={() => { setOrdersPage((page) => page + 1); }}>{ordersLoading ? "Loading…" : "Load more orders"}</button>}
                   </div>
                 </div>
               )}
@@ -1054,11 +1259,14 @@ export default function HeaderActions() {
                       {wishlistProducts.length ? wishlistProducts.map((product) => (
                         <div className="header-account-card header-account-card--wishlist" key={product.id}>
                           <img src={product.image} alt={product.name} />
-                          <div>
+                          <div className="header-account-card--wishlist__details">
                             <strong>{product.name}</strong>
-                            <span>{formatPrice(product.price)}</span>
+                            <div className="header-account-card--wishlist__price">
+                              <span>{formatPrice(product.price)}</span>
+                              {product.originalPrice && product.originalPrice > product.price && <del>{formatPrice(product.originalPrice)}</del>}
+                            </div>
                           </div>
-                          <div className="header-account-card__actions">
+                          <div className="header-account-card__actions header-account-card--wishlist__actions">
                             <button type="button" onClick={() => toggleWishlist(product.id)}>Remove</button>
                             <button type="button" onClick={(event) => { updateCart(product.id, (cart[product.id] || 0) + 1, product, event.currentTarget); }}>Add to Cart</button>
                           </div>
@@ -1076,23 +1284,26 @@ export default function HeaderActions() {
                   <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
                   <div className="header-account-section__content">
                     <h3>Addresses</h3>
+                    {addressesLoading && <p role="status">Loading saved addresses…</p>}
+                    {addressError && <p className="header-form-error" role="alert">{addressError}</p>}
+                    {addressSuccess && <p className="header-form-success" role="status">{addressSuccess}</p>}
                     <div className="header-account-addresses">
-                      {addresses.length ? addresses.map((entry) => (
+                      {!addressesLoading && addresses.length ? addresses.map((entry) => (
                         <div key={entry.id} className={`header-account-card ${entry.isDefault ? "is-default" : ""}`}>
                           <div className="header-account-card__row header-account-card__row--split">
                             <strong>{entry.fullName}</strong>
                             {entry.isDefault && <span>Default</span>}
                           </div>
-                          <p>{entry.address}</p>
+                          <p>{entry.address}{entry.apartment ? `, ${entry.apartment}` : ""}</p>
                           <p>{entry.city}, {entry.state} - {entry.pinCode}</p>
                           <p>{entry.phone}</p>
                           <div className="header-account-card__actions header-account-card__actions--stack">
-                            <button type="button" onClick={() => { setAddressEditId(entry.id); setAddressForm({ fullName: entry.fullName, phone: entry.phone, address: entry.address, city: entry.city, state: entry.state, pinCode: entry.pinCode }); }}>Edit</button>
-                            {!entry.isDefault && <button type="button" onClick={() => setDefaultAddress(entry.id)}>Set Default</button>}
-                            <button type="button" onClick={() => deleteAddress(entry.id)}>Delete</button>
+                            <button type="button" onClick={() => { setAddressError(""); setAddressSuccess(""); addressRequestIdRef.current = null; window.sessionStorage.removeItem("tribull-address-request-id"); setAddressEditId(entry.id); setAddressForm({ fullName: entry.fullName, phone: entry.phone, address: entry.address, apartment: entry.apartment || "", city: entry.city, state: entry.state, pinCode: entry.pinCode }); }}>Edit</button>
+                            {!entry.isDefault && <button type="button" onClick={() => void setDefaultAddress(entry.id)}>Set Default</button>}
+                            <button type="button" onClick={() => void deleteAddress(entry.id)}>Delete</button>
                           </div>
                         </div>
-                      )) : <div className="header-account-empty"><p>No Addresses Saved</p></div>}
+                      )) : !addressesLoading && !addressError && <div className="header-account-empty"><p>No Addresses Saved</p></div>}
                     </div>
 
                     <div className="header-account-address-form">
@@ -1111,6 +1322,10 @@ export default function HeaderActions() {
                         <span>Address</span>
                         <input value={addressForm.address} onChange={(event) => setAddressForm((current) => ({ ...current, address: event.target.value }))} />
                       </label>
+                      <label className="checkout-field">
+                        <span>Apartment / Building (optional)</span>
+                        <input value={addressForm.apartment} onChange={(event) => setAddressForm((current) => ({ ...current, apartment: event.target.value }))} />
+                      </label>
                       <div className="checkout-grid checkout-grid--three">
                         <label className="checkout-field">
                           <span>City</span>
@@ -1125,7 +1340,8 @@ export default function HeaderActions() {
                           <input value={addressForm.pinCode} onChange={(event) => setAddressForm((current) => ({ ...current, pinCode: event.target.value }))} />
                         </label>
                       </div>
-                      <button type="button" className="header-account-drawer__cta" onClick={submitAddress}>{addressEditId ? "Save Address" : "Add Address"}</button>
+                      <button type="button" className="header-account-drawer__cta" disabled={addressSaving} onClick={() => void submitAddress()}>{addressSaving ? "Saving…" : addressEditId ? "Save Changes" : "Add Address"}</button>
+                      {addressEditId && <button type="button" className="header-profile-cancel" onClick={cancelAddressEdit}>Cancel</button>}
                     </div>
                   </div>
                 </div>
