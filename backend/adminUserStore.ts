@@ -434,6 +434,63 @@ export async function deactivateDedicatedAdminAccount(id: string, actor: AdminUs
   return updated ? toAdminUser(updated) : null;
 }
 
+export async function deleteAdminAccount(
+  source: "user-credentials" | "admin-datas",
+  id: string,
+  actor: AdminUserActor,
+): Promise<Pick<AdminUser, "id" | "name" | "email" | "role"> & { source: typeof source } | null> {
+  if (actor.role !== "Super Admin") {
+    throw new AdminUserValidationError("Only a Super Admin can delete admin accounts");
+  }
+  if (!ObjectId.isValid(id)) return null;
+  if (actor.id === id && actor.source === source) {
+    throw new AdminUserValidationError("You cannot delete your own admin account");
+  }
+
+  const database = await getDatabase();
+  const collection = database.collection<AdminUserDocument>(source);
+  const accountId = new ObjectId(id);
+  const existing = await collection.findOne(
+    { _id: accountId, adminRole: "admin" },
+    { projection: { _id: 1, name: 1, email: 1, adminRole: 1, adminTitle: 1 } },
+  );
+  if (!existing || existing.adminRole !== "admin") return null;
+  const role = existing.adminTitle || "Admin";
+  if (role === "Super Admin") {
+    throw new AdminUserValidationError("Super Admin accounts cannot be deleted");
+  }
+  if (role !== "Admin" && role !== "Manager" && role !== "Staff") {
+    throw new AdminUserValidationError("Only Admin, Manager, or Staff accounts can be deleted");
+  }
+
+  if (source === "admin-datas") {
+    const result = await collection.deleteOne({
+      _id: accountId,
+      adminRole: "admin",
+      adminTitle: { $ne: "Super Admin" },
+    });
+    if (result.deletedCount !== 1) return null;
+  } else {
+    const result = await collection.updateOne(
+      { _id: accountId, adminRole: "admin", adminTitle: { $ne: "Super Admin" } },
+      {
+        $unset: {
+          adminRole: "",
+          adminTitle: "",
+          adminStatus: "",
+          adminPermissions: "",
+          adminAccountSource: "",
+          adminAccountType: "",
+        },
+        $inc: { adminTokenVersion: 1 },
+        $set: { updatedAt: new Date() },
+      },
+    );
+    if (result.modifiedCount !== 1) return null;
+  }
+  return { id, name: existing.name, email: existing.email, role, source };
+}
+
 export async function updateAdminUser(id: string, input: AdminUserInput, actor: AdminUserActor): Promise<AdminUser | null> {
   if (!ObjectId.isValid(id)) return null;
   const details = validateAdminInput(input, false);

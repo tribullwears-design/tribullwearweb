@@ -3,8 +3,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import { validateCustomerAddress } from "../lib/customerAddress";
+import {
+  createEmptyCustomerAddressFields,
+  deleteSavedCustomerAddress,
+  fetchCustomerAddresses,
+  saveCustomerAddress,
+  type SavedCustomerAddress,
+} from "../lib/customerAddresses";
+import { fetchCustomerProfile, readProfilePhotoFile, saveCustomerProfile } from "../lib/customerProfile";
 import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, toggleWishlistItem } from "../lib/wishlist";
-import { getCheckoutPaymentLabel } from "../../../shared/checkout";
+import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianState } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
@@ -24,19 +32,7 @@ type AuthUser = {
   email?: string;
   profileImage?: string;
 };
-type AddressEntry = {
-  id: string;
-  fullName: string;
-  phone: string;
-  address: string;
-  apartment?: string;
-  city: string;
-  state: string;
-  pinCode: string;
-  isDefault?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
-};
+type AddressEntry = SavedCustomerAddress;
 type OrderEntry = {
   id: string;
   createdAt: string;
@@ -69,11 +65,9 @@ function formatPrice(price: number) {
   return `₹${price.toLocaleString("en-IN")}`;
 }
 
-function normalizeUsername(value: string) {
-  const normalized = value.trim();
-  if (!normalized) return { valid: false, value: "", message: "Please enter a valid username." };
-  if (!/^[a-zA-Z0-9_]+$/.test(normalized)) return { valid: false, value: "", message: "Please enter a valid username." };
-  if (normalized.length < 3) return { valid: false, value: "", message: "Please enter a valid username." };
+function normalizeProfileName(value: string) {
+  const normalized = value.trim().replace(/\s+/g, " ");
+  if (normalized.length < 2 || normalized.length > 80) return { valid: false, value: "", message: "Enter a name between 2 and 80 characters." };
   return { valid: true, value: normalized, message: "" };
 }
 
@@ -116,18 +110,6 @@ function saveCartItems(items: CartItems) {
   window.localStorage.setItem("tribull-cart-items", JSON.stringify(items));
 }
 
-async function fetchCustomerAddresses(): Promise<AddressEntry[]> {
-  const response = await apiFetch("/api/customer/addresses", { cache: "no-store" });
-  const data = await response.json().catch(() => undefined) as AddressEntry[] | { error?: string } | undefined;
-  if (!response.ok || !Array.isArray(data)) {
-    throw new Error(!Array.isArray(data) && data?.error ? data.error : "Unable to load saved addresses.");
-  }
-  if (data.some((entry) => !entry || typeof entry.id !== "string" || !entry.id.trim())) {
-    throw new Error("Saved address data is missing an address ID. Please contact support.");
-  }
-  return data;
-}
-
 export default function HeaderActions() {
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -145,8 +127,14 @@ export default function HeaderActions() {
   const [profileDraft, setProfileDraft] = useState({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
+  const [profileLoadError, setProfileLoadError] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profilePhotoChanged, setProfilePhotoChanged] = useState(false);
+  const [profilePhotoReading, setProfilePhotoReading] = useState(false);
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
-  const [addressForm, setAddressForm] = useState({ fullName: "", phone: "", address: "", apartment: "", city: "", state: "", pinCode: "" });
+  const profilePhotoReadVersionRef = useRef(0);
+  const profileSaveInFlightRef = useRef(false);
+  const [addressForm, setAddressForm] = useState(createEmptyCustomerAddressFields);
   const [addressEditId, setAddressEditId] = useState<string | null>(null);
   const [addresses, setAddresses] = useState<AddressEntry[]>([]);
   const [addressesLoading, setAddressesLoading] = useState(false);
@@ -155,6 +143,7 @@ export default function HeaderActions() {
   const [addressSuccess, setAddressSuccess] = useState("");
   const addressRequestIdRef = useRef<string | null>(null);
   const addressFetchVersionRef = useRef(0);
+  const addressOperationInFlightRef = useRef(false);
   const [orders, setOrders] = useState<OrderEntry[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
@@ -253,6 +242,40 @@ export default function HeaderActions() {
   useEffect(() => {
     if (!authUser.isAuthenticated) return;
     void syncCustomerWishlist().catch(() => undefined);
+  }, [authUser.isAuthenticated]);
+
+  useEffect(() => {
+    if (!authUser.isAuthenticated) {
+      setProfileLoadError("");
+      return;
+    }
+    let active = true;
+    void fetchCustomerProfile()
+      .then((profile) => {
+        if (!active) return;
+        const user: AuthUser = {
+          username: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          profileImage: profile.photo,
+          isAuthenticated: true,
+        };
+        setAuthUser(user);
+        window.localStorage.setItem("tribull-user", JSON.stringify(user));
+        if (!profileEditing) {
+          setProfileDraft({
+            username: profile.name,
+            email: profile.email,
+            phone: profile.phone,
+            profileImage: profile.photo,
+          });
+        }
+        setProfileLoadError("");
+      })
+      .catch((error: unknown) => {
+        if (active) setProfileLoadError(error instanceof Error ? error.message : "Unable to load your saved profile.");
+      });
+    return () => { active = false; };
   }, [authUser.isAuthenticated]);
 
   useEffect(() => {
@@ -423,6 +446,9 @@ export default function HeaderActions() {
   };
 
   const beginProfileEdit = () => {
+    profilePhotoReadVersionRef.current += 1;
+    setProfilePhotoChanged(false);
+    setProfilePhotoReading(false);
     setProfileDraft({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
     setProfileError("");
     setProfileSuccess("");
@@ -430,61 +456,95 @@ export default function HeaderActions() {
   };
 
   const cancelProfileEdit = () => {
+    profilePhotoReadVersionRef.current += 1;
+    setProfilePhotoChanged(false);
+    setProfilePhotoReading(false);
     setProfileDraft({ username: authUser.username, phone: authUser.phone || "", email: authUser.email || "", profileImage: authUser.profileImage });
     setProfileError("");
     setProfileSuccess("");
     setProfileEditing(false);
   };
 
-  const saveProfile = () => {
-    const normalizedUsername = normalizeUsername(profileDraft.username);
+  const saveProfile = async () => {
+    if (profileSaving || profileSaveInFlightRef.current || profilePhotoReading) return;
+    const normalizedName = normalizeProfileName(profileDraft.username);
     const normalizedPhone = profileDraft.phone.trim();
-    const normalizedEmail = profileDraft.email.trim();
     const phoneDigits = normalizedPhone.replace(/\D/g, "");
 
-    if (!normalizedUsername.valid) {
-      setProfileError("Username must be at least 3 characters and use only letters, numbers, or underscores.");
+    if (!normalizedName.valid) {
+      setProfileError(normalizedName.message);
       return;
     }
-    if (normalizedPhone && (phoneDigits.length < 7 || phoneDigits.length > 15 || !/^[+\d\s()-]+$/.test(normalizedPhone))) {
+    if (normalizedPhone && (!/^\+?[\d\s()-]{10,18}$/.test(normalizedPhone) || phoneDigits.length < 10 || phoneDigits.length > 15)) {
       setProfileError("Enter a valid phone number.");
       return;
     }
-    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
-      setProfileError("Enter a valid email address.");
-      return;
-    }
-
-    const nextUser: AuthUser = {
-      ...authUser,
-      username: normalizedUsername.value,
-      phone: normalizedPhone,
-      email: normalizedEmail,
-      profileImage: profileDraft.profileImage,
-    };
-    persistUser(nextUser);
-    setProfileDraft({ username: normalizedUsername.value, phone: normalizedPhone, email: normalizedEmail, profileImage: profileDraft.profileImage });
     setProfileError("");
-    setProfileSuccess("Profile updated successfully.");
-    setProfileEditing(false);
-    window.setTimeout(() => setProfileSuccess(""), 3000);
+    setProfileSuccess("");
+    profileSaveInFlightRef.current = true;
+    setProfileSaving(true);
+    try {
+      const savedProfile = await saveCustomerProfile({
+        name: normalizedName.value,
+        phone: normalizedPhone,
+        ...(profilePhotoChanged ? { photo: profileDraft.profileImage ?? null } : {}),
+      });
+      const nextUser: AuthUser = {
+        username: savedProfile.name,
+        phone: savedProfile.phone,
+        email: savedProfile.email,
+        profileImage: savedProfile.photo,
+        isAuthenticated: true,
+      };
+      persistUser(nextUser);
+      setProfileDraft({
+        username: savedProfile.name,
+        phone: savedProfile.phone,
+        email: savedProfile.email,
+        profileImage: savedProfile.photo,
+      });
+      setProfileLoadError("");
+      setProfilePhotoChanged(false);
+      setProfileSuccess("Profile updated successfully.");
+      setProfileEditing(false);
+      window.setTimeout(() => setProfileSuccess(""), 3000);
+    } catch (error) {
+      setProfileError(error instanceof Error ? error.message : "Unable to save your profile.");
+    } finally {
+      profileSaveInFlightRef.current = false;
+      setProfileSaving(false);
+    }
   };
 
   const handleProfileImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file || !file.type.startsWith("image/")) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result !== "string") return;
-      setProfileDraft((current) => ({ ...current, profileImage: reader.result as string }));
-    };
-    reader.readAsDataURL(file);
+    if (!file) return;
+    const requestVersion = ++profilePhotoReadVersionRef.current;
+    setProfileError("");
+    setProfilePhotoReading(true);
+    void readProfilePhotoFile(file)
+      .then((photo) => {
+        if (requestVersion !== profilePhotoReadVersionRef.current) return;
+        setProfileDraft((current) => ({ ...current, profileImage: photo }));
+        setProfilePhotoChanged(true);
+      })
+      .catch((error: unknown) => {
+        if (requestVersion === profilePhotoReadVersionRef.current) {
+          setProfileError(error instanceof Error ? error.message : "The selected image could not be read.");
+        }
+      })
+      .finally(() => {
+        if (requestVersion === profilePhotoReadVersionRef.current) setProfilePhotoReading(false);
+      });
     event.target.value = "";
   };
 
   const removeProfileImage = () => {
+    profilePhotoReadVersionRef.current += 1;
+    setProfilePhotoReading(false);
+    setProfileError("");
     setProfileDraft((current) => ({ ...current, profileImage: undefined }));
+    setProfilePhotoChanged(true);
   };
 
   const openProfileImagePicker = () => {
@@ -951,7 +1011,7 @@ export default function HeaderActions() {
 
   const cancelAddressEdit = () => {
     setAddressEditId(null);
-    setAddressForm({ fullName: "", phone: "", address: "", apartment: "", city: "", state: "", pinCode: "" });
+    setAddressForm(createEmptyCustomerAddressFields());
     addressRequestIdRef.current = null;
     window.sessionStorage.removeItem("tribull-address-request-id");
     setAddressError("");
@@ -960,23 +1020,19 @@ export default function HeaderActions() {
 
   const reloadAddresses = async () => {
     const requestVersion = ++addressFetchVersionRef.current;
-    setAddresses([]);
     setAddressesLoading(true);
     setAddressError("");
     try {
       const data = await fetchCustomerAddresses();
       if (requestVersion === addressFetchVersionRef.current) setAddresses(data);
       return data;
-    } catch (error) {
-      if (requestVersion === addressFetchVersionRef.current) setAddresses([]);
-      throw error;
     } finally {
       if (requestVersion === addressFetchVersionRef.current) setAddressesLoading(false);
     }
   };
 
   const submitAddress = async () => {
-    if (addressSaving) return;
+    if (addressSaving || addressOperationInFlightRef.current) return;
     setAddressError("");
     setAddressSuccess("");
     const validation = validateCustomerAddress(addressForm);
@@ -987,6 +1043,9 @@ export default function HeaderActions() {
     }
     const normalizedAddress = validation.value;
 
+    addressOperationInFlightRef.current = true;
+    addressFetchVersionRef.current += 1;
+    setAddressesLoading(false);
     setAddressSaving(true);
     try {
       const editing = addressEditId ? addresses.find((entry) => entry.id === addressEditId) : undefined;
@@ -994,59 +1053,55 @@ export default function HeaderActions() {
       addressRequestIdRef.current ||= window.sessionStorage.getItem("tribull-address-request-id")
         || (window.crypto?.randomUUID ? window.crypto.randomUUID() : `address-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       window.sessionStorage.setItem("tribull-address-request-id", addressRequestIdRef.current);
-      const response = await apiFetch(
-        addressEditId ? `/api/customer/addresses/${encodeURIComponent(addressEditId)}` : "/api/customer/addresses",
-        {
-          method: addressEditId ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ...normalizedAddress,
-            isDefault: editing?.isDefault || false,
-            ...(!addressEditId ? { requestId: addressRequestIdRef.current } : {}),
-          }),
-        },
+      const { addresses: refreshedAddresses } = await saveCustomerAddress(
+        normalizedAddress,
+        addressEditId,
+        addressRequestIdRef.current,
+        editing?.isDefault || false,
       );
-      const data = await response.json().catch(() => undefined) as AddressEntry | { error?: string } | undefined;
-      if (!response.ok || !data || !("id" in data) || typeof data.id !== "string" || !data.id.trim()) {
-        throw new Error(data && "error" in data && data.error ? data.error : "Unable to save this address.");
-      }
-      const savedAddressId = data.id;
-      const refreshedAddresses = await reloadAddresses();
-      if (!refreshedAddresses.some((entry) => entry.id === savedAddressId)) {
-        throw new Error("The address was accepted but could not be found when reloading your saved addresses. Please refresh and try again.");
-      }
+      setAddresses(refreshedAddresses);
       const wasEditing = Boolean(addressEditId);
       cancelAddressEdit();
       setAddressSuccess(wasEditing ? "Address changes saved." : "Address saved to your account.");
     } catch (error) {
       setAddressError(error instanceof Error ? error.message : "Unable to save this address.");
     } finally {
+      addressOperationInFlightRef.current = false;
       setAddressSaving(false);
     }
   };
 
   const deleteAddress = async (id: string) => {
+    if (addressSaving || addressOperationInFlightRef.current) return;
     if (!window.confirm("Delete this saved address? This cannot be undone.")) return;
     setAddressError("");
     setAddressSuccess("");
+    addressOperationInFlightRef.current = true;
+    setAddressSaving(true);
     try {
-      const response = await apiFetch(`/api/customer/addresses/${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!response.ok) {
-        const data = await response.json().catch(() => undefined) as { error?: string } | undefined;
-        throw new Error(data?.error || "Unable to delete this address.");
-      }
-      await reloadAddresses();
+      const refreshedAddresses = await deleteSavedCustomerAddress(id, () => {
+        addressFetchVersionRef.current += 1;
+        setAddressesLoading(false);
+        setAddresses((current) => current.filter((entry) => entry.id !== id));
+      });
+      setAddresses(refreshedAddresses);
       if (addressEditId === id) cancelAddressEdit();
       setAddressSuccess("Address deleted.");
     } catch (error) {
       setAddressError(error instanceof Error ? error.message : "Unable to delete this address.");
+    } finally {
+      addressOperationInFlightRef.current = false;
+      setAddressSaving(false);
     }
   };
 
   const setDefaultAddress = async (id: string) => {
+    if (addressSaving || addressOperationInFlightRef.current) return;
     const selected = addresses.find((entry) => entry.id === id);
     if (!selected) return;
     setAddressError("");
+    addressOperationInFlightRef.current = true;
+    setAddressSaving(true);
     try {
       const response = await apiFetch(`/api/customer/addresses/${encodeURIComponent(id)}`, {
         method: "PATCH",
@@ -1055,9 +1110,13 @@ export default function HeaderActions() {
       });
       const data = await response.json().catch(() => undefined) as AddressEntry | { error?: string } | undefined;
       if (!response.ok || !data || !("id" in data) || typeof data.id !== "string" || !data.id.trim()) throw new Error(data && "error" in data && data.error ? data.error : "Unable to update the default address.");
-      await reloadAddresses();
+      const refreshedAddresses = await reloadAddresses();
+      setAddresses(refreshedAddresses);
     } catch (error) {
       setAddressError(error instanceof Error ? error.message : "Unable to update the default address.");
+    } finally {
+      addressOperationInFlightRef.current = false;
+      setAddressSaving(false);
     }
   };
 
@@ -1137,6 +1196,7 @@ export default function HeaderActions() {
                 <div className="header-account-section">
                   <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
                   <div className="header-account-section__content">
+                    {profileLoadError && <p className="header-form-error" role="alert">{profileLoadError}</p>}
                     <div className="header-profile-avatar-editor">
                       <div className="header-profile-avatar-wrap">
                         <button type="button" className="header-profile-avatar-button" onClick={openProfileImagePicker} aria-label="Change profile photo">
@@ -1147,13 +1207,14 @@ export default function HeaderActions() {
                       <input ref={profileImageInputRef} className="header-profile-image-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={handleProfileImageChange} />
                       {profileEditing && <>
                         <button type="button" className="header-profile-photo-action" onClick={openProfileImagePicker}>Change photo</button>
-                        <button type="button" className="header-profile-photo-action header-profile-photo-action--remove" onClick={removeProfileImage}>Remove photo</button>
+                        <button type="button" className="header-profile-photo-action header-profile-photo-action--remove" onClick={removeProfileImage} disabled={profilePhotoReading}>Remove photo</button>
                       </>}
+                      {profilePhotoReading && <p role="status">Preparing profile photo…</p>}
                     </div>
                     {profileEditing ? (
                       <div className="header-account-profile-form">
                         <label className="checkout-field">
-                          <span>Username</span>
+                          <span>Name</span>
                           <input value={profileDraft.username} onChange={(event) => setProfileDraft((current) => ({ ...current, username: event.target.value }))} autoComplete="username" />
                         </label>
                         <label className="checkout-field">
@@ -1162,12 +1223,12 @@ export default function HeaderActions() {
                         </label>
                         <label className="checkout-field">
                           <span>Email</span>
-                          <input value={profileDraft.email} onChange={(event) => setProfileDraft((current) => ({ ...current, email: event.target.value }))} type="email" autoComplete="email" />
+                          <input value={authUser.email || profileDraft.email} type="email" autoComplete="email" readOnly />
                         </label>
                         {profileError && <p className="header-form-error" role="alert">{profileError}</p>}
                         <div className="header-account-profile-actions">
-                          <button type="button" className="header-account-drawer__cta" onClick={saveProfile}>Save Changes</button>
-                          <button type="button" className="header-profile-cancel" onClick={cancelProfileEdit}>Cancel</button>
+                          <button type="button" className="header-account-drawer__cta" onClick={() => void saveProfile()} disabled={profileSaving || profilePhotoReading}>{profileSaving ? "Saving…" : "Save Changes"}</button>
+                          <button type="button" className="header-profile-cancel" onClick={cancelProfileEdit} disabled={profileSaving}>Cancel</button>
                         </div>
                       </div>
                     ) : (
@@ -1288,7 +1349,7 @@ export default function HeaderActions() {
                     {addressError && <p className="header-form-error" role="alert">{addressError}</p>}
                     {addressSuccess && <p className="header-form-success" role="status">{addressSuccess}</p>}
                     <div className="header-account-addresses">
-                      {!addressesLoading && addresses.length ? addresses.map((entry) => (
+                      {addresses.length ? addresses.map((entry) => (
                         <div key={entry.id} className={`header-account-card ${entry.isDefault ? "is-default" : ""}`}>
                           <div className="header-account-card__row header-account-card__row--split">
                             <strong>{entry.fullName}</strong>
@@ -1298,9 +1359,9 @@ export default function HeaderActions() {
                           <p>{entry.city}, {entry.state} - {entry.pinCode}</p>
                           <p>{entry.phone}</p>
                           <div className="header-account-card__actions header-account-card__actions--stack">
-                            <button type="button" onClick={() => { setAddressError(""); setAddressSuccess(""); addressRequestIdRef.current = null; window.sessionStorage.removeItem("tribull-address-request-id"); setAddressEditId(entry.id); setAddressForm({ fullName: entry.fullName, phone: entry.phone, address: entry.address, apartment: entry.apartment || "", city: entry.city, state: entry.state, pinCode: entry.pinCode }); }}>Edit</button>
-                            {!entry.isDefault && <button type="button" onClick={() => void setDefaultAddress(entry.id)}>Set Default</button>}
-                            <button type="button" onClick={() => void deleteAddress(entry.id)}>Delete</button>
+                            <button type="button" disabled={addressSaving} onClick={() => { setAddressError(""); setAddressSuccess(""); addressRequestIdRef.current = null; window.sessionStorage.removeItem("tribull-address-request-id"); setAddressEditId(entry.id); setAddressForm({ fullName: entry.fullName, phone: entry.phone, address: entry.address, apartment: entry.apartment || "", city: entry.city, state: entry.state, pinCode: entry.pinCode }); }}>Edit</button>
+                            {!entry.isDefault && <button type="button" disabled={addressSaving} onClick={() => void setDefaultAddress(entry.id)}>Set Default</button>}
+                            <button type="button" disabled={addressSaving} onClick={() => void deleteAddress(entry.id)}>{addressSaving ? "Please wait…" : "Delete"}</button>
                           </div>
                         </div>
                       )) : !addressesLoading && !addressError && <div className="header-account-empty"><p>No Addresses Saved</p></div>}
@@ -1333,7 +1394,10 @@ export default function HeaderActions() {
                         </label>
                         <label className="checkout-field">
                           <span>State</span>
-                          <input value={addressForm.state} onChange={(event) => setAddressForm((current) => ({ ...current, state: event.target.value }))} />
+                          <select required value={normalizeIndianState(addressForm.state)} onChange={(event) => setAddressForm((current) => ({ ...current, state: event.target.value }))}>
+                            <option value="">Select state or union territory</option>
+                            {indianStatesAndTerritories.map((state) => <option key={state} value={state}>{state}</option>)}
+                          </select>
                         </label>
                         <label className="checkout-field">
                           <span>PIN Code</span>
@@ -1341,7 +1405,7 @@ export default function HeaderActions() {
                         </label>
                       </div>
                       <button type="button" className="header-account-drawer__cta" disabled={addressSaving} onClick={() => void submitAddress()}>{addressSaving ? "Saving…" : addressEditId ? "Save Changes" : "Add Address"}</button>
-                      {addressEditId && <button type="button" className="header-profile-cancel" onClick={cancelAddressEdit}>Cancel</button>}
+                      {addressEditId && <button type="button" className="header-profile-cancel" onClick={cancelAddressEdit} disabled={addressSaving}>Cancel</button>}
                     </div>
                   </div>
                 </div>

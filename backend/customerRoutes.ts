@@ -4,10 +4,12 @@ import {
   addCustomerAddress,
   addCustomerWishlistItem,
   deleteCustomerAddress,
+  getCustomerProfile,
   getCustomerWishlist,
   listCustomerAddresses,
   mergeCustomerWishlist,
   removeCustomerWishlistItem,
+  updateCustomerProfile,
   updateCustomerAddress,
   type CustomerAddress,
 } from "./customerDataStore.js";
@@ -19,6 +21,49 @@ import { isIndianState, normalizeIndianState } from "../shared/checkout.js";
 const cleanText = (value: unknown, maximum: number) => typeof value === "string"
   ? value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maximum)
   : "";
+
+const maxProfilePhotoBytes = 4_000_000;
+
+function isSupportedProfilePhotoData(value: string) {
+  const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+  if (!match || value.length > 5_600_100) return false;
+  const [, imageType, encoded] = match;
+  const bytes = Buffer.from(encoded, "base64");
+  if (!bytes.length || bytes.length > maxProfilePhotoBytes || bytes.toString("base64") !== encoded) return false;
+  if (imageType === "jpeg") return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (imageType === "png") return bytes.length >= 8
+    && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  return bytes.length >= 12 && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+}
+
+function validateProfile(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const value = input as Record<string, unknown>;
+  if (typeof value.name !== "string" || typeof value.phone !== "string"
+    || (value.photo !== undefined && value.photo !== null && typeof value.photo !== "string")) return null;
+  const name = cleanText(value.name, 80);
+  const phone = cleanText(value.phone, 20);
+  if (name.length < 2 || (phone !== "" && !isValidCustomerMobile(phone))) return null;
+  let photo: string | null | undefined;
+  if (value.photo === null) {
+    photo = null;
+  } else if (typeof value.photo === "string") {
+    const candidate = value.photo.trim();
+    const isSupportedImageData = isSupportedProfilePhotoData(candidate);
+    let isHttpsUrl = false;
+    if (candidate.length <= 2048) {
+      try {
+        const url = new URL(candidate);
+        isHttpsUrl = url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password;
+      } catch {
+        isHttpsUrl = false;
+      }
+    }
+    if (!isSupportedImageData && !isHttpsUrl) return null;
+    photo = candidate;
+  }
+  return { name, phone, ...(photo !== undefined ? { photo } : {}) };
+}
 
 function validateAddress(input: unknown) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -62,6 +107,39 @@ export function createCustomerRouter() {
     }
     return customer;
   };
+
+  router.get("/api/customer/profile", async (req, res) => {
+    try {
+      const customer = await withCustomer(req, res);
+      if (!customer?._id) return;
+      const profile = await getCustomerProfile(customer._id.toString(), {
+        name: customer.name,
+        email: customer.email,
+        phone: customer.mobile,
+      });
+      const { userId: _userId, ...safeProfile } = profile;
+      return res.json({ profile: safeProfile });
+    } catch (error) {
+      console.error("Customer profile could not be loaded", error);
+      return res.status(500).json({ error: "Unable to load your profile" });
+    }
+  });
+
+  router.patch("/api/customer/profile", async (req, res) => {
+    try {
+      const customer = await withCustomer(req, res);
+      if (!customer?._id) return;
+      const patch = validateProfile(req.body);
+      if (!patch) return res.status(400).json({ error: "Enter a valid name, phone number, and profile photo" });
+      const profile = await updateCustomerProfile(customer._id.toString(), customer.email, patch);
+      if (!profile) return res.status(500).json({ error: "Unable to confirm your profile update" });
+      const { userId: _userId, ...safeProfile } = profile;
+      return res.json({ profile: safeProfile });
+    } catch (error) {
+      console.error("Customer profile could not be updated", error);
+      return res.status(500).json({ error: "Unable to update your profile" });
+    }
+  });
 
   router.get("/api/customer/addresses", async (req, res) => {
     try {

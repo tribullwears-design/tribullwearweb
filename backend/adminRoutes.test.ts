@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   createAdminUser: vi.fn(),
   createDedicatedAdminAccount: vi.fn(),
   deactivateDedicatedAdminAccount: vi.fn(),
+  deleteAdminAccount: vi.fn(),
   listDedicatedAdminAccounts: vi.fn(),
   updateDedicatedAdminAccount: vi.fn(),
   updateAdminUser: vi.fn(),
@@ -64,6 +65,7 @@ vi.mock("./adminUserStore.js", () => ({
   createAdminUser: mocks.createAdminUser,
   createDedicatedAdminAccount: mocks.createDedicatedAdminAccount,
   deactivateDedicatedAdminAccount: mocks.deactivateDedicatedAdminAccount,
+  deleteAdminAccount: mocks.deleteAdminAccount,
   listDedicatedAdminAccounts: mocks.listDedicatedAdminAccounts,
   updateDedicatedAdminAccount: mocks.updateDedicatedAdminAccount,
   listAdminUserRecords: mocks.listAdminUserRecords,
@@ -79,6 +81,7 @@ vi.mock("./adminAccountStore.js", () => ({
 }));
 
 import { adminLoginRateLimit, createAdminRouter } from "./adminRoutes.js";
+import { AdminUserValidationError } from "./adminUserStore.js";
 
 let server: Server | undefined;
 let origin: string;
@@ -100,6 +103,7 @@ beforeEach(async () => {
   mocks.createAdminUser.mockReset();
   mocks.createDedicatedAdminAccount.mockReset();
   mocks.deactivateDedicatedAdminAccount.mockReset();
+  mocks.deleteAdminAccount.mockReset();
   mocks.listDedicatedAdminAccounts.mockReset().mockResolvedValue([]);
   mocks.updateDedicatedAdminAccount.mockReset();
   mocks.updateAdminUser.mockReset();
@@ -444,6 +448,62 @@ describe("admin HTTP routes", () => {
       id: activeSuperAdmin()._id.toString(),
       role: "Super Admin",
     }));
+  });
+
+  it("allows only an authenticated Super Admin to request deletion by exact source and ID", async () => {
+    const cookie = "tribull_admin=test-session";
+    const accountId = "507f1f77bcf86cd799439012";
+    mocks.deleteAdminAccount.mockResolvedValue({
+      id: accountId,
+      name: "Admin User",
+      email: "admin-user@example.test",
+      role: "Manager",
+      source: "user-credentials",
+    });
+
+    expect((await fetch(`${origin}/api/admin/user-accounts/user-credentials/${accountId}`, {
+      method: "DELETE",
+    })).status).toBe(401);
+
+    mocks.sessionUser = { ...activeSuperAdmin(), adminTitle: "Admin" };
+    expect((await fetch(`${origin}/api/admin/user-accounts/user-credentials/${accountId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    })).status).toBe(403);
+    expect(mocks.deleteAdminAccount).not.toHaveBeenCalled();
+
+    mocks.sessionUser = activeSuperAdmin();
+    const deleted = await fetch(`${origin}/api/admin/user-accounts/user-credentials/${accountId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(deleted.status).toBe(200);
+    expect(await deleted.json()).toEqual({ deleted: true });
+    expect(mocks.deleteAdminAccount).toHaveBeenCalledWith("user-credentials", accountId, expect.objectContaining({
+      id: activeSuperAdmin()._id.toString(),
+      source: "user-credentials",
+      role: "Super Admin",
+    }));
+
+    mocks.deleteAdminAccount.mockResolvedValueOnce(null);
+    expect((await fetch(`${origin}/api/admin/user-accounts/user-credentials/507f1f77bcf86cd799439013`, {
+      method: "DELETE",
+      headers: { cookie },
+    })).status).toBe(404);
+
+    mocks.deleteAdminAccount.mockRejectedValueOnce(new AdminUserValidationError("Super Admin accounts cannot be deleted"));
+    const protectedSuperAdmin = await fetch(`${origin}/api/admin/user-accounts/admin-datas/507f1f77bcf86cd799439014`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(protectedSuperAdmin.status).toBe(400);
+    expect(await protectedSuperAdmin.json()).toEqual({ error: "Super Admin accounts cannot be deleted" });
+
+    const invalidSource = await fetch(`${origin}/api/admin/user-accounts/customer-profiles/${accountId}`, {
+      method: "DELETE",
+      headers: { cookie },
+    });
+    expect(invalidSource.status).toBe(400);
   });
 
   it("rejects login for a valid-password but inactive dedicated admin without issuing a session", async () => {

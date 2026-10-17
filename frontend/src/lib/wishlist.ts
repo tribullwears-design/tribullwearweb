@@ -24,13 +24,14 @@ function saveWishlist(productIds: string[], guest: boolean) {
 
 export async function syncCustomerWishlist() {
   const legacy = window.localStorage.getItem(guestWishlistKey);
-  const guestItems = legacy ? readStoredList(legacy) : readWishlist();
   try {
-    const response = await apiFetch("/api/customer/wishlist/merge", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productIds: guestItems }),
-    });
+    const response = legacy
+      ? await apiFetch("/api/customer/wishlist/merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds: Array.from(new Set(readStoredList(legacy))) }),
+      })
+      : await apiFetch("/api/customer/wishlist", { cache: "no-store" });
     if (response.status === 401) {
       customerSession = false;
       throw new Error("Sign in again to sync your wishlist.");
@@ -39,6 +40,7 @@ export async function syncCustomerWishlist() {
     if (!response.ok || !payload || !Array.isArray(payload.productIds)) throw new Error(payload?.error || "Unable to sync your wishlist.");
     customerSession = true;
     saveWishlist(payload.productIds, false);
+    if (legacy) window.localStorage.removeItem(guestWishlistKey);
     if (payload.discardedCount) toast.info(`${payload.discardedCount} unavailable wishlist item(s) were not transferred.`);
     return payload.productIds;
   } catch (error) {
@@ -80,8 +82,8 @@ export function restoreGuestWishlist() {
 
 export function preserveGuestWishlist() {
   customerSession = false;
-  if (window.localStorage.getItem(guestWishlistKey) !== null) return;
-  window.localStorage.setItem(guestWishlistKey, JSON.stringify(readWishlist()));
+  const saved = window.localStorage.getItem(guestWishlistKey);
+  saveWishlist(saved ? readStoredList(saved) : [], true);
 }
 
 function readStoredList(value: string) {

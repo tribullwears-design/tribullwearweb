@@ -4,3 +4,14 @@ export async function saveAdminUserAndRefresh<T>(save: () => Promise<T>, refresh
   await refresh();
   return saved;
 }
+
+export async function deleteAdminUserAndRefresh(
+  confirmed: boolean,
+  remove: () => Promise<void>,
+  refresh: () => Promise<void>,
+) {
+  if (!confirmed) return false;
+  await remove();
+  await refresh();
+  return true;
+}

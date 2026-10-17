@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   findOne: vi.fn(),
   findOneDedicated: vi.fn(),
   findOneAndUpdate: vi.fn(),
+  updateOne: vi.fn(),
+  deleteOne: vi.fn(),
+  deleteOneDedicated: vi.fn(),
   insertOne: vi.fn(),
   hashPassword: vi.fn(),
   getDatabase: vi.fn(),
@@ -22,6 +25,7 @@ import {
   createAdminUser,
   createDedicatedAdminAccount,
   deactivateDedicatedAdminAccount,
+  deleteAdminAccount,
   listDedicatedAdminAccounts,
   listAdminUserRecords,
   listAdminUsers,
@@ -52,12 +56,17 @@ beforeEach(() => {
       find: name === "admin-datas" ? mocks.findTest : mocks.find,
       findOne: name === "admin-datas" ? mocks.findOneDedicated : mocks.findOne,
       findOneAndUpdate: mocks.findOneAndUpdate,
+      updateOne: name === "admin-datas" ? vi.fn() : mocks.updateOne,
+      deleteOne: name === "admin-datas" ? mocks.deleteOneDedicated : mocks.deleteOne,
       createIndex: vi.fn(),
       insertOne: mocks.insertOne,
     })),
   });
   mocks.findOne.mockResolvedValue(null);
   mocks.findOneDedicated.mockResolvedValue(null);
+  mocks.updateOne.mockResolvedValue({ modifiedCount: 1 });
+  mocks.deleteOne.mockResolvedValue({ deletedCount: 1 });
+  mocks.deleteOneDedicated.mockResolvedValue({ deletedCount: 1 });
   mocks.insertOne.mockResolvedValue({ acknowledged: true });
   mocks.hashPassword.mockImplementation(async (password: string) => bcrypt.hash(password, 12));
   mocks.find.mockReturnValue({ sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([customer]) }) });
@@ -458,6 +467,91 @@ describe("updateAdminUser", () => {
         { $set: { adminStatus: "Inactive", updatedAt: expect.any(Date) }, $inc: { adminTokenVersion: 1 } },
         expect.objectContaining({ returnDocument: "after" }),
       );
+    });
+  });
+
+  describe("deleteAdminAccount", () => {
+    it.each(["Admin", "Manager", "Staff"] as const)("deletes a dedicated %s account by its collection ID", async (role) => {
+      const target = { ...customer, adminRole: "admin", adminTitle: role };
+      mocks.findOneDedicated.mockResolvedValue(target);
+
+      await expect(deleteAdminAccount("admin-datas", id, superAdmin)).resolves.toMatchObject({
+        id,
+        name: target.name,
+        email: target.email,
+        role,
+        source: "admin-datas",
+      });
+      expect(mocks.deleteOneDedicated).toHaveBeenCalledWith({
+        _id: expect.any(Object),
+        adminRole: "admin",
+        adminTitle: { $ne: "Super Admin" },
+      });
+      expect(mocks.deleteOne).not.toHaveBeenCalled();
+    });
+
+    it.each(["Admin", "Manager", "Staff"] as const)("removes only %s grants from customer credentials and invalidates admin sessions", async (role) => {
+      mocks.findOne.mockResolvedValue({ ...customer, adminRole: "admin", adminTitle: role });
+
+      await expect(deleteAdminAccount("user-credentials", id, superAdmin)).resolves.toMatchObject({
+        id,
+        role,
+        source: "user-credentials",
+      });
+      expect(mocks.updateOne).toHaveBeenCalledWith(
+        { _id: expect.any(Object), adminRole: "admin", adminTitle: { $ne: "Super Admin" } },
+        {
+          $unset: {
+            adminRole: "",
+            adminTitle: "",
+            adminStatus: "",
+            adminPermissions: "",
+            adminAccountSource: "",
+            adminAccountType: "",
+          },
+          $inc: { adminTokenVersion: 1 },
+          $set: { updatedAt: expect.any(Date) },
+        },
+      );
+      expect(mocks.deleteOne).not.toHaveBeenCalled();
+    });
+
+    it("never deletes Super Admin accounts or permits self-deletion", async () => {
+      mocks.findOneDedicated.mockResolvedValue({ ...customer, adminRole: "admin", adminTitle: "Super Admin" });
+      await expect(deleteAdminAccount("admin-datas", id, superAdmin)).rejects.toThrow("Super Admin accounts cannot be deleted");
+      await expect(deleteAdminAccount("admin-datas", id, { ...superAdmin, id, source: "admin-datas" }))
+        .rejects.toThrow("You cannot delete your own admin account");
+      expect(mocks.deleteOneDedicated).not.toHaveBeenCalled();
+      expect(mocks.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-Super Admin callers and does not touch the database", async () => {
+      const manager: AdminUserActor = { role: "Manager", permissions: getEffectiveAdminPermissions("Manager") };
+      await expect(deleteAdminAccount("admin-datas", id, manager)).rejects.toThrow("Only a Super Admin");
+      expect(mocks.getDatabase).not.toHaveBeenCalled();
+    });
+
+    it("returns not found for unknown IDs and customer accounts without an admin grant", async () => {
+      mocks.findOne.mockResolvedValue(null);
+      await expect(deleteAdminAccount("user-credentials", "507f1f77bcf86cd799439012", superAdmin)).resolves.toBeNull();
+
+      mocks.findOne.mockResolvedValue({ ...customer, adminRole: undefined });
+      await expect(deleteAdminAccount("user-credentials", id, superAdmin)).resolves.toBeNull();
+      expect(mocks.updateOne).not.toHaveBeenCalled();
+    });
+
+    it("targets the selected record ID even when the email is duplicated across collections", async () => {
+      mocks.findOne.mockResolvedValue({ ...customer, adminRole: "admin", adminTitle: "Staff" });
+      mocks.findOneDedicated.mockResolvedValue({ ...customer, _id: { toString: () => "507f1f77bcf86cd799439012" }, adminRole: "admin" });
+
+      await deleteAdminAccount("user-credentials", id, superAdmin);
+
+      expect(mocks.updateOne).toHaveBeenCalledWith(
+        { _id: expect.any(Object), adminRole: "admin", adminTitle: { $ne: "Super Admin" } },
+        expect.objectContaining({ $inc: { adminTokenVersion: 1 } }),
+      );
+      expect(mocks.deleteOneDedicated).not.toHaveBeenCalled();
+      expect(mocks.findOneDedicated).not.toHaveBeenCalled();
     });
   });
 

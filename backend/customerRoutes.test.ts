@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   addresses: new Map<string, Array<Record<string, unknown>>>(),
+  profiles: new Map<string, Record<string, unknown>>(),
   wishlists: new Map<string, string[]>(),
   getSessionCustomer: vi.fn(),
   listCustomerAddresses: vi.fn(),
@@ -14,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   addCustomerWishlistItem: vi.fn(),
   removeCustomerWishlistItem: vi.fn(),
   mergeCustomerWishlist: vi.fn(),
+  getCustomerProfile: vi.fn(),
+  updateCustomerProfile: vi.fn(),
   getProduct: vi.fn(),
   listCustomerOrders: vi.fn(),
 }));
@@ -30,6 +33,8 @@ vi.mock("./customerDataStore.js", () => ({
   addCustomerWishlistItem: mocks.addCustomerWishlistItem,
   removeCustomerWishlistItem: mocks.removeCustomerWishlistItem,
   mergeCustomerWishlist: mocks.mergeCustomerWishlist,
+  getCustomerProfile: mocks.getCustomerProfile,
+  updateCustomerProfile: mocks.updateCustomerProfile,
 }));
 vi.mock("./productStore.js", () => ({ getProduct: mocks.getProduct }));
 vi.mock("./orderStore.js", () => ({ listCustomerOrders: mocks.listCustomerOrders }));
@@ -43,9 +48,30 @@ beforeEach(async () => {
   vi.clearAllMocks();
   mocks.addresses.clear();
   mocks.wishlists.clear();
+  mocks.profiles.clear();
   mocks.getSessionCustomer.mockImplementation(async (request: { headers: { cookie?: string } }) => {
     const id = request.headers.cookie?.includes("customer-b") ? "customer-b" : request.headers.cookie?.includes("customer-a") ? "customer-a" : "";
-    return id ? { _id: { toString: () => id } } : null;
+    return id ? { _id: { toString: () => id }, name: `Name ${id}`, email: `${id}@example.com`, mobile: "9876543210" } : null;
+  });
+  mocks.getCustomerProfile.mockImplementation(async (userId: string, identity: Record<string, string>) => ({
+    userId,
+    name: "Name customer-a",
+    ...identity,
+    ...mocks.profiles.get(userId),
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+  }));
+  mocks.updateCustomerProfile.mockImplementation(async (userId: string, email: string, patch: Record<string, unknown>) => {
+    const profile = { ...(mocks.profiles.get(userId) || {}), ...patch, email };
+    if (patch.photo === null) delete profile.photo;
+    mocks.profiles.set(userId, profile);
+    return {
+      userId,
+      name: "Name customer-a",
+      ...profile,
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    };
   });
   mocks.listCustomerAddresses.mockImplementation(async (userId: string) => mocks.addresses.get(userId) || []);
   mocks.addCustomerAddress.mockImplementation(async (userId: string, address: Record<string, unknown>) => {
@@ -93,7 +119,7 @@ beforeEach(async () => {
   }));
 
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: "10mb" }));
   app.use(createCustomerRouter());
   server = app.listen(0);
   await once(server, "listening");
@@ -114,10 +140,87 @@ const addressInput = {
   state: "Tamil Nadu",
   pinCode: "600001",
 };
+const validPng = `data:image/png;base64,${Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64")}`;
 
 const asCustomer = (id: "customer-a" | "customer-b") => ({ cookie: `customer=${id}` });
 
 describe("customer account routes", () => {
+  it("loads and updates only the authenticated customer's profile and keeps account email authoritative", async () => {
+    const loaded = await fetch(`${baseUrl}/api/customer/profile`, { headers: asCustomer("customer-a") });
+    expect(loaded.status).toBe(200);
+    expect(await loaded.json()).toMatchObject({ profile: { name: "Name customer-a", email: "customer-a@example.com" } });
+    expect(mocks.getCustomerProfile).toHaveBeenCalledWith("customer-a", {
+      name: "Name customer-a",
+      email: "customer-a@example.com",
+      phone: "9876543210",
+    });
+
+    const updated = await fetch(`${baseUrl}/api/customer/profile`, {
+      method: "PATCH",
+      headers: { ...asCustomer("customer-a"), "content-type": "application/json" },
+      body: JSON.stringify({
+        userId: "customer-b",
+        name: "Updated Customer",
+        phone: "9876543211",
+        email: "attacker@example.com",
+        photo: validPng,
+      }),
+    });
+    expect(updated.status).toBe(200);
+    expect(await updated.json()).toMatchObject({
+      profile: { name: "Updated Customer", email: "customer-a@example.com", phone: "9876543211" },
+    });
+    expect(mocks.updateCustomerProfile).toHaveBeenCalledWith("customer-a", "customer-a@example.com", {
+      name: "Updated Customer",
+      phone: "9876543211",
+      photo: validPng,
+    });
+  });
+
+  it("requires authentication and validates profile fields", async () => {
+    const unauthorized = await fetch(`${baseUrl}/api/customer/profile`);
+    expect(unauthorized.status).toBe(401);
+    const invalid = await fetch(`${baseUrl}/api/customer/profile`, {
+      method: "PATCH",
+      headers: { ...asCustomer("customer-a"), "content-type": "application/json" },
+      body: JSON.stringify({ name: "  ", phone: "not a number", photo: "javascript:alert(1)" }),
+    });
+    expect(invalid.status).toBe(400);
+    expect(mocks.updateCustomerProfile).not.toHaveBeenCalled();
+  });
+
+  it("stores a supported profile image and returns the exact value again after profile reload", async () => {
+    const saved = await fetch(`${baseUrl}/api/customer/profile`, {
+      method: "PATCH",
+      headers: { ...asCustomer("customer-a"), "content-type": "application/json" },
+      body: JSON.stringify({ name: "Customer A", phone: "9876543210", photo: validPng }),
+    });
+    expect(saved.status).toBe(200);
+    expect((await saved.json()).profile.photo).toBe(validPng);
+
+    const reloaded = await fetch(`${baseUrl}/api/customer/profile`, { headers: asCustomer("customer-a") });
+    expect(reloaded.status).toBe(200);
+    expect((await reloaded.json()).profile.photo).toBe(validPng);
+    expect(mocks.profiles.get("customer-a")?.photo).toBe(validPng);
+  });
+
+  it("rejects malformed, oversized, and non-image data URLs without updating the profile", async () => {
+    for (const photo of [
+      "data:image/png;base64,aGVsbG8=",
+      "data:image/jpeg;base64,AA==",
+      `data:image/png;base64,${Buffer.alloc(4_000_001, 1).toString("base64")}`,
+      "blob:https://tribull.shop/temporary",
+    ]) {
+      const invalid = await fetch(`${baseUrl}/api/customer/profile`, {
+        method: "PATCH",
+        headers: { ...asCustomer("customer-a"), "content-type": "application/json" },
+        body: JSON.stringify({ name: "Customer A", phone: "9876543210", photo }),
+      });
+      expect(invalid.status).toBe(400);
+    }
+    expect(mocks.updateCustomerProfile).not.toHaveBeenCalled();
+  });
+
   it("persists addresses for the authenticated customer and isolates the next login", async () => {
     const saved = await fetch(`${baseUrl}/api/customer/addresses`, {
       method: "POST",

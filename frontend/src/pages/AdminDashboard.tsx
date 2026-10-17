@@ -11,7 +11,7 @@ import type { Product } from "../../../shared/products";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
-import { saveAdminUserAndRefresh } from "../lib/adminUsers";
+import { deleteAdminUserAndRefresh, saveAdminUserAndRefresh } from "../lib/adminUsers";
 import { adminPermissionSections, adminRoleTitles, defaultRolePermissions, getEffectiveAdminPermissions, hasAdminPermission, type AdminPermissions, type AdminRoleTitle, type AdminPermissionSection } from "../lib/adminAccess";
 import { getAdminProductLoadError } from "../lib/adminProductError";
 import AdminAccountSettings from "./AdminAccountSettings";
@@ -1149,6 +1149,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
   const [adminUsersError, setAdminUsersError] = useState("");
   const [adminUserSaving, setAdminUserSaving] = useState(false);
+  const [deleteAdminTarget, setDeleteAdminTarget] = useState<(AdminUserRecord & { email: string }) | null>(null);
+  const [deleteAdminError, setDeleteAdminError] = useState("");
   const [adminModal, setAdminModal] = useState<"add" | "create-dedicated" | "view-permissions" | "edit-permissions" | null>(null);
   const [selectedAdmin, setSelectedAdmin] = useState<AdminUser | null>(null);
   const [adminForm, setAdminForm] = useState({ email: "", role: "Admin" as AdminRoleTitle, status: "Active" as "Active" | "Inactive" });
@@ -1739,6 +1741,35 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setAdminUserSaving(false);
     }
   };
+  const confirmDeleteAdmin = async () => {
+    const target = deleteAdminTarget;
+    if (!target || currentAdmin?.role !== "Super Admin" || target.role === "Super Admin"
+      || target.id === currentAdmin.id || adminUserSaving) return;
+    setAdminUserSaving(true);
+    setDeleteAdminError("");
+    try {
+      await deleteAdminUserAndRefresh(true, async () => {
+        const response = await apiFetch(
+          `/api/admin/user-accounts/${encodeURIComponent(target.source)}/${encodeURIComponent(target.id)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+          throw new Error(details?.error || "Admin account could not be deleted.");
+        }
+      }, refreshAdminUsers);
+      setDeleteAdminTarget(null);
+      toast.success(target.source === "user-credentials"
+        ? "Admin access removed. The customer account and its data were retained."
+        : "Admin account deleted.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Admin account could not be deleted.";
+      setDeleteAdminError(message);
+      toast.error("Admin account was not deleted.", { description: message });
+    } finally {
+      setAdminUserSaving(false);
+    }
+  };
   const saveSocialLinks = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSocialSaving(true);
@@ -1925,7 +1956,16 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         setAdminModal("create-dedicated");
       }}>Create Admin Account</button>}
       {adminUsersError && <><p className="admin-image-error" role="alert">{adminUsersError}</p><button className="admin-secondary-button" type="button" disabled={adminUsersLoading} onClick={() => void refreshAdminUsers()}>Retry loading admins</button></>}
-      {adminUsersLoading ? <p role="status">Loading admin users...</p> : adminUsers.length ? <div className="admin-admin-list">{adminUsers.map((group) => <section className="admin-management-row" key={group.email}><div><strong>{group.email}</strong>{group.records.length > 1 && <span role="status">Email appears in both account collections. Records are shown separately; no account was changed.</span>}{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><span>{admin.name} · {admin.role}</span><span>{admin.source === "admin-datas" ? "Dedicated admin collection" : "Customer account admin"}</span><span>Account ID: {admin.id}</span><span>Permissions: {summarizeAdminPermissions(admin.permissions)}</span></div>)}</div><div className="admin-admin-actions">{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><StatusPill status={admin.status} /><button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "view-permissions")}>View {admin.source === "admin-datas" ? "Dedicated Admin" : "Admin"} Permissions</button>{admin.source === "user-credentials" && canManageAdmins && (currentAdmin?.role === "Super Admin" || (admin.role !== "Super Admin" && admin.id !== currentAdmin?.id)) && <button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Manage Access</button>}{admin.source === "admin-datas" && currentAdmin?.role === "Super Admin" && <><button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Edit Dedicated Admin</button>{admin.id !== currentAdmin.id && admin.status !== "Inactive" && <button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => void deactivateDedicatedAdmin({ ...admin, email: group.email })}>Deactivate</button>}</>}</div>)}</div></section>)}</div> : !adminUsersError && <EmptyState title="No admin users found." message="Grant access to an existing customer account or create a dedicated admin account." />}
+      {adminUsersLoading ? <p role="status">Loading admin users...</p> : adminUsers.length ? <div className="admin-admin-list">{adminUsers.map((group) => <section className="admin-management-row" key={group.email}>
+        <div><strong>{group.email}</strong>{group.records.length > 1 && <span role="status">Email appears in both account collections. Records are shown separately; no account was changed.</span>}{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}><span>{admin.name} · {admin.role}</span><span>{admin.source === "admin-datas" ? "Dedicated admin collection" : "Customer account admin"}</span><span>Account ID: {admin.id}</span><span>Permissions: {summarizeAdminPermissions(admin.permissions)}</span></div>)}</div>
+        <div className="admin-admin-actions">{group.records.map((admin) => <div key={`${admin.source}:${admin.id}`}>
+          <StatusPill status={admin.status} />
+          <button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "view-permissions")}>View {admin.source === "admin-datas" ? "Dedicated Admin" : "Admin"} Permissions</button>
+          {admin.source === "user-credentials" && canManageAdmins && (currentAdmin?.role === "Super Admin" || (admin.role !== "Super Admin" && admin.id !== currentAdmin?.id)) && <button className="admin-small-button" type="button" onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Manage Access</button>}
+          {admin.source === "admin-datas" && currentAdmin?.role === "Super Admin" && <><button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => openPermissions({ ...admin, email: group.email }, "edit-permissions")}>Edit Dedicated Admin</button>{admin.id !== currentAdmin.id && admin.status !== "Inactive" && <button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => void deactivateDedicatedAdmin({ ...admin, email: group.email })}>Deactivate</button>}</>}
+          {currentAdmin?.role === "Super Admin" && admin.role !== "Super Admin" && admin.id !== currentAdmin.id && <button className="admin-small-button" type="button" disabled={adminUserSaving} onClick={() => { setDeleteAdminError(""); setDeleteAdminTarget({ ...admin, email: group.email }); }}>Delete</button>}
+        </div>)}</div>
+      </section>)}</div> : !adminUsersError && <EmptyState title="No admin users found." message="Grant access to an existing customer account or create a dedicated admin account." />}
       {adminModal && <div className="admin-modal-backdrop" onClick={closeAdminModal}><div className="admin-modal admin-admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" disabled={adminUserSaving} onClick={closeAdminModal}><X size={17} /></button>{adminUsersError && <p className="admin-image-error" role="alert">{adminUsersError}</p>}
         {adminModal === "add" ? <><h2>Grant Admin Access</h2><form className="admin-form admin-admin-form" onSubmit={saveAdmin}>
           <label><span>Existing customer email</span><input required type="email" maxLength={254} value={adminForm.email} disabled={adminUserSaving} onChange={(event) => setAdminForm({ ...adminForm, email: event.target.value })} /></label>
@@ -1946,6 +1986,20 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           {adminModal === "edit-permissions" && <div className="admin-form-actions"><button className="admin-primary-button" type="button" disabled={adminUserSaving} onClick={() => void savePermissions()}>{adminUserSaving ? "Saving..." : "Save Access"}</button><button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={closeAdminModal}>Cancel</button></div>}
         </>}
       </div></div>}
+      {deleteAdminTarget && <div className="admin-modal-backdrop" onClick={() => { if (!adminUserSaving) { setDeleteAdminTarget(null); setDeleteAdminError(""); } }}>
+        <div className="admin-modal admin-admin-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-admin-title" onClick={(event) => event.stopPropagation()}>
+          <button type="button" className="admin-modal-close" aria-label="Close delete confirmation" disabled={adminUserSaving} onClick={() => { setDeleteAdminTarget(null); setDeleteAdminError(""); }}><X size={17} /></button>
+          <h2 id="delete-admin-title">Delete Admin Account?</h2>
+          <p className="admin-permission-owner">{deleteAdminTarget.name} · {deleteAdminTarget.email}</p>
+          <p>This action is permanent and may affect account-related records. Orders, customer profiles, and other related records will not be deleted.</p>
+          {deleteAdminTarget.source === "user-credentials" && <p className="admin-data-caption">This account also belongs to a customer. Only its admin access and sessions will be removed; customer sign-in and data will remain.</p>}
+          {deleteAdminError && <p className="admin-image-error" role="alert">{deleteAdminError}</p>}
+          <div className="admin-form-actions">
+            <button className="admin-secondary-button" type="button" disabled={adminUserSaving} onClick={() => { setDeleteAdminTarget(null); setDeleteAdminError(""); }}>Cancel</button>
+            <button className="admin-primary-button" type="button" disabled={adminUserSaving} onClick={() => void confirmDeleteAdmin()}>{adminUserSaving ? "Deleting..." : "Delete Account"}</button>
+          </div>
+        </div>
+      </div>}
     </AdminPanel>;
     return null;
   };

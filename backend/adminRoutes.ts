@@ -10,6 +10,7 @@ import {
   createAdminUser,
   createDedicatedAdminAccount,
   deactivateDedicatedAdminAccount,
+  deleteAdminAccount,
   listDedicatedAdminAccounts,
   listAdminUserRecords,
   listAdminUsers,
@@ -190,6 +191,30 @@ export function createAdminRouter() {
     try {
       res.json(await listDedicatedAdminAccounts());
     } catch (error) {
+      sendAdminUserError(res, error);
+    }
+  });
+  router.delete("/api/admin/user-accounts/:source/:id", requireSuperAdmin, async (req, res) => {
+    const source = req.params.source;
+    if (source !== "user-credentials" && source !== "admin-datas") {
+      return res.status(400).json({ error: "Account source is invalid" });
+    }
+    try {
+      const actor = res.locals.adminActor as AdminUserActor;
+      const account = await deleteAdminAccount(source, req.params.id, actor);
+      if (!account) return res.status(404).json({ error: "Admin account not found" });
+      console.info("Admin account deleted", {
+        category: "admin_account_deleted",
+        actorId: actor.id,
+        actorSource: actor.source,
+        targetId: account.id,
+        targetSource: account.source,
+        targetRole: account.role,
+      });
+      return res.json({ deleted: true });
+    } catch (error) {
+      if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
+      if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
       sendAdminUserError(res, error);
     }
   });

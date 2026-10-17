@@ -17,8 +17,22 @@ export type CustomerAddress = {
 
 type CustomerDataDocument = {
   userId: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  photo?: string;
   addresses?: CustomerAddress[];
   wishlist?: string[];
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CustomerProfile = {
+  userId: string;
+  name: string;
+  email: string;
+  phone: string;
+  photo?: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -55,16 +69,96 @@ async function getCollection() {
   return collectionPromise;
 }
 
-async function ensureDataDocument(collection: Collection<CustomerDataDocument>, userId: string) {
+async function ensureDataDocument(
+  collection: Collection<CustomerDataDocument>,
+  userId: string,
+  identity?: Pick<CustomerProfile, "name" | "email" | "phone">,
+) {
   try {
     await collection.updateOne(
       { userId },
-      { $setOnInsert: { userId, createdAt: new Date(), updatedAt: new Date() } },
+      {
+        $setOnInsert: {
+          userId,
+          ...(identity || {}),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      },
       { upsert: true },
     );
   } catch (error) {
     if (!isDuplicateKeyError(error)) throw error;
   }
+}
+
+export async function getCustomerProfile(
+  userId: string,
+  identity: Pick<CustomerProfile, "name" | "email" | "phone">,
+): Promise<CustomerProfile> {
+  const collection = await getCollection();
+  await ensureDataDocument(collection, userId, identity);
+  const profileFields = ["name", "email", "phone"] as const;
+  for (const field of profileFields) {
+    await collection.updateOne(
+      { userId, [field]: { $exists: false } },
+      { $set: { [field]: identity[field], updatedAt: new Date() } },
+    );
+  }
+  await collection.updateOne(
+    { userId, email: { $ne: identity.email } },
+    { $set: { email: identity.email, updatedAt: new Date() } },
+  );
+  const profile = await collection.findOne(
+    { userId },
+    { projection: { _id: 0, userId: 1, name: 1, email: 1, phone: 1, photo: 1, createdAt: 1, updatedAt: 1 } },
+  );
+  if (!profile) throw new Error("Customer profile could not be loaded after initialization");
+  return {
+    userId: profile.userId,
+    name: profile.name || identity.name,
+    email: identity.email,
+    phone: profile.phone ?? identity.phone,
+    ...(profile.photo ? { photo: profile.photo } : {}),
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
+}
+
+export async function updateCustomerProfile(
+  userId: string,
+  identityEmail: string,
+  patch: { name: string; phone: string; photo?: string | null },
+): Promise<CustomerProfile | null> {
+  const collection = await getCollection();
+  await ensureDataDocument(collection, userId);
+  await collection.updateOne(
+    { userId },
+    {
+      $set: {
+        name: patch.name,
+        email: identityEmail,
+        phone: patch.phone,
+        updatedAt: new Date(),
+        ...(typeof patch.photo === "string" ? { photo: patch.photo } : {}),
+      },
+      ...(patch.photo === null ? { $unset: { photo: "" } } : {}),
+    },
+  );
+  const profile = await collection.findOne(
+    { userId },
+    { projection: { _id: 0, userId: 1, name: 1, email: 1, phone: 1, photo: 1, createdAt: 1, updatedAt: 1 } },
+  );
+  if (!profile) return null;
+  return {
+    userId: profile.userId,
+    name: profile.name || patch.name,
+    email: identityEmail,
+    phone: profile.phone ?? patch.phone,
+    ...(profile.photo ? { photo: profile.photo } : {}),
+    createdAt: profile.createdAt,
+    updatedAt: profile.updatedAt,
+  };
 }
 
 function isDuplicateKeyError(error: unknown): error is { code: number } {
