@@ -18,7 +18,7 @@ import { createAdminOrderRouter } from "./orderRoutes.js";
 import { createCustomerRouter } from "./customerRoutes.js";
 import { logRazorpayConfigurationStatus } from "./razorpayService.js";
 import { requireAdminPermission } from "./adminAuth.js";
-import { createVideo, deleteVideo, listVideos, updateVideo } from "./videoStore.js";
+import { createVideo, deleteVideo, listActiveVideos, listVideos, updateVideo } from "./videoStore.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
@@ -626,6 +626,9 @@ async function startServer() {
   });
   app.get("/api/admin/videos", requireAdminPermission("products", "view"), async (_req, res) => {
     try { res.json(await listVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
+  });
+  app.get("/api/videos", async (_req, res) => {
+    try { res.json(await listActiveVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
   });
   app.post("/api/admin/videos", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await createVideo(req.body)); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save video" }); }

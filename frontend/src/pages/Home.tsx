@@ -121,6 +121,9 @@ export default function Home() {
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontMainCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
+  const [homeVideos, setHomeVideos] = useState<Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>>([]);
+  const [videosLoading, setVideosLoading] = useState(true);
+  const [videosError, setVideosError] = useState("");
   const [homeBanner, setHomeBanner] = useState<{ image: string; title?: string; subtitle?: string; link?: string } | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
@@ -152,6 +155,19 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
+    setVideosLoading(true);
+    void fetch("/api/videos", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error("Videos could not be loaded.");
+      const savedVideos = await response.json() as Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>;
+      if (active) setHomeVideos(savedVideos);
+    }).catch((error: unknown) => {
+      if (active) setVideosError(error instanceof Error ? error.message : "Videos could not be loaded.");
+    }).finally(() => { if (active) setVideosLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     void loadCategoryBanner("home").then((banner) => {
       if (active) setHomeBanner(banner);
     }).catch(() => undefined);
@@ -159,8 +175,7 @@ export default function Home() {
   }, []);
 
 
-  const lifestyleVideos = ["video1", "video2", "video3", "video4"];
-  const lifestyleSlides = Array.from({ length: 6 }, (_, index) => lifestyleVideos[index % lifestyleVideos.length]);
+  const lifestyleSlides = homeVideos;
   const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - 3);
 
   const scrollLifestyle = (direction: "left" | "right") => {
@@ -211,7 +226,7 @@ export default function Home() {
   };
 
   const productLink = (product: StorefrontProduct) => `/product/${encodeURIComponent(product.id)}`;
-  const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : [];
+  const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
@@ -406,10 +421,10 @@ export default function Home() {
                 {lifestyleSlides.map((video, index) => (
                   <div
                     className={cls("lifestyle-video", index === lifestyleIndex ? "lifestyle-video--active" : null)}
-                    key={`${video}-${index}`}
+                    key={`${video.id}-${index}`}
                     ref={index === 0 ? lifestyleSlideRef : undefined}
                   >
-                    <video src={`/products/${video}.mp4`} autoPlay loop muted playsInline preload="metadata" aria-label={`${video} lifestyle video`} />
+                    <video src={video.url} poster={video.thumbnail} autoPlay loop muted playsInline preload="metadata" aria-label={`${video.title} lifestyle video`} />
                   </div>
                 ))}
               </div>
@@ -424,6 +439,9 @@ export default function Home() {
               <ArrowRight size={18} strokeWidth={1.5} />
             </button>
           </div>
+          {videosLoading && <p className="lifestyle-section__message" role="status">Loading videos...</p>}
+          {!videosLoading && videosError && <p className="lifestyle-section__message" role="alert">{videosError}</p>}
+          {!videosLoading && !videosError && lifestyleSlides.length === 0 && <p className="lifestyle-section__message" role="status">No active videos are available right now.</p>}
         </section>
       </main>
 

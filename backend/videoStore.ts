@@ -15,6 +15,7 @@ function validate(value: unknown): Omit<VideoDocument, "id" | "createdAt" | "upd
   return { title, url, ...(input.thumbnail ? { thumbnail: String(input.thumbnail).slice(0, 2000) } : {}), ...(input.category ? { category: String(input.category).trim().slice(0, 80) } : {}), isActive: input.isActive };
 }
 export async function listVideos() { return (await getCollection()).find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray(); }
+export async function listActiveVideos() { return (await getCollection()).find({ isActive: true }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray(); }
 export async function createVideo(value: unknown) { const now = new Date().toISOString(); const video = { id: randomUUID(), ...validate(value), createdAt: now, updatedAt: now }; await (await getCollection()).insertOne(video); return video; }
 export async function updateVideo(id: string, value: unknown) { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid"); return (await getCollection()).findOneAndUpdate({ id }, { $set: { ...validate(value), updatedAt: new Date().toISOString() } }, { returnDocument: "after", projection: { _id: 0 } }); }
 export async function deleteVideo(id: string) { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid"); return (await (await getCollection()).deleteOne({ id })).deletedCount > 0; }
