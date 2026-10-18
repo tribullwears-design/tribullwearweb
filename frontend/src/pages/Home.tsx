@@ -8,7 +8,7 @@ import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
 import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -225,7 +225,7 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  const productLink = (product: StorefrontProduct) => `/product/${encodeURIComponent(product.id)}`;
+  const productLink = productHref;
   const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({

@@ -11,6 +11,7 @@ import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
+import { getProductIdentifier } from "../lib/products";
 
 export type CategoryProduct = {
   id: string;
@@ -262,12 +263,12 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     const loadProducts = () => apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string; productType?: string }[];
+        return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string; productType?: string }[];
       })
       .then((products) => {
         if (active) {
           setStoredCatalog(products.map((product) => ({
-            id: product.id,
+            id: getProductIdentifier(product),
             name: product.name,
             price: `₹${product.price.toLocaleString("en-IN")}`,
             image: product.image,
@@ -397,12 +398,12 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
         const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
         const response = await apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" });
         if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id: string; name: string; price: number; compareAt?: number | null; image: string }[];
+        return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string }[];
       }))
         .then((result) => {
           if (active) {
             setProducts(result.flat().map((product) => ({
-              id: product.id,
+              id: getProductIdentifier(product),
               name: product.name,
               price: `₹${product.price.toLocaleString("en-IN")}`,
               image: product.image,

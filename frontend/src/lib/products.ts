@@ -12,6 +12,20 @@ export type StorefrontProduct = Product & {
   basePrice?: number;
 };
 
+export function getProductIdentifier(product: { id?: unknown; _id?: unknown }) {
+  if (typeof product.id === "string" && product.id.trim()) return product.id.trim();
+  if (typeof product._id === "string" && product._id.trim()) return product._id.trim();
+  if (product._id && typeof product._id === "object" && "$oid" in product._id) {
+    const objectId = (product._id as { $oid?: unknown }).$oid;
+    if (typeof objectId === "string" && objectId.trim()) return objectId.trim();
+  }
+  return "";
+}
+
+export function productHref(product: { id: string }) {
+  return `/product/${encodeURIComponent(product.id)}`;
+}
+
 type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {
   category?: string;
   productType?: string;
@@ -43,6 +57,8 @@ export type ProductWrite = Omit<Product, "price" | "id" | "created" | "sold" | "
 };
 
 export function mapApiProduct(product: ApiProduct): StorefrontProduct {
+  const id = getProductIdentifier(product);
+  if (!id) throw new Error("Product response is missing its stable identifier");
   const price = [
     product.sellingPrice,
     product.salePrice,
@@ -56,7 +72,7 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
   }
   const originalPrice = resolveOriginalPrice(product);
   return {
-    id: product.id,
+    id,
     name: product.name,
     category: product.productType || product.category || ("subcategoryId" in product && typeof product.subcategoryId === "string"
       ? product.subcategoryId
