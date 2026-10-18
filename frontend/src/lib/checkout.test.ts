@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createCheckoutSubmission } from "./checkout";
 
 describe("createCheckoutSubmission", () => {
-  it("preserves the selected Indian state and COD method in the order request", () => {
+  it("preserves the selected Indian state and online method in the order request", () => {
     expect(createCheckoutSubmission({
       idempotencyKey: "checkout-request-123456",
       customer: { name: "Test Customer", email: "test@example.test", phone: "9876543210" },
@@ -14,11 +14,11 @@ describe("createCheckoutSubmission", () => {
         pinCode: "600001",
         country: "India",
       },
-      paymentMethod: "cod",
+      paymentMethod: "upi",
       items: [{ id: "product-1", quantity: 2, variant: { size: "M" } }],
     })).toMatchObject({
       shippingAddress: { state: "Tamil Nadu" },
-      paymentMethod: "cod",
+      paymentMethod: "upi",
       items: [{ id: "product-1", quantity: 2 }],
     });
   });

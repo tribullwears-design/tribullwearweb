@@ -232,32 +232,8 @@ export function createRazorpayCheckoutRouter() {
     }
   });
 
-  router.post("/api/checkout/cod-orders", checkoutLimiter, async (req, res) => {
-    try {
-      const customer = await getSessionCustomer(req);
-      const identity = customer?._id ? { id: customer._id.toString(), email: customer.email } : undefined;
-      const checkout = await prepareCheckoutOrder(req.body, identity);
-      const existing = await findOrderByIdempotencyKey(checkout.idempotencyKey);
-      if (existing) {
-        if ((existing.customerId || undefined) !== identity?.id) {
-          return res.status(409).json({ error: "This checkout request key is already in use" });
-        }
-        if (existing.paymentMode !== "cod") return res.status(409).json({ error: "This checkout request key is already in use" });
-        return res.json(customerFacingOrder(existing));
-      }
-      const order = buildCheckoutOrder(checkout, { method: "cod", status: "Pending collection" }, "cod");
-      try {
-        return res.status(201).json(customerFacingOrder(await createOrder(order)));
-      } catch (error) {
-        if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
-          const duplicate = await findOrderByIdempotencyKey(checkout.idempotencyKey);
-          if (duplicate?.paymentMode === "cod" && (duplicate.customerId || undefined) === identity?.id) return res.json(customerFacingOrder(duplicate));
-        }
-        throw error;
-      }
-    } catch (error) {
-      return sendCheckoutError(res, error);
-    }
+  router.post("/api/checkout/cod-orders", checkoutLimiter, (_req, res) => {
+    return res.status(410).json({ error: "Cash on Delivery is no longer available for new orders." });
   });
   return router;
 }

@@ -21,7 +21,7 @@ import SearchResultsPage from "./pages/SearchResultsPage";
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
+      <Route path={"/"} component={CategoryPage} />
       <Route path={"/admin26/category"}>{() => <LegacyCategoryRedirect />}</Route>
       <Route path={"/admin26"}>{() => <AdminRoute />}</Route>
       <Route path={"/admin26/dashboard"}>{() => <AdminRoute initialScreen="dashboard" />}</Route>
@@ -31,6 +31,7 @@ function Router() {
       <Route path={"/admin26/products/categories"}>{() => <AdminRoute initialScreen="categories" />}</Route>
       <Route path={"/admin26/products/inventory"}>{() => <AdminRoute initialScreen="inventory" />}</Route>
       <Route path={"/admin26/products/banners"}>{() => <AdminRoute initialScreen="banners" />}</Route>
+      <Route path={"/admin26/products/videos"}>{() => <AdminRoute initialScreen="videos" />}</Route>
       <Route path={"/admin26/orders"}>{() => <AdminRoute initialScreen="orders" />}</Route>
       <Route path={"/admin26/orders/pending"}>{() => <AdminRoute initialScreen="orders-pending" />}</Route>
       <Route path={"/admin26/orders/processing"}>{() => <AdminRoute initialScreen="orders-processing" />}</Route>

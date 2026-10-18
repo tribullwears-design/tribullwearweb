@@ -14,6 +14,8 @@ export type ProductDocument = {
   sizes: string[];
   colors: string[];
   status: "Active" | "Draft";
+  newArrival?: boolean;
+  bestSelling?: boolean;
   mainCategoryId: string;
   subcategoryId: string;
   mainCategory: string;
@@ -70,7 +72,7 @@ export class InsufficientInventoryError extends Error {
 function normalizeProduct(product: WithId<ProductDocument>): ProductDocument {
   const { _id, ...fields } = product;
   const id = fields.id || _id.toString();
-  return { ...fields, id };
+  return { ...fields, id, newArrival: fields.newArrival === true, bestSelling: fields.bestSelling === true };
 }
 
 function validateProduct(input: ProductInput, requireImage = true, allowUncategorized = false) {
@@ -84,6 +86,10 @@ function validateProduct(input: ProductInput, requireImage = true, allowUncatego
       : "Product name, main category, and subcategory are required");
   }
   if (input.productType !== undefined && !productTypes.includes(input.productType as typeof productTypes[number])) throw new Error("Invalid product type");
+  if ((input.newArrival !== undefined && typeof input.newArrival !== "boolean")
+    || (input.bestSelling !== undefined && typeof input.bestSelling !== "boolean")) {
+    throw new Error("New Arrival and Best Selling must be boolean values");
+  }
   if (!Number.isFinite(input.price) || input.price < 0 || !Number.isFinite(input.stock) || input.stock < 0) {
     throw new Error("Product price and stock must be valid non-negative numbers");
   }
@@ -107,6 +113,8 @@ function isProductInput(value: unknown): value is Partial<ProductInput> {
     "sizes",
     "colors",
     "status",
+    "newArrival",
+    "bestSelling",
     "mainCategoryId",
     "subcategoryId",
   ]);
@@ -165,6 +173,8 @@ export async function createProduct(input: ProductInput) {
   const now = new Date().toISOString();
   const product: ProductDocument = {
     ...input,
+    newArrival: input.newArrival ?? false,
+    bestSelling: input.bestSelling ?? false,
     id: crypto.randomUUID(),
     name: input.name.trim(),
     mainCategoryId: main.value,
@@ -196,6 +206,8 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     sizes: input.sizes === undefined ? existing.sizes : input.sizes,
     colors: input.colors === undefined ? existing.colors : input.colors,
     status: input.status === undefined ? existing.status : input.status,
+    newArrival: input.newArrival === undefined ? existing.newArrival ?? false : input.newArrival,
+    bestSelling: input.bestSelling === undefined ? existing.bestSelling ?? false : input.bestSelling,
     mainCategoryId: input.mainCategoryId === undefined ? existing.mainCategoryId : input.mainCategoryId,
     subcategoryId: input.subcategoryId === undefined ? existing.subcategoryId : input.subcategoryId,
   };
@@ -218,4 +230,10 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     { returnDocument: "after" },
   );
   return updated ? normalizeProduct(updated) : null;
+}
+
+export async function deleteProduct(id: string) {
+  validateProductId(id);
+  const result = await (await getCollection()).deleteOne(productFilter(id));
+  return result.deletedCount > 0;
 }

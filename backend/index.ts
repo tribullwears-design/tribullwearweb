@@ -6,10 +6,10 @@ import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
-import { adjustProductInventory, createProduct, getProduct, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
+import { adjustProductInventory, createProduct, deleteProduct, getProduct, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
-import { createOffer, deleteOffer, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
+import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
 import { createAdminRouter } from "./adminRoutes.js";
 import { configureProxyTrust } from "./proxyTrust.js";
@@ -18,6 +18,7 @@ import { createAdminOrderRouter } from "./orderRoutes.js";
 import { createCustomerRouter } from "./customerRoutes.js";
 import { logRazorpayConfigurationStatus } from "./razorpayService.js";
 import { requireAdminPermission } from "./adminAuth.js";
+import { createVideo, deleteVideo, listVideos, updateVideo } from "./videoStore.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
@@ -488,10 +489,10 @@ async function startServer() {
     try { res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
   });
   app.post("/api/banners", requireAdminPermission("products", "edit"), async (req, res) => {
-    try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
+    try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image, req.body)); } catch (error) { sendBannerError(res, error); }
   });
   app.put("/api/banners/:id", requireAdminPermission("products", "edit"), async (req, res) => {
-    try { res.json(await updateBanner(req.params.id, req.body?.categoryId, req.body?.image)); } catch (error) { sendBannerError(res, error); }
+    try { res.json(await updateBanner(req.params.id, req.body?.categoryId, req.body?.image, req.body)); } catch (error) { sendBannerError(res, error); }
   });
   app.delete("/api/banners/:id", requireAdminPermission("products", "edit"), async (req, res) => {
     try {
@@ -614,6 +615,21 @@ async function startServer() {
       sendError(res, error);
     }
   });
+  app.get("/api/marketing/coupons/:code", async (req, res) => {
+    try { const offer = await findActiveCoupon(req.params.code); if (!offer) return res.status(404).json({ error: "Coupon is invalid or inactive" }); res.json(offer); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Coupon validation failed" }); }
+  });
+  app.get("/api/admin/videos", requireAdminPermission("products", "view"), async (_req, res) => {
+    try { res.json(await listVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
+  });
+  app.post("/api/admin/videos", requireAdminPermission("products", "edit"), async (req, res) => {
+    try { res.status(201).json(await createVideo(req.body)); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save video" }); }
+  });
+  app.patch("/api/admin/videos/:id", requireAdminPermission("products", "edit"), async (req, res) => {
+    try { const video = await updateVideo(req.params.id, req.body); if (!video) return res.status(404).json({ error: "Video not found" }); res.json(video); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to update video" }); }
+  });
+  app.delete("/api/admin/videos/:id", requireAdminPermission("products", "edit"), async (req, res) => {
+    try { if (!await deleteVideo(req.params.id)) return res.status(404).json({ error: "Video not found" }); res.json({ deleted: true }); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to delete video" }); }
+  });
   app.get("/api/admin/products/:id", requireAdminPermission("products", "view"), async (req, res) => {
     try {
       const product = await getProduct(req.params.id, true);
@@ -640,6 +656,15 @@ async function startServer() {
       const message = error instanceof Error ? error.message : "Product request failed";
       const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") || message.includes("unsupported") ? 400 : 500;
       res.status(status).json({ error: message });
+    }
+  });
+  app.delete("/api/products/:id", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      if (!await deleteProduct(req.params.id)) return res.status(404).json({ error: "Product not found" });
+      return res.json({ deleted: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product could not be deleted";
+      return res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
     }
   });
   app.patch("/api/products/:id/inventory", requireAdminPermission("products", "edit"), async (req, res) => {

@@ -10,6 +10,9 @@ export type BannerDocument = {
   imageUrl: string;
   createdAt: string;
   updatedAt: string;
+  title?: string;
+  subtitle?: string;
+  link?: string;
 };
 
 type StoredBanner = Omit<BannerDocument, "id">;
@@ -82,6 +85,7 @@ function normalizeImage(value: unknown) {
 
 async function resolveCategory(categoryId: unknown) {
   if (typeof categoryId !== "string" || !categoryId.trim()) throw new Error("Main category is required");
+  if (categoryId.trim().toLowerCase() === "home") return { value: "home", label: "Home Page" };
   const categories = await listCategories();
   const slugify = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const requestedId = slugify(categoryId);
@@ -110,7 +114,15 @@ export async function getBanner(categoryId: string) {
   return banners.find((banner) => banner.categoryId === category.value) || null;
 }
 
-export async function saveBanner(categoryId: string, imageInput: unknown) {
+function normalizeBannerFields(value: unknown) {
+  const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const text = (name: string, max: number) => input[name] === undefined ? undefined : typeof input[name] === "string" ? input[name].trim().slice(0, max) : (() => { throw new Error(`${name} must be text`); })();
+  const link = text("link", 500);
+  if (link && !/^\/(?!\/)|^https:\/\//i.test(link)) throw new Error("Banner link must be a relative path or HTTPS URL");
+  return { ...(text("title", 120) !== undefined ? { title: text("title", 120) } : {}), ...(text("subtitle", 240) !== undefined ? { subtitle: text("subtitle", 240) } : {}), ...(link !== undefined ? { link } : {}) };
+}
+
+export async function saveBanner(categoryId: string, imageInput: unknown, fields?: unknown) {
   const category = await resolveCategory(categoryId);
   const image = normalizeImage(imageInput);
   const collection = await getCollection();
@@ -118,7 +130,7 @@ export async function saveBanner(categoryId: string, imageInput: unknown) {
   const document = await collection.findOneAndUpdate(
     { categoryId: category.value },
     {
-      $set: { categoryName: category.label, image, imageUrl: image, updatedAt: now },
+      $set: { categoryName: category.label, image, imageUrl: image, updatedAt: now, ...normalizeBannerFields(fields) },
       $setOnInsert: { createdAt: now },
     },
     { upsert: true, returnDocument: "after" },
@@ -127,7 +139,7 @@ export async function saveBanner(categoryId: string, imageInput: unknown) {
   return toBanner(document);
 }
 
-export async function updateBanner(id: string, categoryId: string, imageInput: unknown) {
+export async function updateBanner(id: string, categoryId: string, imageInput: unknown, fields?: unknown) {
   if (!ObjectId.isValid(id)) throw new Error("Banner not found");
   const category = await resolveCategory(categoryId);
   const image = normalizeImage(imageInput);
@@ -142,7 +154,7 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
     if (categoryBanner && !categoryBanner._id.equals(bannerId)) {
       const updated = await collection.findOneAndUpdate(
         { _id: categoryBanner._id },
-        { $set: { categoryName: category.label, image, imageUrl: image, updatedAt: now } },
+        { $set: { categoryName: category.label, image, imageUrl: image, updatedAt: now, ...normalizeBannerFields(fields) } },
         { returnDocument: "after" },
       );
       await collection.deleteOne({ _id: bannerId });
@@ -153,7 +165,7 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
 
   const updated = await collection.findOneAndUpdate(
     { _id: bannerId },
-    { $set: { categoryId: category.value, categoryName: category.label, image, imageUrl: image, updatedAt: now } },
+    { $set: { categoryId: category.value, categoryName: category.label, image, imageUrl: image, updatedAt: now, ...normalizeBannerFields(fields) } },
     { returnDocument: "after" },
   );
   if (!updated) throw new Error("Banner not found");

@@ -6,6 +6,8 @@ import { apiFetch } from "./api";
 export type StorefrontProduct = Product & {
   mainCategoryId?: string;
   subcategoryId?: string;
+  newArrival?: boolean;
+  bestSelling?: boolean;
 };
 
 type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {
@@ -25,6 +27,8 @@ type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {
   MRP?: string | number | null;
   compareAtPrice?: string | number | null;
   oldPrice?: string | number | null;
+  newArrival?: boolean;
+  bestSelling?: boolean;
 };
 export type ProductWrite = Omit<Product, "price" | "id" | "created" | "sold" | "originalPrice"> & {
   sellingPrice: number;
@@ -60,6 +64,8 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
     sold: product.sold ?? 0,
     ...(product.mainCategoryId ? { mainCategoryId: product.mainCategoryId } : {}),
     ...(product.subcategoryId ? { subcategoryId: product.subcategoryId } : {}),
+    ...(product.newArrival === true ? { newArrival: true } : {}),
+    ...(product.bestSelling === true ? { bestSelling: true } : {}),
     price,
     ...(originalPrice === undefined ? {} : { originalPrice }),
   };

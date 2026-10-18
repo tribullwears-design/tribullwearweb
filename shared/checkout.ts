@@ -41,7 +41,6 @@ export const checkoutPaymentMethods = [
   { id: "upi", label: "UPI" },
   { id: "card", label: "Debit / credit card" },
   { id: "netbanking", label: "Net banking" },
-  { id: "cod", label: "Cash on Delivery (COD)" },
 ] as const;
 
 export type CheckoutPaymentMethod = typeof checkoutPaymentMethods[number]["id"];

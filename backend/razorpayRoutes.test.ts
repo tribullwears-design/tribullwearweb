@@ -436,51 +436,10 @@ describe("Razorpay checkout routes", () => {
     expect(mocks.updateRazorpayPayment).toHaveBeenCalledWith("order_test123", "pay_test123", "Failed", "upi");
   });
 
-  it("records COD as pending collection, not as a collected payment", async () => {
-    mocks.buildCheckoutOrder.mockReturnValue({ ...order, payment: { method: "cod", status: "Pending collection" }, paymentMode: "cod" });
-    mocks.createOrder.mockImplementation(async (document) => ({ ...document, createdAt: "2026-01-01T00:00:00.000Z" }));
+  it("rejects COD order creation for new orders while preserving historical records", async () => {
     const response = await fetch(`${baseUrl}/api/checkout/cod-orders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    const body = await response.json() as { payment: { status: string }; paymentMode: string };
-
-    expect(response.status).toBe(201);
-    expect(body).toMatchObject({ payment: { status: "Pending collection" }, paymentMode: "cod" });
-  });
-
-  it("attaches the authenticated server identity to a COD order", async () => {
-    const identity = { id: "customer-object-id", email: "account@example.test" };
-    mocks.getSessionCustomer.mockResolvedValue({ _id: { toString: () => identity.id }, email: identity.email });
-    mocks.prepareCheckoutOrder.mockResolvedValue({ ...checkout, customerId: identity.id });
-    mocks.buildCheckoutOrder.mockReturnValue({
-      ...order,
-      customerId: identity.id,
-      payment: { method: "cod", status: "Pending collection" },
-      paymentMode: "cod",
-    });
-
-    const response = await fetch(`${baseUrl}/api/checkout/cod-orders`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ checkout: true }),
-    });
-
-    expect(response.status).toBe(201);
-    expect(mocks.prepareCheckoutOrder).toHaveBeenCalledWith({ checkout: true }, identity);
-    expect(mocks.createOrder).toHaveBeenCalledWith(expect.objectContaining({
-      customerId: identity.id,
-      paymentMode: "cod",
-      payment: { method: "cod", status: "Pending collection" },
-    }));
-  });
-
-  it("returns the existing COD order for a duplicate submission", async () => {
-    mocks.findOrderByIdempotencyKey.mockResolvedValue({
-      ...order,
-      payment: { method: "cod", status: "Pending collection" },
-      paymentMode: "cod",
-    });
-    const response = await fetch(`${baseUrl}/api/checkout/cod-orders`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ error: "Cash on Delivery is no longer available for new orders." });
     expect(mocks.createOrder).not.toHaveBeenCalled();
   });
 });

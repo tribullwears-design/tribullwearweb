@@ -61,6 +61,8 @@ describe("public product reads", () => {
       sizes: storedProduct.sizes,
       colors: storedProduct.colors,
       status: storedProduct.status,
+      newArrival: false,
+      bestSelling: false,
       mainCategoryId: storedProduct.mainCategoryId,
       subcategoryId: storedProduct.subcategoryId,
       mainCategory: storedProduct.mainCategory,

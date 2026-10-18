@@ -568,15 +568,7 @@ export default function CheckoutPage() {
         shippingAddress?: { address: string; apartment: string; city: string; state: string; pinCode: string; country: string };
       };
       let result: CheckoutOrderResult | null = null;
-      if (paymentMethod === "cod") {
-        const response = await apiFetch("/api/checkout/cod-orders", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(submission),
-        });
-        result = await response.json() as CheckoutOrderResult;
-        if (!response.ok) throw new Error(result.error || "Unable to place the COD order. Please try again.");
-      } else {
+      {
         const response = await apiFetch("/api/create-order", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -621,10 +613,7 @@ export default function CheckoutPage() {
         result = verification.order;
       }
       if (!result?.id || !result.items || typeof result.total !== "number" || result.status !== "Pending"
-        || typeof result.payment?.method !== "string"
-        || (paymentMethod === "cod"
-          ? result.paymentMode !== "cod" || result.payment?.method !== "cod" || result.payment.status !== "Pending collection"
-          : result.paymentMode !== "razorpay" || result.payment.status !== "Paid")) {
+        || result.paymentMode !== "razorpay" || result.payment?.status !== "Paid") {
         throw new Error("The checkout server returned an incomplete order confirmation.");
       }
       const summary: OrderSummary = {
@@ -860,7 +849,7 @@ export default function CheckoutPage() {
         <section className="checkout-form-area">
           <div className="checkout-test-notice" role="note">
             <strong>SECURE ONLINE PAYMENT</strong>
-            <span>Online payments are processed by Razorpay Checkout. Cash on Delivery is payable upon delivery; payment is not collected at checkout.</span>
+            <span>Online payments are processed securely by Razorpay Checkout.</span>
           </div>
           {catalogLoadError && <p className="checkout-inline-error" role="alert">{catalogLoadError}</p>}
           {!catalogLoaded && !catalogLoadError && <p className="checkout-inline-note" role="status">Loading current product prices…</p>}
@@ -868,7 +857,7 @@ export default function CheckoutPage() {
             <div className="checkout-section checkout-review">
               <h3>Review Order</h3>
               <p><strong>Deliver to</strong><br />{form.fullName}<br />{form.address}{form.apartment ? `, ${form.apartment}` : ""}<br />{form.city}, {form.state} {form.pinCode}, India<br />{form.phone} · {form.email}</p>
-              <p><strong>Payment method</strong><br />{paymentMethod === "cod" ? "Cash on Delivery — payment is due upon delivery." : `${getCheckoutPaymentLabel(paymentMethod)} — payment will be processed securely by Razorpay.`}</p>
+              <p><strong>Payment method</strong><br />{`${getCheckoutPaymentLabel(paymentMethod)} — payment will be processed securely by Razorpay.`}</p>
               <div className="checkout-summary__totals">
                 <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
                 <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
@@ -879,7 +868,7 @@ export default function CheckoutPage() {
               <div className="checkout-review__actions">
                 <button type="button" className="checkout-secondary-button" onClick={() => setReviewMode(false)}>Edit details</button>
                 <button type="button" className="checkout-primary-button" onClick={() => void handlePlaceOrder()} disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
-                  {isSubmitting ? "PROCESSING…" : paymentMethod === "cod" ? "PLACE COD ORDER" : "PAY WITH RAZORPAY"}
+                  {isSubmitting ? "PROCESSING…" : "PAY WITH RAZORPAY"}
                 </button>
               </div>
               {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
@@ -976,7 +965,7 @@ export default function CheckoutPage() {
               {checkoutPaymentMethods.map((option) => (
                 <label key={option.id} className={`checkout-payment-option ${paymentMethod === option.id ? "is-selected" : ""}`}>
                   <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => { setPaymentMethod(option.id); setErrors((current) => ({ ...current, paymentMethod: "" })); }} />
-                  <span>{option.label} <small>{option.id === "cod" ? "Pay when your order is delivered" : "Pay securely using Razorpay Checkout"}</small></span>
+                  <span>{option.label} <small>Pay securely using Razorpay Checkout</small></span>
                 </label>
               ))}
             </div>

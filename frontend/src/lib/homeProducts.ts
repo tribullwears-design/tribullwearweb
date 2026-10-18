@@ -8,13 +8,16 @@ function compareNewest(first: StorefrontProduct, second: StorefrontProduct) {
 }
 
 export function getNewArrivals(products: readonly StorefrontProduct[], hierarchy: CategoryHierarchy) {
-  return getEligibleStorefrontProducts(products, hierarchy).sort(compareNewest);
+  const eligible = getEligibleStorefrontProducts(products, hierarchy);
+  const flagged = eligible.filter((product) => product.newArrival === true);
+  return (flagged.length ? flagged : eligible).sort(compareNewest);
 }
 
 export function getBestSellingProducts(products: readonly StorefrontProduct[], hierarchy: CategoryHierarchy) {
   const eligibleProducts = getEligibleStorefrontProducts(products, hierarchy);
   const hasSalesData = eligibleProducts.some((product) => Number.isFinite(product.sold) && product.sold > 0);
-  return eligibleProducts
+  const flagged = eligibleProducts.filter((product) => product.bestSelling === true);
+  return (flagged.length ? flagged : eligibleProducts)
     .sort((first, second) => hasSalesData
       ? (second.sold - first.sold || compareNewest(first, second))
       : compareNewest(first, second));

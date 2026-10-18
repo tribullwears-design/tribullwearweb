@@ -12,6 +12,7 @@ import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from ".
 import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { fetchFeaturedProductIds } from "../lib/storefrontSettings";
+import { loadCategoryBanner } from "../lib/categoryBanners";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -122,6 +123,7 @@ export default function Home() {
   const mainCategories = getStorefrontMainCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
+  const [homeBanner, setHomeBanner] = useState<{ image: string; title?: string; subtitle?: string; link?: string } | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
@@ -148,6 +150,14 @@ export default function Home() {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadCategoryBanner("home").then((banner) => {
+      if (active) setHomeBanner(banner);
+    }).catch(() => undefined);
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -269,11 +279,14 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className="hero__images">
             <div className="hero__image">
-              <img src={brandAssets.hero} alt="Tribull collection" />
+              <img src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} />
             </div>
           </div>
           <div className="hero__wash" />
           <div className="hero__copy">
+            {homeBanner?.title && <h1>{homeBanner.title}</h1>}
+            {homeBanner?.subtitle && <p className="hero-description">{homeBanner.subtitle}</p>}
+            {homeBanner?.link && <a className="button button--cream" href={homeBanner.link}>Shop now <ArrowUpRight size={17} /></a>}
             <Reveal variant="blur" delay={0.1}>
               <p className="eyebrow" style={{ display: 'none' }}>The everyday uniform / 2026</p>
             </Reveal>

@@ -22,10 +22,10 @@ describe("checkout options", () => {
     expect(isIndianState("Not an Indian state")).toBe(false);
   });
 
-  it("accepts COD as a simulated checkout method and provides its display label", () => {
-    expect(checkoutPaymentMethods.map((method) => method.id)).toEqual(["upi", "card", "netbanking", "cod"]);
-    expect(isCheckoutPaymentMethod("cod")).toBe(true);
+  it("exposes only online payment methods and rejects COD", () => {
+    expect(checkoutPaymentMethods.map((method) => method.id)).toEqual(["upi", "card", "netbanking"]);
+    expect(isCheckoutPaymentMethod("cod")).toBe(false);
     expect(isCheckoutPaymentMethod("cash")).toBe(false);
-    expect(getCheckoutPaymentLabel("cod")).toBe("Cash on Delivery (COD)");
+    expect(getCheckoutPaymentLabel("upi")).toBe("UPI");
   });
 });

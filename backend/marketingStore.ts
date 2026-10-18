@@ -104,6 +104,16 @@ export async function listOffers(kind: OfferKind) {
   return (await getCollection()).find({ kind }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
 }
 
+export async function findActiveCoupon(code: string, now = new Date()) {
+  const normalized = code.trim().toUpperCase();
+  if (!/^[A-Z0-9_-]{3,32}$/.test(normalized)) return null;
+  const offer = await (await getCollection()).findOne({ kind: "coupon", codeKey: normalized, isActive: true }, { projection: { _id: 0 } });
+  if (!offer) return null;
+  const time = now.getTime();
+  if ((offer.startsAt && Date.parse(offer.startsAt) > time) || (offer.endsAt && Date.parse(offer.endsAt) <= time)) return null;
+  return offer;
+}
+
 async function ensureCodeAvailable(collection: Collection<OfferDocument>, code: string | undefined, excludingId?: string) {
   if (!code) return;
   const existing = await collection.findOne({ codeKey: code.toUpperCase(), ...(excludingId ? { id: { $ne: excludingId } } : {}) }, { projection: { _id: 1 } });

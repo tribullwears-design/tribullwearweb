@@ -8,6 +8,9 @@ export type CategoryBanner = {
   imageUrl: string;
   createdAt: string;
   updatedAt: string;
+  title?: string;
+  subtitle?: string;
+  link?: string;
 };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -27,19 +30,19 @@ export function loadCategoryBanner(categoryId: string) {
   return request<CategoryBanner | null>(`/api/banners/${encodeURIComponent(categoryId)}`, { cache: "no-store" });
 }
 
-export function saveBanner(categoryId: string, image: string) {
+export function saveBanner(categoryId: string, image: string, fields: { title?: string; subtitle?: string; link?: string } = {}) {
   return request<CategoryBanner>("/api/banners", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ categoryId, image }),
+    body: JSON.stringify({ categoryId, image, ...fields }),
   });
 }
 
-export function updateBanner(id: string, categoryId: string, image: string) {
+export function updateBanner(id: string, categoryId: string, image: string, fields: { title?: string; subtitle?: string; link?: string } = {}) {
   return request<CategoryBanner>(`/api/banners/${encodeURIComponent(id)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ categoryId, image }),
+    body: JSON.stringify({ categoryId, image, ...fields }),
   });
 }
 

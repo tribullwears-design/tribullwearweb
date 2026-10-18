@@ -3,7 +3,7 @@ import {
   ClipboardList, DollarSign, FileText, Gift, Globe2, Image, LayoutDashboard,
   LifeBuoy, Menu, MoreHorizontal, PackageCheck, PackageOpen, PanelLeftClose, PanelLeftOpen,
   Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Store, Tag, Truck,
-  UserRound, Users, X,
+  UserRound, Users, Video, X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -34,6 +34,8 @@ type AdminProduct = Omit<Product, "category"> & {
   subcategoryId?: string;
   mainCategory?: string;
   subcategory?: string;
+  newArrival?: boolean;
+  bestSelling?: boolean;
 };
 type StoredProduct = {
   id: string;
@@ -48,6 +50,8 @@ type StoredProduct = {
   sizes: string[];
   colors: string[];
   status: "Active" | "Draft";
+  newArrival?: boolean;
+  bestSelling?: boolean;
   mainCategoryId: string;
   subcategoryId: string;
   mainCategory: string;
@@ -68,7 +72,7 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Banners", icon: Image, screen: "banners" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }, { label: "Promotions", icon: Gift, screen: "promotions" }] },
@@ -95,6 +99,7 @@ const adminRoutes: Record<string, string> = {
   coupons: "/admin26/marketing/coupons",
   promotions: "/admin26/marketing/promotions",
   banners: "/admin26/products/banners",
+  videos: "/admin26/products/videos",
   collections: "/admin26/content/collections",
   featured: "/admin26/content/featured-products",
   "social-media": "/admin26/content/social-media",
@@ -123,7 +128,7 @@ const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Nec
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
 
 function permissionSectionForScreen(screen: string): AdminPermissionSection {
-  if (["products", "add-product", "edit-product", "categories", "inventory", "banners"].includes(screen)) return "products";
+  if (["products", "add-product", "edit-product", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
@@ -139,8 +144,8 @@ function ReportingRangeControl({ range, onChange }: { range: DashboardRange; onC
 function SectionHeading({ title, action, onAction }: { title: string; action?: string; onAction?: () => void }) { return <div className="admin-section-heading"><h2>{title}</h2>{action && <button className="admin-text-button" type="button" onClick={onAction}>{action}<ChevronRight size={15} /></button>}</div>; }
 function EmptyState({ title, message, action, onAction }: { title: string; message: string; action?: string; onAction?: () => void }) { return <div className="admin-empty-state"><div className="admin-empty-state__icon"><Box size={20} /></div><strong>{title}</strong><span>{message}</span>{action && <button type="button" className="admin-primary-button" onClick={onAction}>{action}</button>}</div>; }
 
-function ProductTable({ products, onSelect, onEdit, onAdjustStock, alignActionsRight = false }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void; onEdit?: (product: AdminProduct) => void; onAdjustStock?: (product: AdminProduct) => void; alignActionsRight?: boolean }) {
-  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div>{onSelect && <button className="admin-small-button" type="button" onClick={() => onSelect(product)}>View</button>}{onEdit && <button className="admin-small-button" type="button" onClick={() => onEdit(product)}>Edit</button>}{onAdjustStock && <button className="admin-small-button" type="button" onClick={() => onAdjustStock(product)}>Adjust</button>}</div></td></tr>)}</tbody></table></div>;
+function ProductTable({ products, onSelect, onEdit, onAdjustStock, onDelete, deletingProductId, alignActionsRight = false }: { products: AdminProduct[]; onSelect?: (product: AdminProduct) => void; onEdit?: (product: AdminProduct) => void; onAdjustStock?: (product: AdminProduct) => void; onDelete?: (product: AdminProduct) => void; deletingProductId?: string | null; alignActionsRight?: boolean }) {
+  return <div className="admin-table-scroll"><table className={`admin-table${alignActionsRight ? " admin-products-table" : ""}`}><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th className="admin-table-actions-heading">Actions</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td><div className="admin-product-name"><img className="admin-real-product-thumb" src={product.image} alt="" /><strong>{product.name}</strong></div></td><td>{product.mainCategory && product.subcategory ? `${product.mainCategory} · ${product.subcategory}` : product.category}</td><td><strong>₹{product.price.toLocaleString("en-IN")}</strong></td><td>{product.stock}</td><td><StatusPill status={product.stock === 0 ? "Out of stock" : product.stock < 10 ? "Low stock" : product.status} /></td><td className="admin-table-actions"><div>{onSelect && <button className="admin-small-button" type="button" onClick={() => onSelect(product)}>View</button>}{onEdit && <button className="admin-small-button" type="button" onClick={() => onEdit(product)}>Edit</button>}{onAdjustStock && <button className="admin-small-button" type="button" onClick={() => onAdjustStock(product)}>Adjust</button>}{onDelete && <button className="admin-small-button" type="button" disabled={deletingProductId === product.id} onClick={() => onDelete(product)}>{deletingProductId === product.id ? "Deleting..." : "Delete"}</button>}</div></td></tr>)}</tbody></table></div>;
 }
 function OrderTable({ orders, onSelect }: { orders: AdminOrder[]; onSelect: (order: AdminOrder) => void }) {
   return orders.length ? <div className="admin-table-scroll"><table className="admin-table">
@@ -375,7 +380,7 @@ function OfferManagement({ kind }: { kind: AdminOfferKind }) {
         throw new Error(details?.error || `${heading} could not be saved.`);
       }
       const saved = await response.json() as AdminOffer;
-      setOffers((current) => editingId ? current.map((offer) => offer.id === saved.id ? saved : offer) : [saved, ...current]);
+      await refresh();
       toast.success(`${heading.slice(0, -1)} saved.`);
       reset();
     } catch (saveError) {
@@ -396,7 +401,7 @@ function OfferManagement({ kind }: { kind: AdminOfferKind }) {
         const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
         throw new Error(details?.error || `${heading} could not be deleted.`);
       }
-      setOffers((current) => current.filter((item) => item.id !== offer.id));
+      await refresh();
       toast.success(`${heading.slice(0, -1)} deleted.`);
     } catch (deleteError) {
       const message = deleteError instanceof Error ? deleteError.message : `${heading} could not be deleted.`;
@@ -422,9 +427,19 @@ function OfferManagement({ kind }: { kind: AdminOfferKind }) {
     <div className="admin-collection-list"><SectionHeading title={`Saved ${heading.toLowerCase()}`} />{loading ? <p>Loading {heading.toLowerCase()}...</p> : offers.length ? offers.map((offer) => <div className="admin-management-row" key={offer.id}><div><strong>{offer.name}{offer.code ? ` · ${offer.code}` : ""}</strong><span>{offer.discountType === "percentage" ? `${offer.value}% off` : `₹${offer.value.toLocaleString("en-IN")} off`} · minimum ₹{offer.minimumOrderAmount.toLocaleString("en-IN")}</span><span>{offer.isActive ? "Active configuration" : "Inactive"}{offer.startsAt ? ` · Starts ${new Date(offer.startsAt).toLocaleString("en-IN")}` : ""}{offer.endsAt ? ` · Ends ${new Date(offer.endsAt).toLocaleString("en-IN")}` : ""}</span></div><div className="admin-admin-actions"><button className="admin-small-button" type="button" onClick={() => edit(offer)}>Edit</button><button className="admin-small-button" type="button" onClick={() => void remove(offer)}>Delete</button></div></div>) : <p>No {heading.toLowerCase()} configured.</p>}</div>
   </AdminPanel>;
 }
+type AdminVideo = { id: string; title: string; url: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string };
+function VideoManagement() {
+  const [videos, setVideos] = useState<AdminVideo[]>([]); const [form, setForm] = useState({ title: "", url: "", thumbnail: "", category: "", isActive: true }); const [editingId, setEditingId] = useState<string | null>(null); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [error, setError] = useState("");
+  const refresh = async () => { setLoading(true); try { const response = await apiFetch("/api/admin/videos", { cache: "no-store" }); if (!response.ok) throw new Error("Unable to load videos"); setVideos(await response.json() as AdminVideo[]); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to load videos"); } finally { setLoading(false); } };
+  useEffect(() => { void refresh(); }, []);
+  const reset = () => { setEditingId(null); setForm({ title: "", url: "", thumbnail: "", category: "", isActive: true }); };
+  const save = async (event: React.FormEvent) => { event.preventDefault(); setSaving(true); setError(""); try { const response = await apiFetch(editingId ? `/api/admin/videos/${editingId}` : "/api/admin/videos", { method: editingId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) }); if (!response.ok) { const body = await response.json() as { error?: string }; throw new Error(body.error || "Unable to save video"); } await refresh(); reset(); toast.success("Video saved."); } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to save video"); } finally { setSaving(false); } };
+  const remove = async (video: AdminVideo) => { if (!window.confirm(`Delete “${video.title}”?`)) return; const response = await apiFetch(`/api/admin/videos/${video.id}`, { method: "DELETE" }); if (!response.ok) { setError("Unable to delete video"); return; } await refresh(); toast.success("Video deleted."); };
+  return <AdminPanel title="Videos"><form className="admin-form" onSubmit={save}><label><span>Title</span><input required maxLength={120} value={form.title} disabled={saving} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label><label><span>Video URL</span><input required type="url" placeholder="https://... or /products/video.mp4" value={form.url} disabled={saving} onChange={(event) => setForm({ ...form, url: event.target.value })} /></label><label><span>Thumbnail URL (optional)</span><input value={form.thumbnail} disabled={saving} onChange={(event) => setForm({ ...form, thumbnail: event.target.value })} /></label><label><span>Category (optional)</span><input value={form.category} disabled={saving} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label><label className="admin-toggle-label"><span>Active</span><input type="checkbox" checked={form.isActive} disabled={saving} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} /><strong>{form.isActive ? "Active" : "Inactive"}</strong></label><div className="admin-form-actions"><button className="admin-primary-button" disabled={saving}>{saving ? "Saving..." : editingId ? "Save Video" : "Add Video"}</button>{editingId && <button type="button" className="admin-secondary-button" onClick={reset}>Cancel</button>}</div></form>{error && <p className="admin-image-error" role="alert">{error}</p>}<div className="admin-collection-list"><SectionHeading title="Saved videos" />{loading ? <p>Loading videos...</p> : videos.length ? videos.map((video) => <div className="admin-management-row" key={video.id}><div><strong>{video.title}</strong><span>{video.category || "Uncategorized"} · {video.isActive ? "Active" : "Inactive"} · {new Date(video.createdAt).toLocaleDateString("en-IN")}</span></div><div className="admin-admin-actions"><a className="admin-small-button" href={video.url} target="_blank" rel="noreferrer">View</a><button className="admin-small-button" type="button" onClick={() => { setEditingId(video.id); setForm({ title: video.title, url: video.url, thumbnail: video.thumbnail || "", category: video.category || "", isActive: video.isActive }); }}>Edit</button><button className="admin-small-button" type="button" onClick={() => void remove(video)}>Delete</button></div></div>) : <p>No videos saved.</p>}</div></AdminPanel>;
+}
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
 
-type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string };
+type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean };
 const productTypeOptions = [
   { value: "round-neck", label: "Round Neck" },
   { value: "oversized", label: "Oversized" },
@@ -444,6 +459,8 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
+    <label className="admin-toggle-label"><span>New Arrival</span><input type="checkbox" checked={productForm.newArrival} onChange={(event) => setProductForm((current) => ({ ...current, newArrival: event.target.checked }))} /><strong>{productForm.newArrival ? "Enabled" : "Disabled"}</strong></label>
+    <label className="admin-toggle-label"><span>Best Selling</span><input type="checkbox" checked={productForm.bestSelling} onChange={(event) => setProductForm((current) => ({ ...current, bestSelling: event.target.checked }))} /><strong>{productForm.bestSelling ? "Enabled" : "Disabled"}</strong></label>
     <label><span>Main Category</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category (optional)</option>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
     <label><span>Subcategory / Industry</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || !subcategories.length} value={productForm.subcategory} onChange={(event) => setProductForm({ ...productForm, subcategory: event.target.value })}><option value="">Select subcategory (optional)</option>{subcategories.map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
     <label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label>
@@ -691,6 +708,9 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
   const [categoryId, setCategoryId] = useState("");
   const [image, setImage] = useState("");
   const [editing, setEditing] = useState<CategoryBanner | null>(null);
+  const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [link, setLink] = useState("");
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const refresh = async () => {
@@ -715,6 +735,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
   const resetForm = () => {
     setEditing(null);
     setImage("");
+    setTitle(""); setSubtitle(""); setLink("");
     setCategoryId(categories[0]?.value || "");
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
@@ -763,8 +784,9 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
     setSaving(true);
     setError("");
     try {
-      if (editing) await updateBanner(editing.id, categoryId, image);
-      else await saveBanner(categoryId, image);
+      const fields = { title, subtitle, link };
+      if (editing) await updateBanner(editing.id, categoryId, image, fields);
+      else await saveBanner(categoryId, image, fields);
       await refresh();
       resetForm();
     } catch (cause) {
@@ -779,6 +801,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
     setEditing(banner);
     setCategoryId(banner.categoryId);
     setImage(banner.image);
+    setTitle(banner.title || ""); setSubtitle(banner.subtitle || ""); setLink(banner.link || "");
     setError("");
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
@@ -798,7 +821,10 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
   return <section className="admin-panel admin-banner-management">
     <SectionHeading title="Category Banners" />
     <form className="admin-banner-form" onSubmit={submit}>
-      <label><span>Main Category</span><select required disabled={categoriesLoading || categories.length === 0 || saving} value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Select Category</option>{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+      <label><span>Banner placement</span><select required disabled={saving} value={categoryId} onChange={(event) => setCategoryId(event.target.value)}><option value="">Select placement</option><option value="home">Home Page Banner</option>{categories.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+      <label><span>Banner title (optional)</span><input maxLength={120} value={title} disabled={saving} onChange={(event) => setTitle(event.target.value)} /></label>
+      <label><span>Banner subtitle (optional)</span><input maxLength={240} value={subtitle} disabled={saving} onChange={(event) => setSubtitle(event.target.value)} /></label>
+      <label><span>Banner link (optional)</span><input maxLength={500} placeholder="/products or https://..." value={link} disabled={saving} onChange={(event) => setLink(event.target.value)} /></label>
       <div className="admin-banner-image-control">
         <span>Banner Image</span>
         <div className="admin-banner-image-preview">{image ? <img src={image} alt="Banner preview" /> : <span>No banner selected</span>}</div>
@@ -892,12 +918,14 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [isProductEditorOpen, setIsProductEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<StoredProduct | null>(null);
   const [editingProductTarget, setEditingProductTarget] = useState<AdminProduct | null>(null);
-  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft" });
+  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft", newArrival: false, bestSelling: false });
   const [editingProductCategory, setEditingProductCategory] = useState("");
   const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
   const [productUpdateError, setProductUpdateError] = useState("");
   const productUpdateInFlight = useRef(false);
   const [databaseProducts, setDatabaseProducts] = useState<StoredProduct[]>([]);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+  const deletingProductRef = useRef<string | null>(null);
   const [productsError, setProductsError] = useState("");
   const [productsLoading, setProductsLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
@@ -933,7 +961,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [generalSettingsError, setGeneralSettingsError] = useState("");
   const [generalSettingsNotice, setGeneralSettingsNotice] = useState("");
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" });
+  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false });
   const [editProductLoading, setEditProductLoading] = useState(initialScreen === "edit-product");
   const [editProductError, setEditProductError] = useState("");
   const editProductRequest = useRef<AbortController | null>(null);
@@ -966,6 +994,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           colors: product.colors.join(", "),
           productType: product.productType || "",
           status: product.status,
+          newArrival: product.newArrival === true,
+          bestSelling: product.bestSelling === true,
         });
       })
       .catch((error: unknown) => {
@@ -1013,6 +1043,29 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setProductsError(getAdminProductLoadError());
     } finally {
       setProductsLoading(false);
+    }
+  };
+  const deleteSavedProduct = async (product: AdminProduct) => {
+    if (!product.id || deletingProductRef.current) return;
+    if (!window.confirm(`Delete "${product.name}"? Historical order items will remain unchanged.`)) return;
+    deletingProductRef.current = product.id;
+    setDeletingProductId(product.id);
+    try {
+      const response = await apiFetch(`/api/products/${encodeURIComponent(product.id)}`, { method: "DELETE" });
+      if (!response.ok) {
+        const details = await response.json().catch(() => undefined) as { error?: string } | undefined;
+        throw new Error(details?.error || "Product could not be deleted.");
+      }
+      setDatabaseProducts((current) => current.filter((item) => item.id !== product.id));
+      await refreshProducts();
+      window.dispatchEvent(new Event("tribull-products-updated"));
+      toast.success(`${product.name} deleted.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product could not be deleted.";
+      toast.error("Product was not deleted.", { description: message });
+    } finally {
+      deletingProductRef.current = null;
+      setDeletingProductId(null);
     }
   };
   useEffect(() => { void refreshProducts(); }, []);
@@ -1182,6 +1235,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       subcategoryId: product.subcategoryId,
       mainCategory: product.mainCategory,
       subcategory: product.subcategory,
+      newArrival: product.newArrival === true,
+      bestSelling: product.bestSelling === true,
     })), [databaseProducts]);
     const dashboardMetrics = useMemo(() => getDashboardMetrics(orders, range), [orders, range]);
     const customers = useMemo(() => {
@@ -1307,6 +1362,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           sizes: productForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
           colors: productForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
           status: productForm.status,
+          newArrival: productForm.newArrival,
+          bestSelling: productForm.bestSelling,
           mainCategoryId: productForm.category,
           subcategoryId: productForm.subcategory,
         }),
@@ -1324,7 +1381,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       } else {
         await refreshProducts();
         setSavedNotice("Product saved successfully.");
-        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active" }));
+        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false }));
         toast.success("Product added successfully!");
         window.setTimeout(() => setSavedNotice(""), 2500);
       }
@@ -1430,6 +1487,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         sizes: savedProduct.sizes.join(", "),
         colors: savedProduct.colors.join(", "),
         status: savedProduct.status,
+        newArrival: savedProduct.newArrival === true,
+        bestSelling: savedProduct.bestSelling === true,
       });
     } catch (error) {
       if (!request.signal.aborted) setEditProductError(error instanceof Error && error.message === "Unable to load product details. Please try again."
@@ -1455,6 +1514,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       || editingProductForm.sizes !== editingProduct.sizes.join(", ")
       || editingProductForm.colors !== editingProduct.colors.join(", ")
       || editingProductForm.status !== editingProduct.status
+      || editingProductForm.newArrival !== (editingProduct.newArrival === true)
+      || editingProductForm.bestSelling !== (editingProduct.bestSelling === true)
     );
     if (!force && hasUnsavedChanges && !window.confirm("Discard your unsaved changes?")) return;
     editProductRequest.current?.abort();
@@ -1505,6 +1566,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           sizes: editingProductForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
           colors: editingProductForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
           status: editingProductForm.status,
+          newArrival: editingProductForm.newArrival,
+          bestSelling: editingProductForm.bestSelling,
           mainCategoryId: editingProductForm.category,
           subcategoryId: editingProductForm.subcategory,
         }),
@@ -1858,14 +1921,14 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           <label>Stock<select value={productStockFilter} onChange={(event) => { setProductStockFilter(event.target.value); setProductPage(1); }}><option>All stock</option><option>In stock</option><option>Low stock</option><option>Out of stock</option></select></label>
           <label>Sort by<select value={productSort} onChange={(event) => { setProductSort(event.target.value); setProductPage(1); }}><option value="recent">Recently added</option><option value="name">Name</option><option value="price-ascending">Price: low to high</option><option value="price-descending">Price: high to low</option><option value="stock-ascending">Lowest stock</option></select></label>
         </div>
-        {pagedProducts.totalItems ? <><ProductTable products={pagedProducts.items} onSelect={openProduct} onEdit={canEdit("products") ? editProduct : undefined} alignActionsRight /><PaginationControls page={pagedProducts.page} totalPages={pagedProducts.totalPages} totalItems={pagedProducts.totalItems} pageSize={10} onPageChange={setProductPage} /></> : <EmptyState title="No products match these filters." message="Try changing the search or product filters." />}
+        {pagedProducts.totalItems ? <><ProductTable products={pagedProducts.items} onSelect={openProduct} onEdit={canEdit("products") ? editProduct : undefined} onDelete={canEdit("products") ? deleteSavedProduct : undefined} deletingProductId={deletingProductId} alignActionsRight /><PaginationControls page={pagedProducts.page} totalPages={pagedProducts.totalPages} totalItems={pagedProducts.totalItems} pageSize={10} onPageChange={setProductPage} /></> : <EmptyState title="No products match these filters." message="Try changing the search or product filters." />}
       </>}
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
+    if (screen === "videos") return <VideoManagement />;
     if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
     if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} submitLabel="Save Changes" />}</AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><form className="admin-form" onSubmit={saveProduct}>{["name", "description", "price", "compareAt", "stock", "sizes", "colors"].map((field) => <label key={field}><span>{field === "compareAt" ? "Compare-at price" : field.charAt(0).toUpperCase() + field.slice(1)}</span>{field === "description" ? <textarea value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} /> : <input required={field === "name" || field === "price"} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductForm({ ...productForm, [field]: event.target.value })} />}</label>)}<label className="admin-product-image-field"><span>Image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => { setProductForm((current) => ({ ...current, image: "" })); setImageError(""); }}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={handleProductImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}{imageError && <small className="admin-image-error">{imageError}</small>}</label><label><span>Category</span><select value={productForm.category} onChange={(event) => setProductForm({ ...productForm, category: event.target.value })}>{categories.map((category) => <option key={category.label} value={category.label}>{category.label}</option>)}</select></label><label><span>Status</span><select value={productForm.status} onChange={(event) => setProductForm({ ...productForm, status: event.target.value })}><option>Active</option><option>Draft</option></select></label><div className="admin-form-actions"><button className="admin-primary-button" type="submit">Save Product</button><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Cancel</button></div>{savedNotice && <p className="admin-form-success">{savedNotice}</p>}</form></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
     if (screen === "inventory") return <AdminPanel title="Inventory">
       {productsError ? <EmptyState title="Inventory unavailable" message={productsError} action="Retry" onAction={() => void refreshProducts()} /> : productsLoading ? <p>Loading inventory...</p> : <>
