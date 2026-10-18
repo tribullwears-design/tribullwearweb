@@ -59,11 +59,6 @@ export default function ProductDetailPage() {
   const [isAdded, setIsAdded] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [sizeError, setSizeError] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [pincodeFeedback, setPincodeFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({
-    kind: "idle",
-    message: "",
-  });
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; discountType: "percentage" | "fixed"; value: number; minimumOrderAmount: number } | null>(null);
   const [couponFeedback, setCouponFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({ kind: "idle", message: "" });
@@ -220,6 +215,15 @@ export default function ProductDetailPage() {
     }
   }, [product?.image]);
 
+  useEffect(() => {
+    if (!product || !appliedCoupon) return;
+    const currentPrice = Number(product.price.replace(/[^0-9]/g, ""));
+    if (currentPrice * quantity < appliedCoupon.minimumOrderAmount) {
+      setAppliedCoupon(null);
+      setCouponFeedback({ kind: "error", message: `Coupon removed: minimum order is ₹${appliedCoupon.minimumOrderAmount.toLocaleString("en-IN")}.` });
+    }
+  }, [product, appliedCoupon, quantity, selectedSize, activeColor]);
+
   if (!product) {
     return (
       <div className="product-detail-page">
@@ -234,7 +238,8 @@ export default function ProductDetailPage() {
   const isOutOfStock = typeof product.stock === "number" && product.stock <= 0;
   const originalPriceValue = resolveOriginalPrice(product) ?? (product.basePrice && product.basePrice > priceValue ? product.basePrice : undefined);
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
-  const memberPrice = Math.floor(priceValue * 0.95);
+  const originalProductPrice = typeof product.basePrice === "number" && product.basePrice > priceValue ? product.basePrice : priceValue;
+  const productDiscountPerUnit = Math.max(0, originalProductPrice - priceValue);
   const productDescription = product.description || "Product details have not been added yet.";
 
   const applyCoupon = async () => {
@@ -244,10 +249,19 @@ export default function ProductDetailPage() {
       const response = await apiFetch(`/api/marketing/coupons/${encodeURIComponent(code)}`, { cache: "no-store" });
       const result = await response.json() as { error?: string; id?: string; code?: string; name?: string; discountType?: "percentage" | "fixed"; value?: number; minimumOrderAmount?: number };
       if (!response.ok || !result.id || !result.code || !result.name || !result.discountType || typeof result.value !== "number" || typeof result.minimumOrderAmount !== "number") throw new Error(result.error || "Coupon is invalid or unavailable.");
+      if (priceValue * quantity < result.minimumOrderAmount) throw new Error(`This coupon requires a minimum order of ₹${result.minimumOrderAmount.toLocaleString("en-IN")}.`);
       setAppliedCoupon({ code: result.code, name: result.name, discountType: result.discountType, value: result.value, minimumOrderAmount: result.minimumOrderAmount });
       setCouponFeedback({ kind: "success", message: `${result.name}: ${result.discountType === "percentage" ? `${result.value}% off` : `₹${result.value.toLocaleString("en-IN")} off`}. Minimum order ₹${result.minimumOrderAmount.toLocaleString("en-IN")}.` });
     } catch (error) { setAppliedCoupon(null); setCouponFeedback({ kind: "error", message: error instanceof Error ? error.message : "Coupon is invalid or unavailable." }); }
   };
+
+  const couponDiscountPerUnit = appliedCoupon && priceValue * quantity >= appliedCoupon.minimumOrderAmount
+    ? appliedCoupon.discountType === "percentage" ? priceValue * appliedCoupon.value / 100 : Math.min(appliedCoupon.value, priceValue * quantity) / quantity
+    : 0;
+  const productSubtotal = priceValue * quantity;
+  const productDiscountTotal = productDiscountPerUnit * quantity;
+  const couponDiscountTotal = Math.min(productSubtotal, Math.round(couponDiscountPerUnit * quantity * 100) / 100);
+  const finalProductTotal = Math.max(0, productSubtotal - couponDiscountTotal);
 
   const benefitItems = [
     { title: "Fit", detail: "Relaxed" },
@@ -337,23 +351,6 @@ export default function ProductDetailPage() {
     void toggleWishlistItem(productId, !isWishlisted).catch(() => undefined);
   };
 
-  const handlePincodeSubmit = () => {
-    const numericPin = pincode.replace(/\D/g, "");
-
-    if (!/^\d{6}$/.test(numericPin)) {
-      setPincodeFeedback({
-        kind: "error",
-        message: "Please enter a valid 6-digit PIN code.",
-      });
-      return;
-    }
-
-    setPincodeFeedback({
-      kind: "success",
-      message: `Estimated delivery for ${numericPin}: 2–5 business days in this service area.`,
-    });
-  };
-
   return (
     <div className="product-detail-page">
       <div className="product-detail-page__announcement" aria-label="Announcement">
@@ -422,7 +419,7 @@ export default function ProductDetailPage() {
 
             <ProductPrice
               sellingPrice={product.price}
-              originalPrice={resolveOriginalPrice(product)}
+              originalPrice={originalPriceValue}
               productName={product.name}
               className="product-price--detail"
             />
@@ -434,11 +431,6 @@ export default function ProductDetailPage() {
             )}
 
             <p className="product-detail-panel__description">{productDescription}</p>
-
-            <div className="product-detail-member-price">
-              <span>Member price <b>₹{memberPrice.toLocaleString("en-IN")}</b></span>
-              <small>Join the Tribull community for member-only savings.</small>
-            </div>
 
             {availableSizes.length > 0 && <div className="product-detail-option">
               <div className="product-detail-option__header">
@@ -510,6 +502,14 @@ export default function ProductDetailPage() {
               {couponFeedback.kind !== "idle" && <p className={couponFeedback.kind === "success" ? "is-success" : "is-error"}>{couponFeedback.message}</p>}
             </div>
 
+            <div className="product-detail-price-summary" aria-label="Price summary">
+              <div><span>Original product price</span><strong>₹{(originalProductPrice * quantity).toLocaleString("en-IN")}</strong></div>
+              {productDiscountTotal > 0 && <div><span>Product discount</span><strong>-₹{productDiscountTotal.toLocaleString("en-IN")}</strong></div>}
+              {appliedCoupon && couponDiscountTotal > 0 && <div><span>Coupon {appliedCoupon.code}</span><strong>-₹{couponDiscountTotal.toLocaleString("en-IN")}</strong></div>}
+              <div className="product-detail-price-summary__total"><span>Final price</span><strong>₹{finalProductTotal.toLocaleString("en-IN")}</strong></div>
+              {appliedCoupon && <button type="button" onClick={() => { setAppliedCoupon(null); setCouponFeedback({ kind: "idle", message: "" }); }}>Remove Coupon</button>}
+            </div>
+
             <div className="product-detail-cta-row">
               <div className="product-detail-qty" aria-label="Quantity selector">
                 <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
@@ -544,27 +544,6 @@ export default function ProductDetailPage() {
                 <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
                 <span>{isWishlisted ? "Saved" : "Wishlist"}</span>
               </button>
-            </div>
-
-            <div className="product-detail-pincode">
-              <label htmlFor="product-pin">Delivery check</label>
-              <div className="product-detail-pincode__field">
-                <input
-                  id="product-pin"
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pincode}
-                  placeholder="Enter 6-digit PIN"
-                  onChange={(event) => setPincode(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                />
-                <button type="button" onClick={handlePincodeSubmit}>Check</button>
-              </div>
-              {pincodeFeedback.kind !== "idle" ? (
-                <p className={pincodeFeedback.kind === "success" ? "is-success" : "is-error"}>{pincodeFeedback.message}</p>
-              ) : (
-                <p className="product-detail-pincode__hint">Service checks are configured for supported delivery zones.</p>
-              )}
             </div>
 
             <div className="product-detail-features" aria-label="Performance details">

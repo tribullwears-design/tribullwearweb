@@ -459,7 +459,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
     <label><span>Price</span><input required type="number" min="0" step="any" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
     <label><span>Compare-at price</span><input type="number" min="0" step="any" value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
-    <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.discountType === "percentage").map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.value}% off</option>)}</select></label>
+    <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.isActive).map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.discountType === "percentage" ? `${offer.value}% off` : `₹${offer.value.toLocaleString("en-IN")} off`}</option>)}</select></label>
     <label><span>Product type</span><select required value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
@@ -1379,7 +1379,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           status: productForm.status,
           newArrival: productForm.newArrival,
           bestSelling: productForm.bestSelling,
-          ...(productForm.discountOfferId ? { discountOfferId: productForm.discountOfferId } : {}),
+          ...(screen === "edit-product" ? { discountOfferId: productForm.discountOfferId || null } : productForm.discountOfferId ? { discountOfferId: productForm.discountOfferId } : {}),
           mainCategoryId: productForm.category,
           subcategoryId: productForm.subcategory,
         }),
@@ -1586,7 +1586,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           status: editingProductForm.status,
           newArrival: editingProductForm.newArrival,
           bestSelling: editingProductForm.bestSelling,
-          ...(editingProductForm.discountOfferId ? { discountOfferId: editingProductForm.discountOfferId } : {}),
+          discountOfferId: editingProductForm.discountOfferId || null,
           mainCategoryId: editingProductForm.category,
           subcategoryId: editingProductForm.subcategory,
         }),

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Collection } from "mongodb";
+import { ObjectId, type Collection, type WithId } from "mongodb";
 import { getDatabase } from "./database.js";
 
 export const offerKinds = ["discount", "coupon", "promotion"] as const;
@@ -101,13 +101,17 @@ export function validateOffer(value: unknown, kind: OfferKind): OfferInput {
 
 export async function listOffers(kind: OfferKind) {
   if (!offerKinds.includes(kind)) throw new OfferValidationError("Offer type is invalid");
-  return (await getCollection()).find({ kind }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray();
+  const offers = await (await getCollection()).find({ kind }).sort({ createdAt: -1 }).toArray();
+  return offers.map((offer) => {
+    const { _id, ...fields } = offer as WithId<OfferDocument>;
+    return { ...fields, id: fields.id || _id.toString() };
+  });
 }
 
 export async function findActiveCoupon(code: string, now = new Date()) {
   const normalized = code.trim().toUpperCase();
   if (!/^[A-Z0-9_-]{3,32}$/.test(normalized)) return null;
-  const offer = await (await getCollection()).findOne({ kind: "coupon", codeKey: normalized, isActive: true }, { projection: { _id: 0 } });
+  const offer = await (await getCollection()).findOne({ kind: "coupon", isActive: true, $or: [{ codeKey: normalized }, { code: normalized }] }, { projection: { _id: 0 } });
   if (!offer) return null;
   const time = now.getTime();
   if ((offer.startsAt && Date.parse(offer.startsAt) > time) || (offer.endsAt && Date.parse(offer.endsAt) <= time)) return null;
@@ -116,7 +120,8 @@ export async function findActiveCoupon(code: string, now = new Date()) {
 
 export async function findActiveDiscount(id: string, now = new Date()) {
   if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
-  const offer = await (await getCollection()).findOne({ id, kind: "discount", isActive: true }, { projection: { _id: 0 } });
+  const identifierFilter = ObjectId.isValid(id) ? { $or: [{ id }, { _id: new ObjectId(id) }] } : { id };
+  const offer = await (await getCollection()).findOne({ ...identifierFilter, kind: "discount", isActive: true }, { projection: { _id: 0 } });
   if (!offer) return null;
   const time = now.getTime();
   if ((offer.startsAt && Date.parse(offer.startsAt) > time) || (offer.endsAt && Date.parse(offer.endsAt) <= time)) return null;

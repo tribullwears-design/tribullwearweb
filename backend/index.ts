@@ -616,7 +616,10 @@ async function startServer() {
     }
   });
   app.get("/api/admin/product-discounts", requireAdminPermission("products", "view"), async (_req, res) => {
-    try { res.json((await listOffers("discount")).filter((offer) => offer.isActive)); } catch (error) { sendOfferError(res, error); }
+    try {
+      const now = Date.now();
+      res.json((await listOffers("discount")).filter((offer) => offer.isActive && (!offer.startsAt || Date.parse(offer.startsAt) <= now) && (!offer.endsAt || Date.parse(offer.endsAt) > now)));
+    } catch (error) { sendOfferError(res, error); }
   });
   app.get("/api/marketing/coupons/:code", async (req, res) => {
     try { const offer = await findActiveCoupon(req.params.code); if (!offer) return res.status(404).json({ error: "Coupon is invalid or inactive" }); res.json(offer); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Coupon validation failed" }); }
@@ -657,7 +660,7 @@ async function startServer() {
       res.json(product);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
-      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") || message.includes("unsupported") ? 400 : 500;
+      const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("valid") || message.includes("Invalid") || message.includes("must be") || message.includes("unsupported") || message.includes("active or does not exist") ? 400 : 500;
       res.status(status).json({ error: message });
     }
   });

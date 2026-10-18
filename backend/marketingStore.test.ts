@@ -84,4 +84,17 @@ describe("discount offers", () => {
     await expect(findActiveDiscount("discount-1", new Date("2026-10-18T00:00:00.000Z"))).resolves.toMatchObject({ id: "discount-1", kind: "discount" });
     expect(mocks.findOne).toHaveBeenCalledWith({ id: "discount-1", kind: "discount", isActive: true }, { projection: { _id: 0 } });
   });
+
+  it("supports legacy Mongo ObjectId discount references", async () => {
+    mocks.findOne.mockResolvedValue({ id: "507f1f77bcf86cd799439011", kind: "discount", isActive: true, value: 20, discountType: "percentage", startsAt: null, endsAt: null });
+    await expect(findActiveDiscount("507f1f77bcf86cd799439011")).resolves.toMatchObject({ kind: "discount" });
+    expect(mocks.findOne).toHaveBeenCalledWith({ $or: [{ id: "507f1f77bcf86cd799439011" }, { _id: expect.anything() }], kind: "discount", isActive: true }, { projection: { _id: 0 } });
+  });
+
+  it("finds coupons saved with either the normalized key or code field", async () => {
+    mocks.findOne.mockResolvedValue({ code: "SAVE10", kind: "coupon", isActive: true, startsAt: null, endsAt: null });
+    const { findActiveCoupon } = await import("./marketingStore.js");
+    await expect(findActiveCoupon("save10")).resolves.toMatchObject({ code: "SAVE10" });
+    expect(mocks.findOne).toHaveBeenCalledWith({ kind: "coupon", isActive: true, $or: [{ codeKey: "SAVE10" }, { code: "SAVE10" }] }, { projection: { _id: 0 } });
+  });
 });

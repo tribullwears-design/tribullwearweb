@@ -28,7 +28,7 @@ export type ProductDocument = {
   updatedAt: string;
 };
 
-type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice">;
+type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice"> & { discountOfferId?: string | null };
 
 const productTypes = ["round-neck", "oversized", "acid-oversized", "hoodie"] as const;
 
@@ -175,7 +175,7 @@ export async function adjustProductInventory(id: string, adjustment: unknown) {
 
 export async function createProduct(input: ProductInput) {
   validateProduct(input);
-  if (input.discountOfferId !== undefined) {
+  if (input.discountOfferId !== undefined && input.discountOfferId !== null) {
     if (typeof input.discountOfferId !== "string" || !await findActiveDiscount(input.discountOfferId)) throw new Error("Selected discount is not active or does not exist");
   }
   const categories = await listCategories();
@@ -218,7 +218,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     status: input.status === undefined ? existing.status : input.status,
     newArrival: input.newArrival === undefined ? existing.newArrival ?? false : input.newArrival,
     bestSelling: input.bestSelling === undefined ? existing.bestSelling ?? false : input.bestSelling,
-    discountOfferId: input.discountOfferId === undefined ? existing.discountOfferId : input.discountOfferId,
+    discountOfferId: input.discountOfferId === null ? undefined : input.discountOfferId === undefined ? existing.discountOfferId : input.discountOfferId,
     mainCategoryId: input.mainCategoryId === undefined ? existing.mainCategoryId : input.mainCategoryId,
     subcategoryId: input.subcategoryId === undefined ? existing.subcategoryId : input.subcategoryId,
   };
@@ -227,10 +227,12 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
   const category = updatedFields.mainCategoryId && updatedFields.subcategoryId
     ? resolveCategory(await listCategories(), updatedFields.mainCategoryId, updatedFields.subcategoryId)
     : null;
+  const { discountOfferId, ...fieldsToSet } = updatedFields;
   const updated = await collection.findOneAndUpdate(
     filter,
     { $set: {
-      ...updatedFields,
+      ...fieldsToSet,
+      ...(discountOfferId !== undefined ? { discountOfferId } : {}),
       ...(category ? {
         mainCategoryId: category.main.value,
         subcategoryId: category.subcategory.value,
@@ -238,7 +240,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
         subcategory: category.subcategory.label,
       } : {}),
       updatedAt: new Date().toISOString(),
-    } },
+    }, ...(input.discountOfferId === null ? { $unset: { discountOfferId: "" } } : {}) },
     { returnDocument: "after" },
   );
   return updated ? normalizeProduct(updated, false) : null;
