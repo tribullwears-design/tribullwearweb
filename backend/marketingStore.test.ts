@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createOffer, OfferConflictError, OfferValidationError, validateOffer } from "./marketingStore.js";
+import { calculateOfferDiscount, createOffer, findActiveDiscount, OfferConflictError, OfferValidationError, validateOffer } from "./marketingStore.js";
 
 const mocks = vi.hoisted(() => ({
   createIndex: vi.fn(),
@@ -70,5 +70,18 @@ describe("createOffer", () => {
   it("rejects malformed input before writing", async () => {
     await expect(createOffer("coupon", { ...coupon, value: -1 })).rejects.toBeInstanceOf(OfferValidationError);
     expect(mocks.insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("discount offers", () => {
+  it("calculates percentage and fixed discounts without exceeding the order amount", () => {
+    expect(calculateOfferDiscount({ discountType: "percentage", value: 20 }, 1000)).toBe(200);
+    expect(calculateOfferDiscount({ discountType: "fixed", value: 1500 }, 1000)).toBe(1000);
+  });
+
+  it("loads only active, currently valid discount offers", async () => {
+    mocks.findOne.mockResolvedValue({ id: "discount-1", kind: "discount", isActive: true, value: 20, discountType: "percentage", startsAt: null, endsAt: null });
+    await expect(findActiveDiscount("discount-1", new Date("2026-10-18T00:00:00.000Z"))).resolves.toMatchObject({ id: "discount-1", kind: "discount" });
+    expect(mocks.findOne).toHaveBeenCalledWith({ id: "discount-1", kind: "discount", isActive: true }, { projection: { _id: 0 } });
   });
 });

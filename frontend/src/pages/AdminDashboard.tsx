@@ -36,6 +36,7 @@ type AdminProduct = Omit<Product, "category"> & {
   subcategory?: string;
   newArrival?: boolean;
   bestSelling?: boolean;
+  discountOfferId?: string;
 };
 type StoredProduct = {
   id: string;
@@ -52,6 +53,7 @@ type StoredProduct = {
   status: "Active" | "Draft";
   newArrival?: boolean;
   bestSelling?: boolean;
+  discountOfferId?: string;
   mainCategoryId: string;
   subcategoryId: string;
   mainCategory: string;
@@ -72,7 +74,7 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }, { label: "Promotions", icon: Gift, screen: "promotions" }] },
@@ -84,6 +86,8 @@ const navigation: NavSection[] = [
 const adminRoutes: Record<string, string> = {
   dashboard: "/admin26/dashboard",
   products: "/admin26/products",
+  "best-selling": "/admin26/products/best-selling",
+  "new-arrivals": "/admin26/products/new-arrivals",
   "add-product": "/admin26/products/add",
   categories: "/admin26/products/categories",
   inventory: "/admin26/products/inventory",
@@ -128,7 +132,7 @@ const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Nec
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
 
 function permissionSectionForScreen(screen: string): AdminPermissionSection {
-  if (["products", "add-product", "edit-product", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
+  if (["products", "best-selling", "new-arrivals", "add-product", "edit-product", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
@@ -195,6 +199,7 @@ function InventoryAdjustmentDialog({ product, adjustment, error, saving, onAdjus
 type AdminCollection = { id: string; name: string; description: string; productIds: string[]; isVisible: boolean; createdAt: string; updatedAt: string };
 type AdminOfferKind = "discount" | "coupon" | "promotion";
 type AdminOffer = { id: string; kind: AdminOfferKind; name: string; code?: string; discountType: "percentage" | "fixed"; value: number; minimumOrderAmount: number; startsAt: string | null; endsAt: string | null; isActive: boolean; createdAt: string; updatedAt: string };
+let latestDiscountOffers: AdminOffer[] = [];
 function CollectionManagement({ products, productsLoading, productsError, onRefreshProducts }: { products: StoredProduct[]; productsLoading: boolean; productsError: string; onRefreshProducts: () => void }) {
   const [collections, setCollections] = useState<AdminCollection[]>([]);
   const [loading, setLoading] = useState(false);
@@ -439,14 +444,14 @@ function VideoManagement() {
 }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
 
-type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean };
+type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean; discountOfferId: string };
 const productTypeOptions = [
   { value: "round-neck", label: "Round Neck" },
   { value: "oversized", label: "Oversized" },
   { value: "acid-oversized", label: "Acid Oversized" },
   { value: "hoodie", label: "Hoodie" },
 ];
-function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; submitLabel?: string }) {
+function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, discountOffers = latestDiscountOffers, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; discountOffers?: AdminOffer[]; submitLabel?: string }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
   return <form className="admin-form" onSubmit={onSave}>
@@ -454,6 +459,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Description</span><textarea value={productForm.description} onChange={(event) => setProductForm({ ...productForm, description: event.target.value })} /></label>
     <label><span>Price</span><input required type="number" min="0" step="any" value={productForm.price} onChange={(event) => setProductForm({ ...productForm, price: event.target.value })} /></label>
     <label><span>Compare-at price</span><input type="number" min="0" step="any" value={productForm.compareAt} onChange={(event) => setProductForm({ ...productForm, compareAt: event.target.value })} /></label>
+    <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.discountType === "percentage").map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.value}% off</option>)}</select></label>
     <label><span>Product type</span><select required value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
@@ -918,7 +924,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [isProductEditorOpen, setIsProductEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<StoredProduct | null>(null);
   const [editingProductTarget, setEditingProductTarget] = useState<AdminProduct | null>(null);
-  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft", newArrival: false, bestSelling: false });
+  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft", newArrival: false, bestSelling: false, discountOfferId: "" });
   const [editingProductCategory, setEditingProductCategory] = useState("");
   const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
   const [productUpdateError, setProductUpdateError] = useState("");
@@ -961,11 +967,17 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [generalSettingsError, setGeneralSettingsError] = useState("");
   const [generalSettingsNotice, setGeneralSettingsNotice] = useState("");
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false });
+  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" });
+  const [discountOffers, setDiscountOffers] = useState<AdminOffer[]>([]);
   const [editProductLoading, setEditProductLoading] = useState(initialScreen === "edit-product");
   const [editProductError, setEditProductError] = useState("");
   const editProductRequest = useRef<AbortController | null>(null);
   useEffect(() => { setScreen(initialScreen); }, [initialScreen]);
+  useEffect(() => {
+    void apiFetch("/api/admin/product-discounts", { cache: "no-store" }).then(async (response) => {
+      if (response.ok) { const offers = await response.json() as AdminOffer[]; latestDiscountOffers = offers; setDiscountOffers(offers); }
+    }).catch(() => undefined);
+  }, []);
   useEffect(() => {
     if (!productId) return;
     let active = true;
@@ -996,6 +1008,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           status: product.status,
           newArrival: product.newArrival === true,
           bestSelling: product.bestSelling === true,
+          discountOfferId: product.discountOfferId || "",
         });
       })
       .catch((error: unknown) => {
@@ -1237,6 +1250,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       subcategory: product.subcategory,
       newArrival: product.newArrival === true,
       bestSelling: product.bestSelling === true,
+      discountOfferId: product.discountOfferId,
     })), [databaseProducts]);
     const dashboardMetrics = useMemo(() => getDashboardMetrics(orders, range), [orders, range]);
     const customers = useMemo(() => {
@@ -1270,7 +1284,8 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           || (productStockFilter === "Out of stock" && product.stock === 0)
           || (productStockFilter === "Low stock" && product.stock > 0 && product.stock < 10)
           || (productStockFilter === "In stock" && product.stock >= 10);
-        return matchesSearch && matchesCategory && matchesStatus && matchesStock;
+        const matchesSection = screen === "best-selling" ? product.bestSelling === true : screen === "new-arrivals" ? product.newArrival === true : true;
+        return matchesSearch && matchesCategory && matchesStatus && matchesStock && matchesSection;
       });
       return filtered.sort((left, right) => {
         if (productSort === "name") return left.name.localeCompare(right.name);
@@ -1364,6 +1379,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           status: productForm.status,
           newArrival: productForm.newArrival,
           bestSelling: productForm.bestSelling,
+          ...(productForm.discountOfferId ? { discountOfferId: productForm.discountOfferId } : {}),
           mainCategoryId: productForm.category,
           subcategoryId: productForm.subcategory,
         }),
@@ -1381,7 +1397,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       } else {
         await refreshProducts();
         setSavedNotice("Product saved successfully.");
-        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false }));
+        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" }));
         toast.success("Product added successfully!");
         window.setTimeout(() => setSavedNotice(""), 2500);
       }
@@ -1489,6 +1505,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         status: savedProduct.status,
         newArrival: savedProduct.newArrival === true,
         bestSelling: savedProduct.bestSelling === true,
+        discountOfferId: savedProduct.discountOfferId || "",
       });
     } catch (error) {
       if (!request.signal.aborted) setEditProductError(error instanceof Error && error.message === "Unable to load product details. Please try again."
@@ -1516,6 +1533,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       || editingProductForm.status !== editingProduct.status
       || editingProductForm.newArrival !== (editingProduct.newArrival === true)
       || editingProductForm.bestSelling !== (editingProduct.bestSelling === true)
+      || editingProductForm.discountOfferId !== (editingProduct.discountOfferId || "")
     );
     if (!force && hasUnsavedChanges && !window.confirm("Discard your unsaved changes?")) return;
     editProductRequest.current?.abort();
@@ -1568,6 +1586,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           status: editingProductForm.status,
           newArrival: editingProductForm.newArrival,
           bestSelling: editingProductForm.bestSelling,
+          ...(editingProductForm.discountOfferId ? { discountOfferId: editingProductForm.discountOfferId } : {}),
           mainCategoryId: editingProductForm.category,
           subcategoryId: editingProductForm.subcategory,
         }),
@@ -1924,10 +1943,16 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         {pagedProducts.totalItems ? <><ProductTable products={pagedProducts.items} onSelect={openProduct} onEdit={canEdit("products") ? editProduct : undefined} onDelete={canEdit("products") ? deleteSavedProduct : undefined} deletingProductId={deletingProductId} alignActionsRight /><PaginationControls page={pagedProducts.page} totalPages={pagedProducts.totalPages} totalItems={pagedProducts.totalItems} pageSize={10} onPageChange={setProductPage} /></> : <EmptyState title="No products match these filters." message="Try changing the search or product filters." />}
       </>}
     </AdminPanel>;
+    if (screen === "best-selling" || screen === "new-arrivals") return <AdminPanel title={screen === "best-selling" ? "Best Selling" : "New Arrivals"}>
+      {productsError ? <EmptyState title="Unable to load saved products" message={productsError} action="Retry" onAction={() => void refreshProducts()} /> : productsLoading ? <p>Loading saved products...</p> : <>
+        <div className="admin-table-filters"><label>Search<input value={adminSearch} placeholder="Search products" onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); }} /></label><label>Sort by<select value={productSort} onChange={(event) => { setProductSort(event.target.value); setProductPage(1); }}><option value="recent">Recently added</option><option value="name">Name</option><option value="price-ascending">Price: low to high</option><option value="price-descending">Price: high to low</option></select></label></div>
+        {pagedProducts.totalItems ? <><ProductTable products={pagedProducts.items} onSelect={openProduct} onEdit={canEdit("products") ? editProduct : undefined} onDelete={canEdit("products") ? deleteSavedProduct : undefined} deletingProductId={deletingProductId} alignActionsRight /><PaginationControls page={pagedProducts.page} totalPages={pagedProducts.totalPages} totalItems={pagedProducts.totalItems} pageSize={10} onPageChange={setProductPage} /></> : <EmptyState title={screen === "best-selling" ? "No best selling products found." : "No new arrival products found."} message="Edit a product to add it to this section." />}
+      </>}
+    </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} /></AdminPanel>;
-    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} submitLabel="Save Changes" />}</AdminPanel>;
+    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel>;
+    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" />}</AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
     if (screen === "inventory") return <AdminPanel title="Inventory">

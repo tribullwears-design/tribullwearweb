@@ -1,6 +1,7 @@
 import { ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { listCategories, type CategoryDocument } from "./categoryStore.js";
 import { getDatabase } from "./database.js";
+import { findActiveDiscount, calculateOfferDiscount } from "./marketingStore.js";
 
 export type ProductDocument = {
   id: string;
@@ -16,6 +17,9 @@ export type ProductDocument = {
   status: "Active" | "Draft";
   newArrival?: boolean;
   bestSelling?: boolean;
+  discountOfferId?: string;
+  discountedPrice?: number;
+  basePrice?: number;
   mainCategoryId: string;
   subcategoryId: string;
   mainCategory: string;
@@ -24,7 +28,7 @@ export type ProductDocument = {
   updatedAt: string;
 };
 
-type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt">;
+type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice">;
 
 const productTypes = ["round-neck", "oversized", "acid-oversized", "hoodie"] as const;
 
@@ -69,10 +73,12 @@ export class InsufficientInventoryError extends Error {
   }
 }
 
-function normalizeProduct(product: WithId<ProductDocument>): ProductDocument {
+async function normalizeProduct(product: WithId<ProductDocument>, applyDiscount = false): Promise<ProductDocument> {
   const { _id, ...fields } = product;
   const id = fields.id || _id.toString();
-  return { ...fields, id, newArrival: fields.newArrival === true, bestSelling: fields.bestSelling === true };
+  const discount = applyDiscount && fields.discountOfferId ? await findActiveDiscount(fields.discountOfferId) : null;
+  const discountedPrice = discount ? fields.price - calculateOfferDiscount(discount, fields.price) : fields.price;
+  return { ...fields, id, price: discountedPrice, ...(applyDiscount ? { discountedPrice, basePrice: fields.price } : {}), newArrival: fields.newArrival === true, bestSelling: fields.bestSelling === true };
 }
 
 function validateProduct(input: ProductInput, requireImage = true, allowUncategorized = false) {
@@ -115,6 +121,7 @@ function isProductInput(value: unknown): value is Partial<ProductInput> {
     "status",
     "newArrival",
     "bestSelling",
+    "discountOfferId",
     "mainCategoryId",
     "subcategoryId",
   ]);
@@ -137,7 +144,7 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
     filter = { ...filter, productType, status: "Active" };
   }
   const products = await collection.find(filter).sort({ createdAt: -1 }).toArray();
-  return products.map(normalizeProduct);
+  return Promise.all(products.map((product) => normalizeProduct(product, !includeDrafts)));
 }
 
 export async function getProduct(id: string, includeDrafts = false) {
@@ -146,7 +153,7 @@ export async function getProduct(id: string, includeDrafts = false) {
     ...productFilter(id),
     ...(!includeDrafts ? { status: "Active" as const } : {}),
   });
-  return product ? normalizeProduct(product) : null;
+  return product ? normalizeProduct(product, !includeDrafts) : null;
 }
 
 export async function adjustProductInventory(id: string, adjustment: unknown) {
@@ -161,13 +168,16 @@ export async function adjustProductInventory(id: string, adjustment: unknown) {
     { $inc: { stock: adjustment }, $set: { updatedAt: new Date().toISOString() } },
     { returnDocument: "after", projection: { _id: 0 } },
   );
-  if (updated) return normalizeProduct(updated);
+  if (updated) return normalizeProduct(updated, false);
   if (!await collection.findOne(productFilter(id), { projection: { _id: 1 } })) return null;
   throw new InsufficientInventoryError();
 }
 
 export async function createProduct(input: ProductInput) {
   validateProduct(input);
+  if (input.discountOfferId !== undefined) {
+    if (typeof input.discountOfferId !== "string" || !await findActiveDiscount(input.discountOfferId)) throw new Error("Selected discount is not active or does not exist");
+  }
   const categories = await listCategories();
   const { main, subcategory } = resolveCategory(categories, input.mainCategoryId, input.subcategoryId);
   const now = new Date().toISOString();
@@ -208,9 +218,11 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     status: input.status === undefined ? existing.status : input.status,
     newArrival: input.newArrival === undefined ? existing.newArrival ?? false : input.newArrival,
     bestSelling: input.bestSelling === undefined ? existing.bestSelling ?? false : input.bestSelling,
+    discountOfferId: input.discountOfferId === undefined ? existing.discountOfferId : input.discountOfferId,
     mainCategoryId: input.mainCategoryId === undefined ? existing.mainCategoryId : input.mainCategoryId,
     subcategoryId: input.subcategoryId === undefined ? existing.subcategoryId : input.subcategoryId,
   };
+  if (updatedFields.discountOfferId !== undefined && (!updatedFields.discountOfferId || !await findActiveDiscount(updatedFields.discountOfferId))) throw new Error("Selected discount is not active or does not exist");
   validateProduct(updatedFields, false, !existing.mainCategoryId && !existing.subcategoryId);
   const category = updatedFields.mainCategoryId && updatedFields.subcategoryId
     ? resolveCategory(await listCategories(), updatedFields.mainCategoryId, updatedFields.subcategoryId)
@@ -229,7 +241,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     } },
     { returnDocument: "after" },
   );
-  return updated ? normalizeProduct(updated) : null;
+  return updated ? normalizeProduct(updated, false) : null;
 }
 
 export async function deleteProduct(id: string) {

@@ -13,6 +13,7 @@ export type CheckoutSubmission = {
     country: "India";
   };
   paymentMethod: CheckoutPaymentMethod;
+  couponCode?: string;
   items: Array<{ id: string; quantity: number; variant: { size?: string; color?: string } }>;
 };
 

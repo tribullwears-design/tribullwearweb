@@ -20,6 +20,7 @@ interface ProductData extends OriginalPriceFields {
   sizes?: string[];
   colors?: string[];
   stock?: number;
+  basePrice?: number;
 }
 
 const tShirtColors = [
@@ -63,6 +64,9 @@ export default function ProductDetailPage() {
     kind: "idle",
     message: "",
   });
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; name: string; discountType: "percentage" | "fixed"; value: number; minimumOrderAmount: number } | null>(null);
+  const [couponFeedback, setCouponFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({ kind: "idle", message: "" });
 
   useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
@@ -110,6 +114,7 @@ export default function ProductDetailPage() {
             sizes: string[];
             colors: string[];
             stock: number;
+            basePrice?: number;
           };
         })
         .then((product) => {
@@ -129,6 +134,7 @@ export default function ProductDetailPage() {
             sizes: product.sizes,
             colors: product.colors,
             stock: product.stock,
+            basePrice: product.basePrice,
           });
           setIsProductLoading(false);
         })
@@ -226,10 +232,22 @@ export default function ProductDetailPage() {
 
   const priceValue = Number(product.price.replace(/[^0-9]/g, ""));
   const isOutOfStock = typeof product.stock === "number" && product.stock <= 0;
-  const originalPriceValue = resolveOriginalPrice(product);
+  const originalPriceValue = resolveOriginalPrice(product) ?? (product.basePrice && product.basePrice > priceValue ? product.basePrice : undefined);
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
   const memberPrice = Math.floor(priceValue * 0.95);
   const productDescription = product.description || "Product details have not been added yet.";
+
+  const applyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) { setCouponFeedback({ kind: "error", message: "Enter a coupon code." }); return; }
+    try {
+      const response = await apiFetch(`/api/marketing/coupons/${encodeURIComponent(code)}`, { cache: "no-store" });
+      const result = await response.json() as { error?: string; id?: string; code?: string; name?: string; discountType?: "percentage" | "fixed"; value?: number; minimumOrderAmount?: number };
+      if (!response.ok || !result.id || !result.code || !result.name || !result.discountType || typeof result.value !== "number" || typeof result.minimumOrderAmount !== "number") throw new Error(result.error || "Coupon is invalid or unavailable.");
+      setAppliedCoupon({ code: result.code, name: result.name, discountType: result.discountType, value: result.value, minimumOrderAmount: result.minimumOrderAmount });
+      setCouponFeedback({ kind: "success", message: `${result.name}: ${result.discountType === "percentage" ? `${result.value}% off` : `₹${result.value.toLocaleString("en-IN")} off`}. Minimum order ₹${result.minimumOrderAmount.toLocaleString("en-IN")}.` });
+    } catch (error) { setAppliedCoupon(null); setCouponFeedback({ kind: "error", message: error instanceof Error ? error.message : "Coupon is invalid or unavailable." }); }
+  };
 
   const benefitItems = [
     { title: "Fit", detail: "Relaxed" },
@@ -305,6 +323,7 @@ export default function ProductDetailPage() {
       price: priceValue,
       originalPrice: originalPriceNumber,
       image: product.image,
+      ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
       size: selectedSize,
       color: isTShirtColorVariant ? activeColor : "",
       variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
@@ -448,20 +467,6 @@ export default function ProductDetailPage() {
               {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
             </div>}
 
-            <section className="product-detail-offers" aria-label="Offers">
-              <h2>Best offers for you</h2>
-              <div className="product-detail-offers__grid">
-                <div className="product-detail-offer">
-                  <p><b>10% off</b> your first order. Minimum order value ₹999.</p>
-                  <div><span>Coupon code</span><strong>FIRST10</strong></div>
-                </div>
-                <div className="product-detail-offer product-detail-offer--muted">
-                  <p>Member-only offers, made for your next favourite.</p>
-                  <div><span>Explore</span><strong>TRIBULL CLUB</strong></div>
-                </div>
-              </div>
-            </section>
-
             <div className="product-detail-return-note">
               <ShieldCheck size={17} />
               <span>Easy 10-day return and exchange on this product. No questions asked.</span>
@@ -495,6 +500,15 @@ export default function ProductDetailPage() {
                 </div>
               </div>
             ) : null}
+
+            <div className="product-detail-coupon" aria-label="Coupon code">
+              <label htmlFor="product-coupon">Enter coupon code</label>
+              <div className="product-detail-pincode__field">
+                <input id="product-coupon" value={couponCode} onChange={(event) => { setCouponCode(event.target.value.toUpperCase()); setCouponFeedback({ kind: "idle", message: "" }); }} placeholder="Enter coupon code" maxLength={32} />
+                <button type="button" onClick={() => void applyCoupon()}>Apply</button>
+              </div>
+              {couponFeedback.kind !== "idle" && <p className={couponFeedback.kind === "success" ? "is-success" : "is-error"}>{couponFeedback.message}</p>}
+            </div>
 
             <div className="product-detail-cta-row">
               <div className="product-detail-qty" aria-label="Quantity selector">

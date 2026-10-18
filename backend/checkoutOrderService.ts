@@ -5,6 +5,7 @@ import { getProduct } from "./productStore.js";
 import type { OrderDocument, OrderItem } from "./orderStore.js";
 import { isIndianState, normalizeIndianState } from "../shared/checkout.js";
 import { findCustomerAddress } from "./customerDataStore.js";
+import { calculateOfferDiscount, findActiveCoupon } from "./marketingStore.js";
 
 export class CheckoutValidationError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -19,15 +20,16 @@ type CheckoutRequest = {
   customer: OrderDocument["customer"];
   shippingAddress: OrderDocument["shippingAddress"];
   items: Array<{ id: string; quantity: number; variant?: { size?: string; color?: string } }>;
+  couponCode?: string;
 };
 
 export async function prepareCheckoutOrder(
   input: unknown,
   identity?: { id: string; email: string },
-): Promise<CheckoutRequest & { orderItems: OrderItem[]; total: number }> {
+): Promise<CheckoutRequest & { orderItems: OrderItem[]; subtotal: number; discount: number; total: number }> {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new CheckoutValidationError("Checkout details are required");
   const body = input as Record<string, unknown>;
-  const { idempotencyKey, customer, shippingAddress, items, savedAddressId } = body;
+  const { idempotencyKey, customer, shippingAddress, items, savedAddressId, couponCode } = body;
 
   if (typeof idempotencyKey !== "string" || !/^[A-Za-z0-9_-]{16,100}$/.test(idempotencyKey)) {
     throw new CheckoutValidationError("A valid checkout request key is required");
@@ -119,7 +121,18 @@ export async function prepareCheckoutOrder(
     });
   }
 
-  const total = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+  let discount = 0;
+  let appliedCouponCode: string | undefined;
+  if (couponCode !== undefined) {
+    if (typeof couponCode !== "string" || !couponCode.trim()) throw new CheckoutValidationError("Coupon code is invalid");
+    const coupon = await findActiveCoupon(couponCode);
+    if (!coupon) throw new CheckoutValidationError("Coupon is invalid, inactive, or expired");
+    if (subtotal < coupon.minimumOrderAmount) throw new CheckoutValidationError(`This coupon requires a minimum order of ₹${coupon.minimumOrderAmount.toLocaleString("en-IN")}`);
+    discount = calculateOfferDiscount(coupon, subtotal);
+    appliedCouponCode = coupon.code;
+  }
+  const total = subtotal - discount;
   if (!Number.isFinite(total) || !Number.isSafeInteger(Math.round(total * 100))) {
     throw new CheckoutValidationError("The order total is invalid");
   }
@@ -142,7 +155,10 @@ export async function prepareCheckoutOrder(
       phone: (checkoutPhone as string).trim(),
     },
     items: items as CheckoutRequest["items"],
+    ...(appliedCouponCode ? { couponCode: appliedCouponCode } : {}),
     orderItems,
+    subtotal,
+    discount,
     total,
   };
 }
@@ -160,9 +176,9 @@ export function buildCheckoutOrder(
     customer: checkout.customer,
     shippingAddress: checkout.shippingAddress,
     items: checkout.orderItems,
-    subtotal: checkout.total,
+    subtotal: checkout.subtotal,
     shipping: 0,
-    discount: 0,
+    discount: checkout.discount,
     total: checkout.total,
     payment,
     paymentMode,

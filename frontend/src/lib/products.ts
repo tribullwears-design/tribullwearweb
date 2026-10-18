@@ -8,6 +8,8 @@ export type StorefrontProduct = Product & {
   subcategoryId?: string;
   newArrival?: boolean;
   bestSelling?: boolean;
+  discountOfferId?: string;
+  basePrice?: number;
 };
 
 type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {
@@ -29,6 +31,8 @@ type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {
   oldPrice?: string | number | null;
   newArrival?: boolean;
   bestSelling?: boolean;
+  discountOfferId?: string;
+  basePrice?: number;
 };
 export type ProductWrite = Omit<Product, "price" | "id" | "created" | "sold" | "originalPrice"> & {
   sellingPrice: number;
@@ -66,8 +70,10 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
     ...(product.subcategoryId ? { subcategoryId: product.subcategoryId } : {}),
     ...(product.newArrival === true ? { newArrival: true } : {}),
     ...(product.bestSelling === true ? { bestSelling: true } : {}),
+    ...(product.discountOfferId ? { discountOfferId: product.discountOfferId } : {}),
+    ...(typeof product.basePrice === "number" ? { basePrice: product.basePrice } : {}),
     price,
-    ...(originalPrice === undefined ? {} : { originalPrice }),
+    ...(originalPrice === undefined ? (typeof product.basePrice === "number" && product.basePrice > price ? { originalPrice: product.basePrice } : {}) : { originalPrice }),
   };
 }
 let cachedProducts: StorefrontProduct[] | undefined;

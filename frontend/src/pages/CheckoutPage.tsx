@@ -25,7 +25,7 @@ type CartEntry = {
 };
 
 type CartState = Record<string, number>;
-type CartItemMeta = Partial<Product> & { productId?: string; variant?: string; size?: string; color?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
+type CartItemMeta = Partial<Product> & { productId?: string; variant?: string; size?: string; color?: string; couponCode?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
 type CheckoutSelection = { productId: string; quantity: number; metadata: CartItemMeta };
 type SavedAddress = {
   id: string;
@@ -530,6 +530,7 @@ export default function CheckoutPage() {
       const submission = createCheckoutSubmission({
         idempotencyKey: key,
         ...(savedAddressId ? { savedAddressId } : {}),
+        ...(cartDetails.entries.length === 1 && cartItems[cartDetails.entries[0].id]?.couponCode ? { couponCode: cartItems[cartDetails.entries[0].id].couponCode } : {}),
         customer: { name: form.fullName, email: form.email, phone: form.phone },
         shippingAddress: {
           address: form.address,

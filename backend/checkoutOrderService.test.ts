@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   isValidCustomerMobile: vi.fn(),
   normalizeCustomerEmail: vi.fn(),
   findCustomerAddress: vi.fn(),
+  findActiveCoupon: vi.fn(),
+  calculateOfferDiscount: vi.fn(),
 }));
 
 vi.mock("./categoryStore.js", () => ({ listCategories: mocks.listCategories }));
@@ -17,6 +19,7 @@ vi.mock("./authStore.js", () => ({
   normalizeCustomerEmail: mocks.normalizeCustomerEmail,
 }));
 vi.mock("./customerDataStore.js", () => ({ findCustomerAddress: mocks.findCustomerAddress }));
+vi.mock("./marketingStore.js", () => ({ findActiveCoupon: mocks.findActiveCoupon, calculateOfferDiscount: mocks.calculateOfferDiscount }));
 
 import { buildCheckoutOrder, prepareCheckoutOrder } from "./checkoutOrderService.js";
 
@@ -55,6 +58,8 @@ describe("prepareCheckoutOrder", () => {
     mocks.isValidCustomerMobile.mockReturnValue(true);
     mocks.normalizeCustomerEmail.mockImplementation((email: string) => email.trim().toLowerCase());
     mocks.findCustomerAddress.mockResolvedValue(null);
+    mocks.findActiveCoupon.mockResolvedValue(null);
+    mocks.calculateOfferDiscount.mockImplementation((_offer: unknown, amount: number) => amount * 0.1);
   });
 
   it("uses current catalog prices rather than client-submitted price or totals", async () => {
@@ -75,6 +80,14 @@ describe("prepareCheckoutOrder", () => {
     }]);
 
     await expect(prepareCheckoutOrder(request)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it("revalidates an active coupon and stores the calculated discount", async () => {
+    mocks.findActiveCoupon.mockResolvedValue({ code: "SAVE10", minimumOrderAmount: 500, discountType: "percentage", value: 10 });
+    mocks.calculateOfferDiscount.mockReturnValue(300);
+    const checkout = await prepareCheckoutOrder({ ...request, couponCode: "save10" });
+    expect(mocks.findActiveCoupon).toHaveBeenCalledWith("save10");
+    expect(checkout).toMatchObject({ couponCode: "SAVE10", subtotal: 3000, discount: 300, total: 2700 });
   });
 
   it("rejects an invalid state before it can be persisted to an order", async () => {

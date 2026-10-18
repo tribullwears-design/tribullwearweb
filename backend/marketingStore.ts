@@ -114,6 +114,20 @@ export async function findActiveCoupon(code: string, now = new Date()) {
   return offer;
 }
 
+export async function findActiveDiscount(id: string, now = new Date()) {
+  if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) return null;
+  const offer = await (await getCollection()).findOne({ id, kind: "discount", isActive: true }, { projection: { _id: 0 } });
+  if (!offer) return null;
+  const time = now.getTime();
+  if ((offer.startsAt && Date.parse(offer.startsAt) > time) || (offer.endsAt && Date.parse(offer.endsAt) <= time)) return null;
+  return offer;
+}
+
+export function calculateOfferDiscount(offer: Pick<OfferDocument, "discountType" | "value">, amount: number) {
+  const discount = offer.discountType === "percentage" ? amount * offer.value / 100 : offer.value;
+  return Math.min(amount, Math.max(0, Math.round(discount * 100) / 100));
+}
+
 async function ensureCodeAvailable(collection: Collection<OfferDocument>, code: string | undefined, excludingId?: string) {
   if (!code) return;
   const existing = await collection.findOne({ codeKey: code.toUpperCase(), ...(excludingId ? { id: { $ne: excludingId } } : {}) }, { projection: { _id: 1 } });
