@@ -18,7 +18,7 @@ import { createAdminOrderRouter } from "./orderRoutes.js";
 import { createCustomerRouter } from "./customerRoutes.js";
 import { logRazorpayConfigurationStatus } from "./razorpayService.js";
 import { requireAdminPermission } from "./adminAuth.js";
-import { createVideo, deleteVideo, listActiveVideos, listVideos, updateVideo } from "./videoStore.js";
+import { createUploadedVideo, createVideo, deleteVideo, listActiveVideos, listVideos, streamVideoFile, updateVideo } from "./videoStore.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
 import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
@@ -627,8 +627,17 @@ async function startServer() {
   app.get("/api/admin/videos", requireAdminPermission("products", "view"), async (_req, res) => {
     try { res.json(await listVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
   });
+  app.post("/api/admin/videos/upload", requireAdminPermission("products", "edit"), express.raw({ type: ["video/mp4", "video/webm", "video/ogg"], limit: "100mb" }), async (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body)) return res.status(400).json({ error: "Select an MP4, WebM, or OGG video" });
+      res.status(201).json(await createUploadedVideo(req.get("X-Video-Name"), req.body, req.get("Content-Type")?.split(";", 1)[0]));
+    } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to upload video" }); }
+  });
   app.get("/api/videos", async (_req, res) => {
     try { res.json(await listActiveVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
+  });
+  app.get("/api/videos/files/:storageId", async (req, res) => {
+    try { if (!await streamVideoFile(req.params.storageId, res)) res.status(404).end(); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load video" }); }
   });
   app.post("/api/admin/videos", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await createVideo(req.body)); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save video" }); }

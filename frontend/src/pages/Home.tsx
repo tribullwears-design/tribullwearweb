@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
-import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontMainCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
@@ -119,7 +119,7 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
 export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
-  const mainCategories = getStorefrontMainCategories(hierarchy);
+  const mainCategories = getStorefrontHomeCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const [homeVideos, setHomeVideos] = useState<Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>>([]);
   const [videosLoading, setVideosLoading] = useState(true);

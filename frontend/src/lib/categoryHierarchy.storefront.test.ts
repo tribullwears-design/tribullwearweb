@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock("./api", () => ({ apiFetch: mocks.apiFetch }));
 
-import { fromApiDocuments, getStorefrontCategoryHierarchy, getStorefrontMainCategories, loadCategoryHierarchy } from "./categoryHierarchy";
+import { fromApiDocuments, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, getStorefrontMainCategories, loadCategoryHierarchy } from "./categoryHierarchy";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -67,5 +67,43 @@ describe("storefront main categories", () => {
     mocks.apiFetch.mockResolvedValue(new Response("unavailable", { status: 503 }));
 
     await expect(loadCategoryHierarchy()).rejects.toThrow("Category request failed");
+  });
+
+  it("replaces the homepage Cinema card with stored Cinema subcategories", () => {
+    const hierarchy = getStorefrontCategoryHierarchy(fromApiDocuments([
+      {
+        value: "cinema",
+        label: "Cinema",
+        subcategories: [
+          { value: "hollywood", label: "Hollywood", image: "/stored/hollywood.png" },
+          { value: "bollywood", label: "Bollywood" },
+        ],
+      },
+      { value: "sports", label: "Sports", image: "/stored/sports.png" },
+    ]));
+
+    expect(getStorefrontHomeCategories(hierarchy)).toEqual([
+      {
+        value: "hollywood",
+        label: "Hollywood",
+        image: "/stored/hollywood.png",
+        isVisible: true,
+        href: "/category/cinema/hollywood",
+      },
+      {
+        value: "bollywood",
+        label: "Bollywood",
+        image: "/products/front-white.png",
+        isVisible: true,
+        href: "/category/cinema/bollywood",
+      },
+      {
+        value: "sports",
+        label: "Sports",
+        image: "/stored/sports.png",
+        isVisible: true,
+        href: "/category/sports",
+      },
+    ]);
   });
 });

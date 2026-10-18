@@ -1,13 +1,28 @@
 import { randomUUID } from "node:crypto";
-import type { Collection } from "mongodb";
+import { ObjectId, GridFSBucket, type Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 
-export type VideoDocument = { id: string; title: string; url: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string; updatedAt: string };
+export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
+const supportedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
+export type VideoDocument = { id: string; title: string; url: string; storageId?: string; mimeType?: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string; updatedAt: string };
 async function getCollection(): Promise<Collection<VideoDocument>> { const collection = (await getDatabase()).collection<VideoDocument>("videos"); await collection.createIndex({ id: 1 }, { unique: true }); await collection.createIndex({ createdAt: -1 }); return collection; }
+function validateTitle(value: unknown) {
+  const title = typeof value === "string" ? value.trim() : "";
+  if (!title || title.length > 120) throw new Error("Video name is required and must be 120 characters or fewer");
+  return title;
+}
+export function validateVideoUpload(file: { mimeType: unknown; size: unknown }) {
+  if (typeof file.mimeType !== "string" || !supportedVideoTypes.has(file.mimeType.toLowerCase())) throw new Error("Upload an MP4, WebM, or OGG video");
+  if (typeof file.size !== "number" || !Number.isInteger(file.size) || file.size < 1 || file.size > MAX_VIDEO_UPLOAD_BYTES) throw new Error("Video must be smaller than 100 MB");
+  return file.mimeType.toLowerCase();
+}
+function fileObjectId(value: string) {
+  return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+async function getBucket() { return new GridFSBucket(await getDatabase(), { bucketName: "video-files" }); }
 function validate(value: unknown): Omit<VideoDocument, "id" | "createdAt" | "updatedAt"> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Video details are required");
-  const input = value as Record<string, unknown>; const title = typeof input.title === "string" ? input.title.trim() : ""; const url = typeof input.url === "string" ? input.url.trim() : "";
-  if (!title || title.length > 120) throw new Error("Video title is required and must be 120 characters or fewer");
+  const input = value as Record<string, unknown>; const title = validateTitle(input.title); const url = typeof input.url === "string" ? input.url.trim() : "";
   if ((!/^https:\/\//i.test(url) && !/^\/(?!\/)/.test(url)) || url.length > 2000 || (!/^https:\/\//i.test(url) && !/\.(mp4|webm|ogg)(\?|$)/i.test(url))) throw new Error("Video URL must be HTTPS or a supported video path");
   if (input.thumbnail !== undefined && typeof input.thumbnail !== "string") throw new Error("Thumbnail must be text");
   if (input.category !== undefined && typeof input.category !== "string") throw new Error("Category must be text");
@@ -17,5 +32,64 @@ function validate(value: unknown): Omit<VideoDocument, "id" | "createdAt" | "upd
 export async function listVideos() { return (await getCollection()).find({}, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray(); }
 export async function listActiveVideos() { return (await getCollection()).find({ isActive: true }, { projection: { _id: 0 } }).sort({ createdAt: -1 }).toArray(); }
 export async function createVideo(value: unknown) { const now = new Date().toISOString(); const video = { id: randomUUID(), ...validate(value), createdAt: now, updatedAt: now }; await (await getCollection()).insertOne(video); return video; }
-export async function updateVideo(id: string, value: unknown) { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid"); return (await getCollection()).findOneAndUpdate({ id }, { $set: { ...validate(value), updatedAt: new Date().toISOString() } }, { returnDocument: "after", projection: { _id: 0 } }); }
-export async function deleteVideo(id: string) { if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid"); return (await (await getCollection()).deleteOne({ id })).deletedCount > 0; }
+export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeType: unknown) {
+  const safeTitle = validateTitle(title);
+  const safeMimeType = validateVideoUpload({ mimeType, size: bytes.length });
+  const bucket = await getBucket();
+  const upload = bucket.openUploadStream(`${randomUUID()}.video`, { metadata: { mimeType: safeMimeType } });
+  const fileId = upload.id as ObjectId;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      upload.once("finish", resolve);
+      upload.once("error", reject);
+      upload.end(bytes);
+    });
+    const now = new Date().toISOString();
+    const video: VideoDocument = { id: randomUUID(), title: safeTitle, url: `/api/videos/files/${fileId.toHexString()}`, storageId: fileId.toHexString(), mimeType: safeMimeType, isActive: true, createdAt: now, updatedAt: now };
+    try {
+      await (await getCollection()).insertOne(video);
+      return video;
+    } catch (error) {
+      await bucket.delete(fileId).catch(() => undefined);
+      throw error;
+    }
+  } catch (error) {
+    await bucket.delete(fileId).catch(() => undefined);
+    throw error;
+  }
+}
+export async function updateVideo(id: string, value: unknown) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid");
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Video details are required");
+  const input = value as Record<string, unknown>;
+  const updates: Partial<VideoDocument> = { title: validateTitle(input.title), updatedAt: new Date().toISOString() };
+  if (Object.prototype.hasOwnProperty.call(input, "url") || Object.prototype.hasOwnProperty.call(input, "isActive") || Object.prototype.hasOwnProperty.call(input, "thumbnail") || Object.prototype.hasOwnProperty.call(input, "category")) {
+    Object.assign(updates, validate(value));
+  }
+  return (await getCollection()).findOneAndUpdate({ id }, { $set: updates }, { returnDocument: "after", projection: { _id: 0 } });
+}
+export async function deleteVideo(id: string) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid");
+  const collection = await getCollection();
+  const video = await collection.findOne({ id });
+  if (!video) return false;
+  if (video.storageId) {
+    const objectId = fileObjectId(video.storageId);
+    if (objectId) await (await getBucket()).delete(objectId).catch(() => undefined);
+  }
+  await collection.deleteOne({ id });
+  return true;
+}
+export async function streamVideoFile(storageId: string, res: import("express").Response) {
+  const objectId = fileObjectId(storageId);
+  if (!objectId) return false;
+  const bucket = await getBucket();
+  const files = await bucket.find({ _id: objectId }).toArray();
+  if (!files[0]) return false;
+  const metadata = files[0].metadata as { mimeType?: string } | undefined;
+  res.setHeader("Content-Type", metadata?.mimeType || "application/octet-stream");
+  res.setHeader("Content-Length", String(files[0].length));
+  res.setHeader("Accept-Ranges", "bytes");
+  bucket.openDownloadStream(objectId).pipe(res);
+  return true;
+}

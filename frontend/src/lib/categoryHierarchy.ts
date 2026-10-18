@@ -63,6 +63,21 @@ export function getStorefrontMainCategories(hierarchy: CategoryHierarchy) {
     }));
 }
 
+export function getStorefrontHomeCategories(hierarchy: CategoryHierarchy) {
+  return getStorefrontMainCategories(hierarchy).flatMap((category) => {
+    if (category.value.toLowerCase() !== "cinema") return [category];
+
+    const subcategoryKey = Object.keys(hierarchy.subcategories).find(
+      (key) => key.toLowerCase() === category.value.toLowerCase(),
+    );
+    return (subcategoryKey ? hierarchy.subcategories[subcategoryKey] : []).map((subcategory) => ({
+      ...subcategory,
+      image: subcategory.image || "/products/front-white.png",
+      href: `/category/${encodeURIComponent(category.value)}/${encodeURIComponent(subcategory.value)}`,
+    }));
+  });
+}
+
 export const CATEGORY_HIERARCHY_KEY = "tribull-admin-category-hierarchy";
 
 type ApiCategory = CategoryChoice & { subcategories?: CategoryChoice[] };

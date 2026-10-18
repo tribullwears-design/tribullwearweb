@@ -21,7 +21,7 @@ import SearchResultsPage from "./pages/SearchResultsPage";
 function Router() {
   return (
     <Switch>
-      <Route path={"/"} component={CategoryPage} />
+      <Route path={"/"} component={Home} />
       <Route path={"/admin26/category"}>{() => <LegacyCategoryRedirect />}</Route>
       <Route path={"/admin26"}>{() => <AdminRoute />}</Route>
       <Route path={"/admin26/dashboard"}>{() => <AdminRoute initialScreen="dashboard" />}</Route>
