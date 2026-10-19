@@ -3,9 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import StorefrontHeader from "../components/StorefrontHeader";
-import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, refreshProducts, type StorefrontProduct } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { createCheckoutSubmission } from "../lib/checkout";
 import { getRazorpayPaymentConfig, openRazorpayCheckout } from "../lib/razorpayCheckout";
@@ -25,7 +24,7 @@ type CartEntry = {
 };
 
 type CartState = Record<string, number>;
-type CartItemMeta = Partial<Product> & { productId?: string; variant?: string; size?: string; color?: string; couponCode?: string; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
+type CartItemMeta = Partial<StorefrontProduct> & { productId?: string; variant?: string; size?: string; color?: string; couponCode?: string; couponDiscountType?: "percentage" | "fixed"; couponValue?: number; couponMinimumOrderAmount?: number; name?: string; image?: string; price?: number; mrp?: string | number; MRP?: string | number; compareAtPrice?: string | number; compareAt?: string | number; oldPrice?: string | number };
 type CheckoutSelection = { productId: string; quantity: number; metadata: CartItemMeta };
 type SavedAddress = {
   id: string;
@@ -227,7 +226,7 @@ export default function CheckoutPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
   const [placedOrderSummary, setPlacedOrderSummary] = useState<OrderSummary | null>(null);
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogLoadError, setCatalogLoadError] = useState("");
   const [isDirectCheckout, setIsDirectCheckout] = useState(() => Boolean(readCheckoutSelection()));
@@ -364,14 +363,24 @@ export default function CheckoutPage() {
         quantity,
         variant: item.variant,
         lineTotal,
-        available: Boolean(product),
+        available: Boolean(product && typeof product.stock === "number" && product.stock >= quantity),
       });
     }
 
     const subtotal = entries.reduce((total, entry) => total + entry.lineTotal, 0);
     const shipping = 0;
-    const discount = 0;
-    const total = subtotal + shipping;
+    const couponMeta = entries.length === 1 ? cartItems[entries[0].id] : undefined;
+    const couponValue = couponMeta?.couponValue;
+    const couponEligible = couponMeta?.couponCode
+      && couponMeta.couponDiscountType
+      && typeof couponValue === "number"
+      && subtotal >= (couponMeta.couponMinimumOrderAmount ?? 0);
+    const discount = couponEligible
+      ? Math.min(subtotal, couponMeta?.couponDiscountType === "percentage"
+        ? Math.round(subtotal * (couponValue as number) / 100 * 100) / 100
+        : (couponValue as number))
+      : 0;
+    const total = subtotal - discount + shipping;
 
     return { entries, subtotal, discount, shipping, total };
   }, [catalogProducts, cart, cartItems, orderPlaced]);
@@ -977,7 +986,7 @@ export default function CheckoutPage() {
           <button type="button" className="checkout-primary-button checkout-primary-button--full" onClick={handleReviewOrder} disabled={!catalogLoaded || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
             REVIEW ORDER
           </button>
-          {!cartDetails.entries.every((item) => item.available) && catalogLoaded && <p className="checkout-inline-error" role="alert">One or more products are unavailable or no longer listed. Remove them before continuing.</p>}
+          {!cartDetails.entries.every((item) => item.available) && catalogLoaded && <p className="checkout-inline-error" role="alert">One or more products are unavailable or have insufficient stock. Reduce the quantity or remove them before continuing.</p>}
           {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
           </>
           )}

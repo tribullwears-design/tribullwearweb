@@ -16,6 +16,7 @@ import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianSta
 import type { Product } from "../../../shared/products";
 import { fetchProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
+import { getOrderStatusDisplay } from "../lib/orderStatus";
 
 type Cart = Record<string, number>;
 type CartItem = { productId?: string; name: string; price: number; image: string; variant?: string };
@@ -46,11 +47,6 @@ type OrderEntry = {
 };
 
 const orderProgressLabels = ["Order Placed", "Processing", "Shipped", "Delivered"];
-
-function getOrderProgressStatus(status: string) {
-  if (status === "Pending") return "Order Placed";
-  return orderProgressLabels.includes(status) ? status : null;
-}
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -1255,16 +1251,21 @@ export default function HeaderActions() {
                     {ordersError && <p className="header-form-error" role="alert">{ordersError}</p>}
                     {ordersLoading && <p role="status">Loading your orders…</p>}
                     {orders.length ? orders.map((order) => {
-                      const progressStatus = getOrderProgressStatus(order.status);
+                      const statusDisplay = getOrderStatusDisplay(order.status);
+                      const progressStatus = statusDisplay.progressStatus;
                       const currentStep = progressStatus ? orderProgressLabels.indexOf(progressStatus) : -1;
                       return (
                         <div className="header-account-card" key={order.id}>
                           <div className="header-account-card__row header-account-card__row--split">
-                            <strong>Order {order.id}</strong>
+                            <div className="header-account-order-heading">
+                              <strong>Order {order.id}</strong>
+                              <span className={`header-account-order-status header-account-order-status--${statusDisplay.tone}`}>
+                                {statusDisplay.label}
+                              </span>
+                            </div>
                             <span>Placed {new Date(order.createdAt).toLocaleDateString("en-IN")}</span>
                           </div>
-                          <p>Fulfilment: <strong>{order.status === "Cancelled" ? "Cancelled" : progressStatus || order.status || "Status unavailable"}</strong></p>
-                          {order.status === "Cancelled" ? <p>This order was cancelled.</p> : progressStatus ? (
+                          {statusDisplay.tone === "cancelled" ? <p>This order was cancelled.</p> : progressStatus ? (
                             <ol aria-label="Order progress">
                               {orderProgressLabels.map((label, index) => (
                                 <li key={label} aria-current={index === currentStep ? "step" : undefined}>{label}{index < currentStep ? " ✓" : ""}</li>

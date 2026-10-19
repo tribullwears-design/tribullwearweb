@@ -6,7 +6,7 @@ import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
-import { adjustProductInventory, createProduct, deleteProduct, getProduct, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
+import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
@@ -586,12 +586,52 @@ async function startServer() {
       res.json({ deleted: true });
     } catch (error) { sendOfferError(res, error); }
   });
+  const storefrontProductImageUrl = (id: string, updatedAt?: string, field: "image" | "images" = "image", index?: number) => {
+    const params = new URLSearchParams();
+    if (updatedAt) params.set("v", updatedAt);
+    if (field === "images") {
+      params.set("field", field);
+      params.set("index", String(index));
+    }
+    const query = params.size ? `?${params.toString()}` : "";
+    return `/api/products/${encodeURIComponent(id)}/image${query}`;
+  };
+
+  app.get("/api/products/:id/image", async (req, res) => {
+    try {
+      const productImages = await getProductImage(req.params.id);
+      const field = req.query.field === "images" ? "images" : "image";
+      const imageIndex = field === "images" && typeof req.query.index === "string" ? Number(req.query.index) : -1;
+      const image = field === "images"
+        ? Number.isInteger(imageIndex) && imageIndex >= 0 ? productImages?.images?.[imageIndex] : undefined
+        : productImages?.image;
+      if (!image || typeof image !== "string") {
+        return res.status(404).json({ error: "Product image not found" });
+      }
+      const imageVersion = typeof req.query.v === "string" ? req.query.v : "";
+      const isVersioned = Boolean(productImages?.updatedAt && imageVersion === productImages.updatedAt);
+      res.set("Cache-Control", isVersioned ? "public, max-age=31536000, immutable" : "public, max-age=60");
+      if (!/^data:/i.test(image)) return res.redirect(302, image);
+      const match = image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+      if (!match) return res.status(415).json({ error: "Product image format is not supported" });
+      return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product image request failed";
+      return res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
   app.get("/api/products", async (req, res) => {
     try {
       const mainCategory = typeof req.query.mainCategory === "string" ? req.query.mainCategory : undefined;
       const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory : undefined;
       const productType = typeof req.query.productType === "string" ? req.query.productType : undefined;
-      res.json(await listProducts(mainCategory, subcategory, productType));
+      const products = await listProducts(mainCategory, subcategory, productType);
+      res.json(products.map((product) => ({
+        ...product,
+        image: storefrontProductImageUrl(product.id, product.updatedAt),
+        ...(product.images ? { images: product.images.map((_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index)) } : {}),
+      })));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
       const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("Invalid") ? 400 : 500;
@@ -602,7 +642,11 @@ async function startServer() {
     try {
       const product = await getProduct(req.params.id);
       if (!product) return res.status(404).json({ error: "Product not found" });
-      res.json(product);
+      res.json({
+        ...product,
+        image: storefrontProductImageUrl(product.id, product.updatedAt),
+        ...(product.images ? { images: product.images.map((_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index)) } : {}),
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
       res.status(message.includes("invalid") ? 400 : 500).json({ error: message });

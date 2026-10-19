@@ -337,7 +337,12 @@ export default function ProductDetailPage() {
       price: priceValue,
       originalPrice: originalPriceNumber,
       image: product.image,
-      ...(appliedCoupon ? { couponCode: appliedCoupon.code } : {}),
+      ...(appliedCoupon ? {
+        couponCode: appliedCoupon.code,
+        couponDiscountType: appliedCoupon.discountType,
+        couponValue: appliedCoupon.value,
+        couponMinimumOrderAmount: appliedCoupon.minimumOrderAmount,
+      } : {}),
       size: selectedSize,
       color: isTShirtColorVariant ? activeColor : "",
       variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,

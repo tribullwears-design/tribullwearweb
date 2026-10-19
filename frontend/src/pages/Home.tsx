@@ -9,7 +9,7 @@ import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
-import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
+import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 
@@ -71,10 +71,11 @@ function Reveal({
   );
 }
 
-function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: { item: string[]; delay?: number; showMeta?: boolean; href: string; originalPrice?: number }) {
+function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice, hoverImage }: { item: string[]; delay?: number; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string }) {
   const { ref, visible } = useScrollReveal<HTMLElement>();
   const [, setLocation] = useLocation();
   const [isOpening, setIsOpening] = useState(false);
+  const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
   const openingTimer = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -104,11 +105,12 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice }: 
     <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
       <article
         ref={ref}
-        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null)}
+        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null, hoverImageLoaded ? "product-card--has-hover-image" : null)}
         style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
       >
         <div className="product-card__image">
-          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" />
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" decoding="async" />
+          {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -126,13 +128,32 @@ export default function Home() {
   const [videosError, setVideosError] = useState("");
   const [homeBanner, setHomeBanner] = useState<{ image: string; title?: string; subtitle?: string; link?: string } | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const lifestyleSectionRef = useRef<HTMLElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
   const lifestyleViewportRef = useRef<HTMLDivElement>(null);
   const lifestyleSlideRef = useRef<HTMLDivElement>(null);
   const [lifestyleIndex, setLifestyleIndex] = useState(0);
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
+  const [lifestyleMediaReady, setLifestyleMediaReady] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    const section = lifestyleSectionRef.current;
+    if (!section || lifestyleMediaReady) return;
+    if (!("IntersectionObserver" in window)) {
+      setLifestyleMediaReady(true);
+      return;
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        setLifestyleMediaReady(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: "300px" });
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [lifestyleMediaReady]);
 
   useEffect(() => {
     let active = true;
@@ -232,11 +253,13 @@ export default function Home() {
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
     href: productLink(product),
     originalPrice: product.originalPrice,
+    hoverImage: getAlternateProductImage(product),
   }));
   const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
       href: productLink(product),
       originalPrice: product.originalPrice,
+      hoverImage: getAlternateProductImage(product),
     }));
 
   return (
@@ -273,7 +296,7 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className="hero__images">
             <div className="hero__image">
-              <img src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} />
+              <img src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} fetchPriority="high" decoding="async" />
             </div>
           </div>
           <div className="hero__wash" />
@@ -302,13 +325,14 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--featured">
-              {arrivalCards.map(({ item, href, originalPrice }, idx) => (
+              {arrivalCards.map(({ item, href, originalPrice, hoverImage }, idx) => (
                 <ProductCard
                   item={item}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
                   href={href}
                   originalPrice={originalPrice}
+                  hoverImage={hoverImage}
                 />
               ))}
             </div>
@@ -324,13 +348,14 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only product-grid--featured">
-              {bestSellingCards.map(({ item, href, originalPrice }, idx) => (
+              {bestSellingCards.map(({ item, href, originalPrice, hoverImage }, idx) => (
                 <ProductCard
                   item={item}
                   key={`${item[1]}-${idx}`}
                   delay={0.08 * idx}
                   href={href}
                   originalPrice={originalPrice}
+                  hoverImage={hoverImage}
                 />
               ))}
             </div>
@@ -394,7 +419,7 @@ export default function Home() {
           </Reveal>
         </div>
 
-        <section className="lifestyle-section" aria-labelledby="lifestyle-heading">
+        <section className="lifestyle-section" aria-labelledby="lifestyle-heading" ref={lifestyleSectionRef}>
           <Reveal variant="blur">
             <h2 id="lifestyle-heading">Shop by Lifestyle</h2>
           </Reveal>
@@ -424,7 +449,7 @@ export default function Home() {
                     key={`${video.id}-${index}`}
                     ref={index === 0 ? lifestyleSlideRef : undefined}
                   >
-                    <video src={video.url} poster={video.thumbnail} autoPlay loop muted playsInline preload="metadata" aria-label={`${video.title} lifestyle video`} />
+                    <video src={lifestyleMediaReady ? video.url : undefined} poster={lifestyleMediaReady ? video.thumbnail : undefined} autoPlay loop muted playsInline preload={lifestyleMediaReady ? "metadata" : "none"} aria-label={`${video.title} lifestyle video`} />
                   </div>
                 ))}
               </div>

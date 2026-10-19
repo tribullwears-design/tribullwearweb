@@ -23,6 +23,7 @@ export type OfferDocument = {
   updatedAt: string;
 };
 export type OfferInput = Omit<OfferDocument, "id" | "codeKey" | "createdAt" | "updatedAt">;
+let indexesPromise: Promise<void> | undefined;
 
 export class OfferValidationError extends Error {
   constructor(message: string) {
@@ -40,12 +41,18 @@ export class OfferConflictError extends Error {
 
 async function getCollection(): Promise<Collection<OfferDocument>> {
   const collection = (await getDatabase()).collection<OfferDocument>("marketing-offers");
-  await collection.createIndex({ id: 1 }, { unique: true });
-  await collection.createIndex({ codeKey: 1 }, {
-    unique: true,
-    partialFilterExpression: { codeKey: { $type: "string" } },
+  indexesPromise ||= Promise.all([
+    collection.createIndex({ id: 1 }, { unique: true }),
+    collection.createIndex({ codeKey: 1 }, {
+      unique: true,
+      partialFilterExpression: { codeKey: { $type: "string" } },
+    }),
+    collection.createIndex({ kind: 1, isActive: 1, startsAt: 1, endsAt: 1 }),
+  ]).then(() => undefined).catch((error: unknown) => {
+    indexesPromise = undefined;
+    throw error;
   });
-  await collection.createIndex({ kind: 1, isActive: 1, startsAt: 1, endsAt: 1 });
+  await indexesPromise;
   return collection;
 }
 

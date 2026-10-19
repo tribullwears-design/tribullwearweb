@@ -22,4 +22,26 @@ describe("storefront product identifiers", () => {
       image: "/product.png",
     } as never).id).toBe("507f1f77bcf86cd799439011");
   });
+
+  it("preserves inventory from the catalog response for checkout availability", () => {
+    expect(mapApiProduct({
+      id: "saved-product",
+      name: "Saved product",
+      category: "products",
+      price: 599,
+      image: "/product.png",
+      stock: 0,
+    } as never).stock).toBe(0);
+  });
+
+  it("preserves distinct additional product images for cards that support hover views", () => {
+    expect(mapApiProduct({
+      id: "saved-product",
+      name: "Saved product",
+      category: "products",
+      price: 599,
+      image: "/front.png",
+      images: ["/front.png", "/back.png"],
+    } as never).images).toEqual(["/front.png", "/back.png"]);
+  });
 });

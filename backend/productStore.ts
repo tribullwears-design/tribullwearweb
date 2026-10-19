@@ -10,6 +10,7 @@ export type ProductDocument = {
   price: number;
   compareAt: number | null;
   image: string;
+  images?: string[];
   productType?: string;
   stock: number;
   sizes: string[];
@@ -31,12 +32,19 @@ export type ProductDocument = {
 type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice"> & { discountOfferId?: string | null };
 
 const productTypes = ["round-neck", "oversized", "acid-oversized", "hoodie"] as const;
+let indexesPromise: Promise<void> | undefined;
 
 async function getCollection(): Promise<Collection<ProductDocument>> {
   const db = await getDatabase();
   const collection = db.collection<ProductDocument>("products");
-  await collection.createIndex({ id: 1 }, { unique: true });
-  await collection.createIndex({ mainCategoryId: 1, subcategoryId: 1, createdAt: -1 });
+  indexesPromise ||= Promise.all([
+    collection.createIndex({ id: 1 }, { unique: true }),
+    collection.createIndex({ mainCategoryId: 1, subcategoryId: 1, createdAt: -1 }),
+  ]).then(() => undefined).catch((error: unknown) => {
+    indexesPromise = undefined;
+    throw error;
+  });
+  await indexesPromise;
   return collection;
 }
 
@@ -73,10 +81,14 @@ export class InsufficientInventoryError extends Error {
   }
 }
 
-async function normalizeProduct(product: WithId<ProductDocument>, applyDiscount = false): Promise<ProductDocument> {
+async function normalizeProduct(product: WithId<ProductDocument>, applyDiscount = false, discounts?: Map<string, Awaited<ReturnType<typeof findActiveDiscount>>>): Promise<ProductDocument> {
   const { _id, ...fields } = product;
   const id = fields.id || _id.toString();
-  const discount = applyDiscount && fields.discountOfferId ? await findActiveDiscount(fields.discountOfferId) : null;
+  const discount = applyDiscount && fields.discountOfferId
+    ? discounts?.has(fields.discountOfferId)
+      ? discounts.get(fields.discountOfferId) || null
+      : await findActiveDiscount(fields.discountOfferId)
+    : null;
   const discountedPrice = discount ? fields.price - calculateOfferDiscount(discount, fields.price) : fields.price;
   return { ...fields, id, price: discountedPrice, ...(applyDiscount ? { discountedPrice, basePrice: fields.price } : {}), newArrival: fields.newArrival === true, bestSelling: fields.bestSelling === true };
 }
@@ -143,8 +155,51 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
     if (!productTypes.includes(productType as typeof productTypes[number])) throw new Error("Invalid product type");
     filter = { ...filter, productType, status: "Active" };
   }
-  const products = await collection.find(filter).sort({ createdAt: -1 }).toArray();
-  return Promise.all(products.map((product) => normalizeProduct(product, !includeDrafts)));
+  // Storefront cards only need a small product summary. Keep image bytes and
+  // detail-only fields out of the catalog response so browsers can request
+  // images independently and progressively. Admin listings still receive the
+  // complete document for editing.
+  const storefrontProjection = {
+    _id: 0,
+    id: 1,
+    name: 1,
+    price: 1,
+    compareAt: 1,
+    productType: 1,
+    stock: 1,
+    status: 1,
+    newArrival: 1,
+    bestSelling: 1,
+    discountOfferId: 1,
+    basePrice: 1,
+    mainCategoryId: 1,
+    subcategoryId: 1,
+    mainCategory: 1,
+    subcategory: 1,
+    createdAt: 1,
+    updatedAt: 1,
+    sold: 1,
+    images: 1,
+  } as const;
+  const cursor = includeDrafts
+    ? collection.find(filter)
+    : collection.find(filter, { projection: storefrontProjection });
+  const products = await cursor
+    .sort({ createdAt: -1 })
+    .toArray();
+  const discountIds = !includeDrafts
+    ? Array.from(new Set(products.map((product) => product.discountOfferId).filter((id): id is string => Boolean(id))))
+    : [];
+  const discounts = new Map(await Promise.all(discountIds.map(async (id) => [id, await findActiveDiscount(id)] as const)));
+  return Promise.all(products.map((product) => normalizeProduct(product, !includeDrafts, discounts)));
+}
+
+export async function getProductImage(id: string) {
+  validateProductId(id);
+  return (await getCollection()).findOne(
+    { ...productFilter(id), status: "Active" },
+    { projection: { _id: 0, image: 1, images: 1, updatedAt: 1 } },
+  );
 }
 
 export async function getProduct(id: string, includeDrafts = false) {

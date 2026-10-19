@@ -179,6 +179,7 @@ export function buildCheckoutOrder(
     subtotal: checkout.subtotal,
     shipping: 0,
     discount: checkout.discount,
+    ...(checkout.couponCode ? { couponCode: checkout.couponCode } : {}),
     total: checkout.total,
     payment,
     paymentMode,

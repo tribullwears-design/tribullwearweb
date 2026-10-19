@@ -33,6 +33,7 @@ export type OrderDocument = {
   subtotal: number;
   shipping: number;
   discount: number;
+  couponCode?: string;
   total: number;
   payment: { method: string; status: string };
   paymentMode?: "test" | "razorpay" | "cod";
@@ -44,13 +45,21 @@ export type OrderDocument = {
   statusUpdatedAt?: string;
 };
 
+let indexesPromise: Promise<void> | undefined;
+
 async function getCollection(): Promise<Collection<OrderDocument>> {
   const db = await getDatabase();
   const collection = db.collection<OrderDocument>("orders");
-  await collection.createIndex({ id: 1 }, { unique: true });
-  await collection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true });
-  await collection.createIndex({ status: 1, createdAt: -1 });
-  await collection.createIndex({ customerId: 1, createdAt: -1 });
+  indexesPromise ||= Promise.all([
+    collection.createIndex({ id: 1 }, { unique: true }),
+    collection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true }),
+    collection.createIndex({ status: 1, createdAt: -1 }),
+    collection.createIndex({ customerId: 1, createdAt: -1 }),
+  ]).then(() => undefined).catch((error: unknown) => {
+    indexesPromise = undefined;
+    throw error;
+  });
+  await indexesPromise;
   return collection;
 }
 

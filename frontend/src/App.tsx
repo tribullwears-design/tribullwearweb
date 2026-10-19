@@ -1,26 +1,28 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import { useLocation } from "wouter";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import CategoryPage from "./pages/CategoryPage";
-import ProductDetailPage from "./pages/ProductDetailPage";
 import Home from "./pages/Home";
-import AllProductsPage from "./pages/AllProductsPage";
-import AdminDashboard from "./pages/AdminDashboard";
 import { apiFetch } from "./lib/api";
 import "./pages/admin-login.css";
-import CheckoutPage from "./pages/CheckoutPage";
-import SearchResultsPage from "./pages/SearchResultsPage";
+
+const NotFound = lazy(() => import("@/pages/NotFound"));
+const CategoryPage = lazy(() => import("./pages/CategoryPage"));
+const ProductDetailPage = lazy(() => import("./pages/ProductDetailPage"));
+const AllProductsPage = lazy(() => import("./pages/AllProductsPage"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 
 
 function Router() {
   return (
-    <Switch>
+    <Suspense fallback={<main role="status">Loading page...</main>}>
+      <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/admin26/category"}>{() => <LegacyCategoryRedirect />}</Route>
       <Route path={"/admin26"}>{() => <AdminRoute />}</Route>
@@ -65,7 +67,8 @@ function Router() {
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
-    </Switch>
+      </Switch>
+    </Suspense>
   );
 }
 

@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { adjustProductInventory, getProduct, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
+import { adjustProductInventory, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -80,16 +80,68 @@ describe("public product reads", () => {
     mocks.find.mockReturnValue({ sort });
 
     await listProducts();
-    expect(mocks.find).toHaveBeenLastCalledWith({ status: "Active" });
+    expect(mocks.find).toHaveBeenLastCalledWith(
+      { status: "Active" },
+      { projection: expect.objectContaining({ id: 1, name: 1, price: 1, stock: 1, updatedAt: 1 }) },
+    );
 
     await listProducts(undefined, undefined, undefined, true);
     expect(mocks.find).toHaveBeenLastCalledWith({});
+  });
+
+  it("loads a shared active discount once when several products use it", async () => {
+    const product = (id: string) => ({
+      _id: id,
+      id,
+      name: `Product ${id}`,
+      description: "Description",
+      price: 2000,
+      compareAt: null,
+      image: "/product.jpg",
+      stock: 5,
+      sizes: ["M"],
+      colors: ["Black"],
+      status: "Active",
+      discountOfferId: "shared-discount",
+      mainCategoryId: "category",
+      subcategoryId: "subcategory",
+      mainCategory: "Category",
+      subcategory: "Subcategory",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.000Z",
+    });
+    mocks.find.mockReturnValue({ sort: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([product("one"), product("two")]) }) });
+    mocks.findOne.mockResolvedValue({
+      id: "shared-discount",
+      kind: "discount",
+      isActive: true,
+      discountType: "percentage",
+      value: 10,
+      startsAt: null,
+      endsAt: null,
+    });
+
+    const products = await listProducts();
+
+    expect(products.map(({ price }) => price)).toEqual([1800, 1800]);
+    expect(mocks.findOne).toHaveBeenCalledTimes(1);
   });
 
   it("does not expose draft products through the public product detail API", async () => {
     mocks.findOne.mockResolvedValue(null);
     await expect(getProduct("draft-product")).resolves.toBeNull();
     expect(mocks.findOne).toHaveBeenCalledWith({ id: "draft-product", status: "Active" });
+  });
+
+  it("loads storefront image bytes separately using an active product projection", async () => {
+    const storedImage = { image: "data:image/webp;base64,AA==", updatedAt: "2026-01-02T00:00:00.000Z" };
+    mocks.findOne.mockResolvedValue(storedImage);
+
+    await expect(getProductImage("product-1")).resolves.toEqual(storedImage);
+    expect(mocks.findOne).toHaveBeenLastCalledWith(
+      { id: "product-1", status: "Active" },
+      { projection: { _id: 0, image: 1, images: 1, updatedAt: 1 } },
+    );
   });
 });
 

@@ -19,3 +19,7 @@ export function getBestSellingProducts(products: readonly StorefrontProduct[], h
     ? (second.sold - first.sold || compareNewest(first, second))
     : compareNewest(first, second));
 }
+
+export function getAlternateProductImage(product: Pick<StorefrontProduct, "image" | "images">) {
+  return product.images?.find((image) => image.trim() && image !== product.image);
+}

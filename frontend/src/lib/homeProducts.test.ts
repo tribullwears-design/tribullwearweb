@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "../../../shared/products";
 import type { CategoryHierarchy } from "./categoryHierarchy";
-import { getBestSellingProducts, getNewArrivals } from "./homeProducts";
+import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "./homeProducts";
 import type { StorefrontProduct } from "./products";
 
 const hierarchy: CategoryHierarchy = {
@@ -59,5 +59,17 @@ describe("home product sections", () => {
   it("keeps unflagged products out of both homepage sections", () => {
     expect(getNewArrivals([product("unflagged", 9)], hierarchy)).toEqual([]);
     expect(getBestSellingProducts([product("unflagged", 9, 10)], hierarchy)).toEqual([]);
+  });
+});
+
+describe("homepage alternate product images", () => {
+  it("uses the first available image distinct from the primary image", () => {
+    expect(getAlternateProductImage({ image: "/front.jpg", images: ["/front.jpg", "", "/back.jpg", "/detail.jpg"] }))
+      .toBe("/back.jpg");
+  });
+
+  it("leaves cards without a second image on the hover zoom fallback", () => {
+    expect(getAlternateProductImage({ image: "/front.jpg" })).toBeUndefined();
+    expect(getAlternateProductImage({ image: "/front.jpg", images: ["/front.jpg"] })).toBeUndefined();
   });
 });

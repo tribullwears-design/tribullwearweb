@@ -82,12 +82,39 @@ describe("prepareCheckoutOrder", () => {
     await expect(prepareCheckoutOrder(request)).rejects.toMatchObject({ status: 409 });
   });
 
+  it("accepts an in-stock product at its current server price and selected variant", async () => {
+    const checkout = await prepareCheckoutOrder(request);
+    expect(checkout.orderItems).toEqual([expect.objectContaining({
+      id: "product-1",
+      price: 1500,
+      quantity: 2,
+      variant: "Size: M / Colour: Black",
+      lineTotal: 3000,
+    })]);
+  });
+
+  it("rejects an out-of-stock product even when the client requests one unit", async () => {
+    mocks.getProduct.mockResolvedValue({ ...product, stock: 0 });
+    await expect(prepareCheckoutOrder({
+      ...request,
+      items: [{ id: "product-1", quantity: 1, variant: { size: "M", color: "Black" } }],
+    })).rejects.toMatchObject({ status: 409, message: "Only 0 units of Catalog-priced shirt are available" });
+  });
+
   it("revalidates an active coupon and stores the calculated discount", async () => {
     mocks.findActiveCoupon.mockResolvedValue({ code: "SAVE10", minimumOrderAmount: 500, discountType: "percentage", value: 10 });
     mocks.calculateOfferDiscount.mockReturnValue(300);
     const checkout = await prepareCheckoutOrder({ ...request, couponCode: "save10" });
     expect(mocks.findActiveCoupon).toHaveBeenCalledWith("save10");
     expect(checkout).toMatchObject({ couponCode: "SAVE10", subtotal: 3000, discount: 300, total: 2700 });
+    expect(buildCheckoutOrder(checkout, { method: "upi", status: "Pending" }, "razorpay", "order_test123"))
+      .toMatchObject({ couponCode: "SAVE10", discount: 300, total: 2700 });
+  });
+
+  it("rejects an invalid coupon rather than accepting a client discount", async () => {
+    mocks.findActiveCoupon.mockResolvedValue(null);
+    await expect(prepareCheckoutOrder({ ...request, couponCode: "NOTREAL" }))
+      .rejects.toMatchObject({ status: 400, message: "Coupon is invalid, inactive, or expired" });
   });
 
   it("rejects an invalid state before it can be persisted to an order", async () => {

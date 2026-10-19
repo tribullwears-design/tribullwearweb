@@ -4,6 +4,8 @@ import { parsePrice, resolveOriginalPrice } from "./productPrice";
 import { apiFetch } from "./api";
 
 export type StorefrontProduct = Product & {
+  images?: string[];
+  stock?: number;
   mainCategoryId?: string;
   subcategoryId?: string;
   newArrival?: boolean;
@@ -80,8 +82,10 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
         ? product.mainCategoryId
         : "products"),
     image: product.image,
+    ...(Array.isArray(product.images) ? { images: product.images.filter((image): image is string => typeof image === "string" && Boolean(image.trim())) } : {}),
     created: product.created ?? (typeof product.createdAt === "string" ? Date.parse(product.createdAt) : 0),
     sold: product.sold ?? 0,
+    ...(typeof product.stock === "number" ? { stock: product.stock } : {}),
     ...(product.mainCategoryId ? { mainCategoryId: product.mainCategoryId } : {}),
     ...(product.subcategoryId ? { subcategoryId: product.subcategoryId } : {}),
     ...(product.newArrival === true ? { newArrival: true } : {}),
