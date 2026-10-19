@@ -62,13 +62,22 @@ function customerFacingOrder(order: OrderDocument) {
   return safeOrder;
 }
 
+async function requireCustomer(req: express.Request, res: express.Response) {
+  const customer = await getSessionCustomer(req);
+  if (!customer?._id) {
+    res.status(401).json({ error: "Sign in to continue to checkout" });
+    return null;
+  }
+  return { id: customer._id.toString(), email: customer.email };
+}
+
 export function createRazorpayCheckoutRouter() {
   const router = express.Router();
 
   router.post("/api/create-order", checkoutLimiter, async (req, res) => {
     try {
-      const customer = await getSessionCustomer(req);
-      const identity = customer?._id ? { id: customer._id.toString(), email: customer.email } : undefined;
+      const identity = await requireCustomer(req, res);
+      if (!identity) return;
       const checkout = await prepareCheckoutOrder(req.body, identity);
       const existing = await findOrderByIdempotencyKey(checkout.idempotencyKey);
       if (existing) {
@@ -138,8 +147,9 @@ export function createRazorpayCheckoutRouter() {
     try {
       const order = await findOrderByRazorpayOrderId(orderId);
       if (!order) return res.status(404).json({ error: "Checkout order was not found" });
-      const customer = await getSessionCustomer(req);
-      if (order.customerId && order.customerId !== customer?._id?.toString()) {
+      const identity = await requireCustomer(req, res);
+      if (!identity) return;
+      if (order.customerId !== identity.id) {
         return res.status(404).json({ error: "Checkout order was not found" });
       }
       if (!verifyPaymentSignature(orderId, paymentId, signature)) {

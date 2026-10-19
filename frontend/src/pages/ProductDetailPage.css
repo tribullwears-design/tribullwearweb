@@ -1005,4 +1005,14 @@
   .product-detail-recommendation-card h3 {
     font-size: 12px;
   }
+
+  .product-detail-qty button {
+    width: 44px;
+    min-width: 44px;
+  }
+
+  .product-detail-swatches button {
+    width: 44px;
+    height: 44px;
+  }
 }

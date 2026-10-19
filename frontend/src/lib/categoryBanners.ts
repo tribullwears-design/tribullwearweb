@@ -23,11 +23,11 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function loadBanners() {
-  return request<CategoryBanner[]>("/api/banners", { cache: "no-store" });
+  return request<CategoryBanner[]>("/api/banners");
 }
 
 export function loadCategoryBanner(categoryId: string) {
-  return request<CategoryBanner | null>(`/api/banners/${encodeURIComponent(categoryId)}`, { cache: "no-store" });
+  return request<CategoryBanner | null>(`/api/banners/${encodeURIComponent(categoryId)}`);
 }
 
 export function saveBanner(categoryId: string, image: string, fields: { title?: string; subtitle?: string; link?: string } = {}) {

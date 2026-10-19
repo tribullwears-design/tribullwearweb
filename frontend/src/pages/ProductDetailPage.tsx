@@ -66,6 +66,19 @@ export default function ProductDetailPage() {
   const [couponFeedback, setCouponFeedback] = useState<{ kind: "idle" | "error" | "success"; message: string }>({ kind: "idle", message: "" });
 
   useEffect(() => {
+    const continueCheckoutAfterLogin = () => {
+      try {
+        const selection = JSON.parse(window.sessionStorage.getItem("tribull-checkout-selection") || "null") as { productId?: string } | null;
+        if (selection?.productId === (id || storedProduct?.id)) setLocation("/checkout");
+      } catch {
+        // Ignore malformed checkout state; checkout validation handles it.
+      }
+    };
+    window.addEventListener("tribull-customer-authenticated", continueCheckoutAfterLogin);
+    return () => window.removeEventListener("tribull-customer-authenticated", continueCheckoutAfterLogin);
+  }, [id, storedProduct?.id, setLocation]);
+
+  useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
     setHeaderCartCount(Object.values(cart).reduce((total, quantityValue) => total + quantityValue, 0));
   }, [cart]);
@@ -354,7 +367,7 @@ export default function ProductDetailPage() {
     setIsAdded(true);
   };
 
-  const checkoutCurrentProduct = () => {
+  const checkoutCurrentProduct = async () => {
     if (isOutOfStock) return;
     if (availableSizes.length > 0 && !selectedSize) {
       setSizeError("Please select a size before checking out.");
@@ -378,7 +391,14 @@ export default function ProductDetailPage() {
       variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
     };
     window.sessionStorage.setItem("tribull-checkout-selection", JSON.stringify({ productId, quantity, metadata }));
-    setLocation("/checkout");
+    try {
+      const response = await apiFetch("/api/auth/me", { cache: "no-store" });
+      if (response.ok) setLocation("/checkout");
+      else if (response.status === 401) window.dispatchEvent(new Event("tribull-open-login"));
+      else setSizeError("Unable to verify your sign-in status. Please try again.");
+    } catch {
+      setSizeError("Unable to verify your sign-in status. Please try again.");
+    }
   };
 
   const toggleWishlist = () => {

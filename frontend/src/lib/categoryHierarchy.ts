@@ -274,7 +274,7 @@ export function deleteSubcategory(parent: string, value: string) {
 }
 
 export function useCategoryHierarchy(fallback: CategoryHierarchy) {
-  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => fallback);
+  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => readCachedHierarchy(fallback));
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [requestVersion, setRequestVersion] = useState(0);

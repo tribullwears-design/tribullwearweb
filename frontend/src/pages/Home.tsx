@@ -177,7 +177,7 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     setVideosLoading(true);
-    void fetch("/api/videos", { cache: "no-store" }).then(async (response) => {
+    void fetch("/api/videos").then(async (response) => {
       if (!response.ok) throw new Error("Videos could not be loaded.");
       const savedVideos = await response.json() as Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>;
       if (active) setHomeVideos(savedVideos);

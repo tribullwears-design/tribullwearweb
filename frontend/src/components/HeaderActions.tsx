@@ -419,6 +419,7 @@ export default function HeaderActions() {
   const persistUser = (nextUser: AuthUser) => {
     setAuthUser(nextUser);
     window.localStorage.setItem("tribull-user", JSON.stringify(nextUser));
+    if (nextUser.isAuthenticated) window.dispatchEvent(new Event("tribull-customer-authenticated"));
   };
 
   const openAccount = () => {
@@ -440,6 +441,12 @@ export default function HeaderActions() {
     setLoginSuccess("");
     setOverlay("account");
   };
+
+  useEffect(() => {
+    const openLoginForCheckout = () => openAccount();
+    window.addEventListener("tribull-open-login", openLoginForCheckout);
+    return () => window.removeEventListener("tribull-open-login", openLoginForCheckout);
+  }, [authUser.isAuthenticated]);
 
   const beginProfileEdit = () => {
     profilePhotoReadVersionRef.current += 1;

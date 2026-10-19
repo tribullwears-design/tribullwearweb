@@ -260,7 +260,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     setStoredCatalog([]);
     setProductsLoading(true);
     const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-    const loadProducts = () => apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" })
+    const loadProducts = () => apiFetch(`/api/products?${params.toString()}`)
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load category products.");
         return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string; productType?: string }[];
@@ -396,7 +396,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
     const loadProducts = () => {
       void Promise.all(requestedSubcategories.map(async (entrySlug) => {
         const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-        const response = await apiFetch(`/api/products?${params.toString()}`, { cache: "no-store" });
+        const response = await apiFetch(`/api/products?${params.toString()}`);
         if (!response.ok) throw new Error("Unable to load category products.");
         return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string }[];
       }))

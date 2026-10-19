@@ -110,8 +110,13 @@ export async function listBanners() {
 
 export async function getBanner(categoryId: string) {
   const category = await resolveCategory(categoryId);
-  const banners = await listBanners();
-  return banners.find((banner) => banner.categoryId === category.value) || null;
+  const collection = await getCollection();
+  await seedExistingHeroBanners(collection);
+  const document = await collection.findOne({ categoryId: category.value });
+  return document ? {
+    ...toBanner(document),
+    categoryName: category.label,
+  } : null;
 }
 
 function normalizeBannerFields(value: unknown) {

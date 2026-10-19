@@ -74,6 +74,7 @@ async function startServer() {
   validateCustomerAuthConfiguration();
 
   const app = express();
+  const publicCatalogCache = "public, max-age=60, stale-while-revalidate=300";
   configureProxyTrust(app);
   const server = createServer(app);
   app.use(express.json({
@@ -437,7 +438,7 @@ async function startServer() {
   };
 
   app.get("/api/categories", async (_req, res) => {
-    try { res.json(await listCategories()); } catch (error) { sendError(res, error); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await listCategories()); } catch (error) { sendError(res, error); }
   });
   app.put("/api/categories", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.json(await replaceCategories(req.body)); } catch (error) { sendError(res, error); }
@@ -483,10 +484,10 @@ async function startServer() {
     try { const category = await removeSubcategory(req.params.parent, req.params.value); if (!category) return res.status(404).json({ error: "Parent category not found" }); res.json(category); } catch (error) { sendError(res, error); }
   });
   app.get("/api/banners", async (_req, res) => {
-    try { res.json(await listBanners()); } catch (error) { sendBannerError(res, error); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await listBanners()); } catch (error) { sendBannerError(res, error); }
   });
   app.get("/api/banners/:categoryId", async (req, res) => {
-    try { res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
   });
   app.post("/api/banners", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image, req.body)); } catch (error) { sendBannerError(res, error); }
@@ -501,10 +502,10 @@ async function startServer() {
     } catch (error) { sendBannerError(res, error);     }
   });
   app.get("/api/storefront/settings/social", async (_req, res) => {
-    try { res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
   });
   app.get("/api/storefront/featured-products", async (_req, res) => {
-    try { res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
   });
   app.get("/api/admin/settings/general", requireAdminPermission("settings", "view"), async (_req, res) => {
     try { res.json(await getGeneralSettings()); } catch (error) { sendError(res, error); }
@@ -627,6 +628,7 @@ async function startServer() {
       const subcategory = typeof req.query.subcategory === "string" ? req.query.subcategory : undefined;
       const productType = typeof req.query.productType === "string" ? req.query.productType : undefined;
       const products = await listProducts(mainCategory, subcategory, productType);
+      res.set("Cache-Control", publicCatalogCache);
       res.json(products.map((product) => ({
         ...product,
         image: storefrontProductImageUrl(product.id, product.updatedAt),
@@ -642,6 +644,7 @@ async function startServer() {
     try {
       const product = await getProduct(req.params.id);
       if (!product) return res.status(404).json({ error: "Product not found" });
+      res.set("Cache-Control", publicCatalogCache);
       res.json({
         ...product,
         image: storefrontProductImageUrl(product.id, product.updatedAt),
@@ -678,7 +681,7 @@ async function startServer() {
     } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to upload video" }); }
   });
   app.get("/api/videos", async (_req, res) => {
-    try { res.json(await listActiveVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await listActiveVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
   });
   app.get("/api/videos/files/:storageId", async (req, res) => {
     try { if (!await streamVideoFile(req.params.storageId, res)) res.status(404).end(); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load video" }); }
@@ -770,7 +773,8 @@ async function startServer() {
     }
     try {
       const sessionCustomer = await getSessionCustomer(req);
-      const customerId = sessionCustomer?._id?.toString();
+      if (!sessionCustomer?._id) return res.status(401).json({ error: "Sign in to continue to checkout" });
+      const customerId = sessionCustomer._id.toString();
       const existingOrder = await findOrderByIdempotencyKey(idempotencyKey);
       if (existingOrder) {
         if ((existingOrder.customerId || undefined) !== customerId) {

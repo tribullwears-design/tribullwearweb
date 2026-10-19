@@ -1975,6 +1975,24 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 
 @media (max-width: 640px) { .wordmark { width:100px; height:38px; } .footer__brand-row .wordmark { width:100px; height:38px; } }
 
+@media (max-width: 640px) {
+  .icon-button,
+  .mobile-menu {
+    box-sizing: content-box;
+    padding: 9px;
+    margin: -9px;
+  }
+
+  .footer__col .footer__links button {
+    min-height: 36px;
+  }
+}
+
+:where(input, textarea, select):focus-visible {
+  outline: 2px solid var(--tribull-green);
+  outline-offset: 2px;
+}
+
 @media (max-width: 900px) {
   .ticker { height:30px; }
   .site-header { height:54px; }

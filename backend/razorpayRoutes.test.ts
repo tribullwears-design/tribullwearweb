@@ -61,6 +61,7 @@ const checkout = {
 const order = {
   id: "TB-20260101-TEST1234",
   idempotencyKey: checkout.idempotencyKey,
+  customerId: "customer-object-id",
   customer: checkout.customer,
   shippingAddress: checkout.shippingAddress,
   items: checkout.orderItems,
@@ -95,7 +96,7 @@ beforeEach(async () => {
   mocks.getRazorpayKeyId.mockReturnValue("rzp_test_public");
   mocks.verifyPaymentSignature.mockReturnValue(true);
   mocks.verifyWebhookSignature.mockReturnValue(true);
-  mocks.getSessionCustomer.mockResolvedValue(null);
+  mocks.getSessionCustomer.mockResolvedValue({ _id: { toString: () => "customer-object-id" }, email: "customer@example.test" });
   mocks.fetchGatewayPayment.mockResolvedValue({
     id: "pay_test123",
     order_id: "order_test123",
@@ -128,6 +129,21 @@ afterEach(async () => {
 });
 
 describe("Razorpay checkout routes", () => {
+  it("rejects unauthenticated order creation and payment verification", async () => {
+    mocks.getSessionCustomer.mockResolvedValue(null);
+    const createResponse = await fetch(`${baseUrl}/api/create-order`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ checkout: true }) });
+    expect(createResponse.status).toBe(401);
+    expect(mocks.prepareCheckoutOrder).not.toHaveBeenCalled();
+
+    const verifyResponse = await fetch(`${baseUrl}/api/verify-payment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ razorpay_order_id: "order_test123", razorpay_payment_id: "pay_test123", razorpay_signature: "a".repeat(64) }),
+    });
+    expect(verifyResponse.status).toBe(401);
+    expect(mocks.verifyPaymentSignature).not.toHaveBeenCalled();
+  });
+
   it("returns a clear server configuration error without exposing credentials", async () => {
     mocks.createGatewayOrder.mockRejectedValue(
       new RazorpayConfigurationError("Razorpay is not configured on the server. Missing RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET."),
