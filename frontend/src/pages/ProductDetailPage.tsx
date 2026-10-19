@@ -46,6 +46,8 @@ export default function ProductDetailPage() {
     }
   });
   const [isProductLoading, setIsProductLoading] = useState(true);
+  const [productLoadError, setProductLoadError] = useState(false);
+  const [productRetry, setProductRetry] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [isInfoOpen, setIsInfoOpen] = useState(true);
   const [headerCartCount, setHeaderCartCount] = useState(0);
@@ -88,17 +90,38 @@ export default function ProductDetailPage() {
     const loadStoredProduct = () => {
       setStoredProduct(null);
       setIsProductLoading(true);
+      setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setIsProductLoading(false);
         return;
       }
-      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store" })
+      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
         .then(async (response) => {
           if (!response.ok) {
-            if (response.status !== 404) throw new Error("Unable to load product details.");
-            return null;
+            if (response.status === 404) return null;
+            throw new Error("Unable to load product details.");
           }
-          return await response.json() as {
+          if (!(response.headers.get("content-type") || "").includes("application/json")) throw new Error("Product response was not JSON.");
+          const product = await response.json() as Partial<{
+            id: string;
+            name: string;
+            description: string;
+            price: number;
+            compareAt: number | null;
+            image: string;
+            mainCategory: string;
+            sizes: string[];
+            colors: string[];
+            stock: number;
+            basePrice?: number;
+          }>;
+          if (typeof product.id !== "string" || !product.id || typeof product.name !== "string"
+            || typeof product.price !== "number" || !Number.isFinite(product.price)
+            || typeof product.image !== "string" || typeof product.mainCategory !== "string"
+            || !Array.isArray(product.sizes) || !Array.isArray(product.colors) || typeof product.stock !== "number") {
+            throw new Error("Product response was incomplete.");
+          }
+          return product as {
             id: string;
             name: string;
             description: string;
@@ -135,7 +158,10 @@ export default function ProductDetailPage() {
         })
         .catch((error: unknown) => {
           console.error("Product detail request failed.", error);
-          if (active) setIsProductLoading(false);
+          if (active) {
+            setProductLoadError(true);
+            setIsProductLoading(false);
+          }
         });
     };
     loadStoredProduct();
@@ -144,7 +170,7 @@ export default function ProductDetailPage() {
       active = false;
       window.removeEventListener("tribull-products-updated", loadStoredProduct);
     };
-  }, [id]);
+  }, [id, productRetry]);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -228,7 +254,11 @@ export default function ProductDetailPage() {
     return (
       <div className="product-detail-page">
         <main className="product-detail-page__state" role="status">
-          {isProductLoading ? "Loading product…" : "Product not found."}
+          {isProductLoading ? "Loading product…" : productLoadError ? (
+            <><p>We could not load this product. Please check your connection and try again.</p><button type="button" onClick={() => setProductRetry((retry) => retry + 1)}>Retry</button></>
+          ) : (
+            <><p>Product Not Found</p><Link href="/products">Back to shopping</Link></>
+          )}
         </main>
       </div>
     );
