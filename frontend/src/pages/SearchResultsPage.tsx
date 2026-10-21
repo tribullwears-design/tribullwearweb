@@ -3,22 +3,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
-import { useScrollReveal } from "../hooks/useScrollReveal";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
 type SortOrder = "relevance" | "price-low" | "price-high" | "newest";
 
-function SearchResultCard({
-  product,
-  index,
-}: {
-  product: Product;
-  index: number;
-}) {
-  const { ref, visible } = useScrollReveal<HTMLElement>();
+function SearchResultCard({ product }: { product: Product }) {
   const category = getProductSearchCategory(product);
 
   return (
@@ -26,13 +18,9 @@ function SearchResultCard({
       href={`/product/${encodeURIComponent(product.id)}`}
       className="search-page__card-link"
     >
-      <article
-        ref={ref}
-        className={`search-page__card reveal-scale-in parallax-tilt${visible ? " reveal-visible" : ""}`}
-        style={{ transitionDelay: `${0.08 * index}s` }}
-      >
+      <article className="search-page__card parallax-tilt">
         <div className="search-page__image">
-          <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+          <img src={product.image} alt={product.name} className="product-image-primary" decoding="async" />
         </div>
         <div className="search-page__card-info">
           <span>{category.replace(/-/g, " ")}</span>
@@ -50,7 +38,7 @@ function SearchResultCard({
 
 export default function SearchResultsPage() {
   const query = new URLSearchParams(window.location.search).get("q")?.trim() || "";
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
   const [sortOrder, setSortOrder] = useState<SortOrder>("relevance");
 
   useEffect(() => {
@@ -63,11 +51,13 @@ export default function SearchResultsPage() {
         console.error("Could not load products for search results.", error);
       });
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 
@@ -132,8 +122,8 @@ export default function SearchResultsPage() {
                 <section className="search-page__group" key={category} aria-label={`${category.replace(/-/g, " ")} products`}>
                   <h2>{category.replace(/-/g, " ")}</h2>
                   <div className="search-page__grid">
-                    {products.map((product, index) => (
-                      <SearchResultCard key={product.id} product={product} index={index} />
+                    {products.map((product) => (
+                      <SearchResultCard key={product.id} product={product} />
                     ))}
                   </div>
                 </section>

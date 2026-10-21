@@ -1,7 +1,6 @@
 import { ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
 import { Link, useParams } from "wouter";
-import { apiFetch } from "../lib/api";
-import { useScrollReveal } from "../hooks/useScrollReveal";
+import { fetchProducts, getCachedProducts } from "../lib/products";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
@@ -11,7 +10,6 @@ import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
-import { getProductIdentifier } from "../lib/products";
 
 export type CategoryProduct = {
   id: string;
@@ -37,6 +35,20 @@ const existingHeroBanners: Record<string, string> = {
   motorsports: "/products/motosportsbanner.png",
 };
 
+function getCachedCategoryProducts(categorySlug: string, entrySlugs: readonly string[]) {
+  const requested = new Set(entrySlugs);
+  return getCachedProducts()
+    .filter((product) => product.mainCategoryId === categorySlug && product.subcategoryId && requested.has(product.subcategoryId))
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      price: `₹${product.price.toLocaleString("en-IN")}`,
+      image: product.image,
+      originalPrice: product.originalPrice,
+      productType: product.category,
+    }));
+}
+
 function normalizeCategorySlug(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
@@ -59,32 +71,12 @@ function liveCategoryDefinition(targetSlug: string, hierarchy: CategoryHierarchy
 
 function Reveal({
   children,
-  variant = "up",
-  stagger = false,
   className = "",
-  delay = 0,
 }: {
   children: React.ReactNode;
-  variant?: "up" | "left" | "right" | "scale" | "blur";
-  stagger?: boolean;
   className?: string;
-  delay?: number;
 }) {
-  const { ref, visible } = useScrollReveal<HTMLDivElement>();
-  const base =
-    variant === "up" ? "reveal-hidden" :
-    variant === "left" ? "reveal-hidden-left" :
-    variant === "right" ? "reveal-hidden-right" :
-    variant === "scale" ? "reveal-scale-in" : "reveal-blur-in";
-  return (
-    <div
-      ref={ref}
-      className={`${base} ${stagger ? "reveal-stagger" : ""} ${visible ? "reveal-visible" : ""} ${className}`}
-      style={delay ? { transitionDelay: `${delay}s` } : undefined}
-    >
-      {children}
-    </div>
-  );
+  return <div className={className}>{children}</div>;
 }
 
 interface CategoryHeroProps {
@@ -127,14 +119,14 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
       </div>
       <div className="hero__wash" />
       <div className="hero__copy" ref={heroCopyRef}>
-        <Reveal variant="blur" delay={0.1}>
+        <Reveal>
           <p className="eyebrow">{subtitle}</p>
         </Reveal>
-        <Reveal variant="blur" delay={0.25}>
+        <Reveal>
           <h1>{title}<br /><em>Collection</em></h1>
         </Reveal>
         {description && (
-          <Reveal variant="up" delay={0.5}>
+          <Reveal>
             <p className="hero-description">{description}</p>
           </Reveal>
         )}
@@ -147,19 +139,16 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, delay = 0, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; delay?: number; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
-  const { ref, visible } = useScrollReveal<HTMLElement>();
+function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
   const productLink = `/product/${encodeURIComponent(item.id)}`;
 
   return (
     <Link href={productLink} className="block h-full">
       <article
-        ref={ref}
-        className={`category-page__card category-cinema-product reveal-scale-in ${visible ? "reveal-visible" : ""} cursor-pointer hover:shadow-lg transition-shadow`}
-        style={{ transitionDelay: `${delay}s` }}
+        className="category-page__card category-cinema-product cursor-pointer hover:shadow-lg transition-shadow"
       >
         <div className="category-catalog-card__image-wrap">
-          <img src={item.image} alt={item.name} className="category-page__image" />
+          <img src={item.image} alt={item.name} className="category-page__image" decoding="async" />
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -245,8 +234,8 @@ const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
   const [sort, setSort] = useState<CatalogSort>("featured");
-  const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, [entrySlug]));
+  const [productsLoading, setProductsLoading] = useState(() => getCachedProducts().length === 0);
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -257,24 +246,12 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 
   useEffect(() => {
     let active = true;
-    setStoredCatalog([]);
-    setProductsLoading(true);
-    const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-    const loadProducts = () => apiFetch(`/api/products?${params.toString()}`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string; productType?: string }[];
-      })
+    setStoredCatalog(getCachedCategoryProducts(categorySlug, [entrySlug]));
+    setProductsLoading(getCachedProducts().length === 0);
+    const loadProducts = () => fetchProducts()
       .then((products) => {
         if (active) {
-          setStoredCatalog(products.map((product) => ({
-            id: getProductIdentifier(product),
-            name: product.name,
-            price: `₹${product.price.toLocaleString("en-IN")}`,
-            image: product.image,
-            originalPrice: product.compareAt,
-            productType: product.productType,
-          })));
+          setStoredCatalog(getCachedCategoryProducts(categorySlug, [entrySlug]));
           setProductsLoading(false);
         }
       })
@@ -284,9 +261,11 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
       });
     void loadProducts();
     window.addEventListener("tribull-products-updated", loadProducts);
+    window.addEventListener("tribull-products-cache-updated", loadProducts);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", loadProducts);
+      window.removeEventListener("tribull-products-cache-updated", loadProducts);
     };
   }, [categorySlug, entrySlug]);
 
@@ -368,9 +347,9 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
         </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
-        {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item, index) => {
+        {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item) => {
           const key = productKey(item);
-          return <ProductCard key={item.id} item={item} delay={0.04 * index} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={item.id} item={item} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>
@@ -378,37 +357,26 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 }
 
 function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string; entrySlugs: string[] }) {
-  const [products, setProducts] = useState<CategoryProduct[]>([]);
-  const [loading, setLoading] = useState(entrySlugs.length > 0);
+  const [products, setProducts] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, entrySlugs));
+  const [loading, setLoading] = useState(() => entrySlugs.length > 0 && getCachedProducts().length === 0);
   const entrySlugsKey = entrySlugs.join("\u0000");
 
   useEffect(() => {
     const requestedSubcategories = entrySlugsKey ? entrySlugsKey.split("\u0000") : [];
     let active = true;
+    setProducts(getCachedCategoryProducts(categorySlug, requestedSubcategories));
+    setLoading(requestedSubcategories.length > 0 && getCachedProducts().length === 0);
     if (requestedSubcategories.length === 0) {
       setProducts([]);
       setLoading(false);
       return () => { active = false; };
     }
 
-    setProducts([]);
-    setLoading(true);
     const loadProducts = () => {
-      void Promise.all(requestedSubcategories.map(async (entrySlug) => {
-        const params = new URLSearchParams({ mainCategory: categorySlug, subcategory: entrySlug });
-        const response = await apiFetch(`/api/products?${params.toString()}`);
-        if (!response.ok) throw new Error("Unable to load category products.");
-        return await response.json() as { id?: string; _id?: string | { $oid?: string }; name: string; price: number; compareAt?: number | null; image: string }[];
-      }))
+      void fetchProducts()
         .then((result) => {
           if (active) {
-            setProducts(result.flat().map((product) => ({
-              id: getProductIdentifier(product),
-              name: product.name,
-              price: `₹${product.price.toLocaleString("en-IN")}`,
-              image: product.image,
-              originalPrice: product.compareAt,
-            })));
+            setProducts(getCachedCategoryProducts(categorySlug, requestedSubcategories));
             setLoading(false);
           }
         })
@@ -419,9 +387,11 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
     };
     loadProducts();
     window.addEventListener("tribull-products-updated", loadProducts);
+    window.addEventListener("tribull-products-cache-updated", loadProducts);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", loadProducts);
+      window.removeEventListener("tribull-products-cache-updated", loadProducts);
     };
   }, [categorySlug, entrySlugsKey]);
 
@@ -432,7 +402,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
     <div className="category-best-selling-grid">
       {products.map((item) => (
         <Link key={item.id} href={`/product/${encodeURIComponent(item.id)}`} className="product-card">
-          <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" /></div>
+          <div className="product-card__image"><img src={item.image} alt={item.name} decoding="async" /></div>
         </Link>
       ))}
     </div>
@@ -464,7 +434,7 @@ export default function CategoryPage() {
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
 
-  if (!hierarchy.loaded) return <div className="p-8">Loading category...</div>;
+  if (!hierarchy.loaded && !activeDefinitions[categorySlug]) return <div className="p-8">Loading category...</div>;
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
   if (categorySlug === "cinema" && !lang) {

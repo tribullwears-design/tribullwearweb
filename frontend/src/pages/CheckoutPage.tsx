@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
-import { fetchProducts, refreshProducts, type StorefrontProduct } from "../lib/products";
+import { fetchProducts, getCachedProducts, refreshProducts, type StorefrontProduct } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { createCheckoutSubmission } from "../lib/checkout";
 import { getRazorpayPaymentConfig, openRazorpayCheckout } from "../lib/razorpayCheckout";
@@ -226,8 +226,8 @@ export default function CheckoutPage() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoiceError, setInvoiceError] = useState("");
   const [placedOrderSummary, setPlacedOrderSummary] = useState<OrderSummary | null>(null);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
-  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
+  const [catalogLoaded, setCatalogLoaded] = useState(() => getCachedProducts().length > 0);
   const [catalogLoadError, setCatalogLoadError] = useState("");
   const [isDirectCheckout, setIsDirectCheckout] = useState(() => Boolean(readCheckoutSelection()));
   const [cart, setCart] = useState<CartState>(() => {
@@ -330,11 +330,13 @@ export default function CheckoutPage() {
       });
     };
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 

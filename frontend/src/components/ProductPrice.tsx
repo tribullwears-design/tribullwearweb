@@ -1,6 +1,6 @@
 import { getDiscountPercentage, parsePrice, formatProductPrice } from "../lib/productPrice";
 import { useEffect, useState } from "react";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts } from "../lib/products";
 import type { Product } from "../../../shared/products";
 
 type ProductPriceProps = {
@@ -11,14 +11,13 @@ type ProductPriceProps = {
 };
 
 export default function ProductPrice({ sellingPrice, originalPrice, productName, className = "" }: ProductPriceProps) {
-  const [catalogProduct, setCatalogProduct] = useState<Product>();
+  const [catalogProduct, setCatalogProduct] = useState<Product | undefined>(() => getCachedProducts()
+    .find((product) => product.name.trim().toLowerCase() === productName?.trim().toLowerCase()));
   useEffect(() => {
-    setCatalogProduct(undefined);
     if (!productName) return;
     let active = true;
-    const loadProductPrice = (refresh: boolean) => {
-      const request = refresh ? refreshProducts() : fetchProducts();
-      void request.then((products) => {
+    const loadProductPrice = () => {
+      void fetchProducts().then((products) => {
         if (!active) return;
         const match = products.find((product) => product.name.trim().toLowerCase() === productName.trim().toLowerCase());
         setCatalogProduct(match);
@@ -26,12 +25,14 @@ export default function ProductPrice({ sellingPrice, originalPrice, productName,
         console.error("Failed to load original product prices.", error);
       });
     };
-    loadProductPrice(false);
-    const syncProductPrices = () => loadProductPrice(true);
+    loadProductPrice();
+    const syncProductPrices = () => loadProductPrice();
     window.addEventListener("tribull-products-updated", syncProductPrices);
+    window.addEventListener("tribull-products-cache-updated", syncProductPrices);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", syncProductPrices);
+      window.removeEventListener("tribull-products-cache-updated", syncProductPrices);
     };
   }, [productName]);
   const sellingValue = parsePrice(catalogProduct?.price ?? sellingPrice);

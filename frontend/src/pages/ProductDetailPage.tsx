@@ -3,7 +3,7 @@ import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { fetchProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
 import { toggleWishlistItem } from "../lib/wishlist";
 import { Link, useLocation, useParams } from "wouter";
@@ -23,6 +23,23 @@ interface ProductData extends OriginalPriceFields {
   basePrice?: number;
 }
 
+function readCachedProduct(id?: string): ProductData | null {
+  if (!id) return null;
+  try {
+    const cached = window.sessionStorage.getItem(`tribull-product-detail:${id}`);
+    if (!cached) return null;
+    const product = JSON.parse(cached) as ProductData;
+    return typeof product.name === "string"
+      && typeof product.price === "string"
+      && typeof product.image === "string"
+      && typeof product.category === "string"
+      ? product
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 const tShirtColors = [
   { name: "Black", value: "#171717" },
   { name: "White", value: "#ffffff" },
@@ -31,8 +48,18 @@ const tShirtColors = [
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
-  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id));
+  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getCachedProducts()
+    .filter((product) => product.id !== id)
+    .slice(0, 4)
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      price: `₹${product.price.toLocaleString("en-IN")}`,
+      originalPrice: product.originalPrice,
+      image: product.image,
+      category: product.category,
+    })));
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -45,7 +72,7 @@ export default function ProductDetailPage() {
       return false;
     }
   });
-  const [isProductLoading, setIsProductLoading] = useState(true);
+  const [isProductLoading, setIsProductLoading] = useState(() => !readCachedProduct(id));
   const [productLoadError, setProductLoadError] = useState(false);
   const [productRetry, setProductRetry] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
@@ -101,14 +128,15 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      setStoredProduct(null);
-      setIsProductLoading(true);
+      const cachedProduct = readCachedProduct(id);
+      setStoredProduct((current) => current?.id === id ? current : cachedProduct);
+      setIsProductLoading(!cachedProduct);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setIsProductLoading(false);
         return;
       }
-      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
+      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(15000) })
         .then(async (response) => {
           if (!response.ok) {
             if (response.status === 404) return null;
@@ -154,7 +182,7 @@ export default function ProductDetailPage() {
             setIsProductLoading(false);
             return;
           }
-          setStoredProduct({
+          const nextProduct = {
             id: product.id,
             name: product.name,
             description: product.description,
@@ -166,7 +194,13 @@ export default function ProductDetailPage() {
             colors: product.colors,
             stock: product.stock,
             basePrice: product.basePrice,
-          });
+          };
+          setStoredProduct(nextProduct);
+          try {
+            window.sessionStorage.setItem(`tribull-product-detail:${product.id}`, JSON.stringify(nextProduct));
+          } catch {
+            // Keep the product available in memory when browser storage is unavailable.
+          }
           setIsProductLoading(false);
         })
         .catch((error: unknown) => {
@@ -219,9 +253,11 @@ export default function ProductDetailPage() {
     };
     loadRecommendations();
     window.addEventListener("tribull-products-updated", loadRecommendations);
+    window.addEventListener("tribull-products-cache-updated", loadRecommendations);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", loadRecommendations);
+      window.removeEventListener("tribull-products-cache-updated", loadRecommendations);
     };
   }, [id]);
   const product = storedProduct;
@@ -669,7 +705,7 @@ export default function ProductDetailPage() {
                 className="product-detail-recommendation-card"
               >
                 <div className="product-detail-recommendation-card__image">
-                  <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" loading="lazy" />
+                  <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" decoding="async" />
                 </div>
                 <div>
                   <h3>{recommendation.name}</h3>

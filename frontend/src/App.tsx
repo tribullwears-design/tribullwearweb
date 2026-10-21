@@ -138,6 +138,19 @@ function LegacyCategoryRedirect() {
 function App() {
   const [location] = useLocation();
 
+  useEffect(() => {
+    void Promise.all([
+      import("./pages/CategoryPage"),
+      import("./pages/ProductDetailPage"),
+      import("./pages/AllProductsPage"),
+      import("./pages/CheckoutPage"),
+      import("./pages/SearchResultsPage"),
+      import("./pages/ProductsPage"),
+    ]).catch((error: unknown) => {
+      console.error("Could not preload storefront pages.", error);
+    });
+  }, []);
+
   useLayoutEffect(() => {
     const previousScrollRestoration = window.history.scrollRestoration;
     window.history.scrollRestoration = "manual";

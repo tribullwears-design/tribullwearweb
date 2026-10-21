@@ -14,7 +14,7 @@ import { fetchCustomerProfile, readProfilePhotoFile, saveCustomerProfile } from 
 import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, toggleWishlistItem } from "../lib/wishlist";
 import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianState } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
 
@@ -113,7 +113,7 @@ export default function HeaderActions() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>(getCachedProducts);
   const [authUser, setAuthUser] = useState<AuthUser>(() => ({
     ...readStorage<AuthUser>("tribull-user", { username: "", isAuthenticated: false }),
     isAuthenticated: false,
@@ -179,11 +179,13 @@ export default function HeaderActions() {
       });
     };
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 
@@ -1283,7 +1285,7 @@ export default function HeaderActions() {
                           <div className="header-account-card__body">
                             {order.items.map((item, index) => (
                               <div key={`${order.id}-${index}`} className="header-account-card__item">
-                                {item.image && <img src={item.image} alt="" loading="lazy" />}
+                                {item.image && <img src={item.image} alt="" />}
                                 <span>{item.name}{item.variant ? ` · ${item.variant}` : ""}<small>Qty: {item.quantity} · {formatPrice(item.lineTotal)}</small></span>
                               </div>
                             ))}

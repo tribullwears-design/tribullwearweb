@@ -7,7 +7,7 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import type { AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { getEligibleStorefrontProducts } from "../lib/products";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy } from "../lib/categoryHierarchy";
 import type { StorefrontProduct } from "../lib/products";
@@ -25,7 +25,7 @@ export default function AllProductsPage() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
   const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
 
@@ -40,11 +40,13 @@ export default function AllProductsPage() {
       });
     };
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 
@@ -56,7 +58,13 @@ export default function AllProductsPage() {
       ...(product.originalPrice === undefined ? {} : { originalPrice: product.originalPrice }),
       image: product.image,
     })),
-  ] : [], [catalogProducts, hierarchy]);
+  ] : catalogProducts.map((product) => ({
+    id: product.id,
+    name: product.name,
+    price: `₹${product.price.toLocaleString("en-IN")}`,
+    ...(product.originalPrice === undefined ? {} : { originalPrice: product.originalPrice }),
+    image: product.image,
+  })), [catalogProducts, hierarchy]);
 
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
@@ -127,7 +135,7 @@ export default function AllProductsPage() {
               <article className="all-products-card" key={product.id}>
                 <div className="all-products-card__image">
                   <Link href={productHref} className="all-products-card__product-link" aria-label={`View ${product.name}`}>
-                    <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                    <img src={product.image} alt={product.name} className="product-image-primary" decoding="async" />
                   </Link>
                   <button
                     className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}

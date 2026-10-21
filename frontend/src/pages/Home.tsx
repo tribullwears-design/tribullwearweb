@@ -7,7 +7,7 @@ import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -81,7 +81,7 @@ function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }:
       >
         <div className="product-card__image">
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading="eager" decoding="async" />
-          {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
+          {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -93,7 +93,7 @@ export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
   const [homeVideos, setHomeVideos] = useState<Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>>([]);
   const [videosLoading, setVideosLoading] = useState(true);
   const [videosError, setVideosError] = useState("");
@@ -119,11 +119,13 @@ export default function Home() {
       });
     };
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 

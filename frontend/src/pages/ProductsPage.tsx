@@ -10,7 +10,7 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 
 export type { Product } from "../../../shared/products";
 
@@ -37,7 +37,7 @@ function readStorage<T>(key: string, fallback: T): T {
 
 export default function ProductsPage() {
   const [, setLocation] = useLocation();
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
@@ -55,11 +55,13 @@ export default function ProductsPage() {
       });
     };
     syncProducts();
-    const refreshCatalog = () => syncProducts(true);
+    const refreshCatalog = () => syncProducts();
     window.addEventListener("tribull-products-updated", refreshCatalog);
+    window.addEventListener("tribull-products-cache-updated", refreshCatalog);
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
+      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
     };
   }, []);
 
@@ -194,7 +196,7 @@ export default function ProductsPage() {
                 }}
               >
                 <div className="catalog-product-card__image">
-                  <img src={product.image} alt={product.name} className="product-image-primary" loading="lazy" />
+                  <img src={product.image} alt={product.name} className="product-image-primary" decoding="async" />
                   <button
                     type="button"
                     className={`catalog-product-card__wishlist ${isWishlisted ? "is-active" : ""}`}

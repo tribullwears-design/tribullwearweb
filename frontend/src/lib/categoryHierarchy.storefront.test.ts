@@ -44,7 +44,7 @@ describe("storefront main categories", () => {
     const storefront = getStorefrontCategoryHierarchy(fetched);
     const cards = getStorefrontMainCategories(storefront);
 
-    expect(mocks.apiFetch).toHaveBeenCalledWith("/api/categories", { cache: "no-store" });
+    expect(mocks.apiFetch).toHaveBeenCalledWith("/api/categories");
     expect(cards.map(({ value, label, image, href }) => ({ value, label, image, href }))).toEqual([
       { value: "cinema", label: "Cinema", image: "/stored/cinema.png", href: "/category/cinema" },
       { value: "games", label: "Games", image: "/stored/games.png", href: "/category/games" },
