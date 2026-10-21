@@ -1,6 +1,5 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
-import { useScrollReveal } from "../hooks/useScrollReveal";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
@@ -38,41 +37,15 @@ function Wordmark({ inverse = false }: { inverse?: boolean }) {
   );
 }
 
-function Reveal({
-  children,
-  variant = "up",
-  stagger = false,
-  className = "",
-  delay = 0,
-  id,
-}: {
+function Reveal({ children, className = "", id }: {
   children: React.ReactNode;
-  variant?: "up" | "left" | "right" | "scale" | "blur";
-  stagger?: boolean;
   className?: string;
-  delay?: number;
   id?: string;
 }) {
-  const { ref, visible } = useScrollReveal<HTMLDivElement>();
-  const base =
-    variant === "up" ? "reveal-hidden" :
-    variant === "left" ? "reveal-hidden-left" :
-    variant === "right" ? "reveal-hidden-right" :
-    variant === "scale" ? "reveal-scale-in" : "reveal-blur-in";
-  return (
-    <div
-      ref={ref}
-      id={id}
-      className={cls(base, stagger ? "reveal-stagger" : null, visible ? "reveal-visible" : null, className)}
-      style={delay ? { transitionDelay: `${delay}s` } : undefined}
-    >
-      {children}
-    </div>
-  );
+  return <div id={id} className={className}>{children}</div>;
 }
 
-function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice, hoverImage }: { item: string[]; delay?: number; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string }) {
-  const { ref, visible } = useScrollReveal<HTMLElement>();
+function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }: { item: string[]; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string }) {
   const [, setLocation] = useLocation();
   const [isOpening, setIsOpening] = useState(false);
   const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
@@ -104,12 +77,10 @@ function ProductCard({ item, delay = 0, showMeta = true, href, originalPrice, ho
   return (
     <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
       <article
-        ref={ref}
-        className={cls("product-card", "reveal-scale-in", "parallax-tilt", visible ? "is-revealed" : null, isOpening ? "is-opening" : null, hoverImageLoaded ? "product-card--has-hover-image" : null)}
-        style={{ transitionDelay: `${delay}s`, animationDelay: `${delay}s` }}
+        className={cls("product-card", "parallax-tilt", isOpening ? "is-opening" : null, hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
         <div className="product-card__image">
-          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="lazy" decoding="async" />
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="eager" decoding="async" />
           {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
@@ -135,25 +106,7 @@ export default function Home() {
   const [lifestyleIndex, setLifestyleIndex] = useState(0);
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
-  const [lifestyleMediaReady, setLifestyleMediaReady] = useState(false);
   const touchStartX = useRef<number | null>(null);
-
-  useEffect(() => {
-    const section = lifestyleSectionRef.current;
-    if (!section || lifestyleMediaReady) return;
-    if (!("IntersectionObserver" in window)) {
-      setLifestyleMediaReady(true);
-      return;
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry?.isIntersecting) {
-        setLifestyleMediaReady(true);
-        observer.disconnect();
-      }
-    }, { rootMargin: "300px" });
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [lifestyleMediaReady]);
 
   useEffect(() => {
     let active = true;
@@ -278,7 +231,7 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      {hierarchy.loaded ? mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
+      {mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
         <div className="category-nav__track">
           {mainCategories.map(({ value, label, image, href }) => (
             <Link className="category-nav__item" href={href} key={value} aria-label={`Shop ${label}`}>
@@ -287,10 +240,9 @@ export default function Home() {
             </Link>
           ))}
         </div>
-      </nav> : <p className="category-nav__message" role="status">No visible categories are available right now.</p>
-        : fetchedHierarchy.error
-          ? <div className="category-nav__message" role="alert"><span>Categories could not be loaded.</span><button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
-          : <p className="category-nav__message" role="status">Loading categories...</p>}
+      </nav> : fetchedHierarchy.error
+        ? <div className="category-nav__message" role="alert"><span>Categories could not be loaded.</span><button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
+        : <p className="category-nav__message" role="status">No visible categories are available right now.</p>}
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
@@ -304,13 +256,13 @@ export default function Home() {
             {homeBanner?.title && <h1>{homeBanner.title}</h1>}
             {homeBanner?.subtitle && <p className="hero-description">{homeBanner.subtitle}</p>}
             {homeBanner?.link && <a className="button button--cream" href={homeBanner.link}>Shop now <ArrowUpRight size={17} /></a>}
-            <Reveal variant="blur" delay={0.1}>
+            <Reveal>
               <p className="eyebrow" style={{ display: 'none' }}>The everyday uniform / 2026</p>
             </Reveal>
-            <Reveal variant="blur" delay={0.25}>
+            <Reveal>
               <h1 style={{ display: 'none' }}>Wear what<br /><em>moves</em> you.</h1>
             </Reveal>
-            <Reveal variant="up" delay={0.5}>
+            <Reveal>
               <a className="button button--cream" href="#arrivals" style={{ display: 'none' }}>Shop now <ArrowUpRight size={17} /></a>
             </Reveal>
           </div>
@@ -321,7 +273,7 @@ export default function Home() {
           <div className="product-section" id="arrivals">
             <Reveal>
               <div className="section-heading">
-                <Reveal variant="left"><div><p className="eyebrow"></p><h2>New Arrivals</h2></div></Reveal>
+                <Reveal><div><p className="eyebrow"></p><h2>New Arrivals</h2></div></Reveal>
               </div>
             </Reveal>
             <div className="product-grid product-grid--featured">
@@ -329,7 +281,6 @@ export default function Home() {
                 <ProductCard
                   item={item}
                   key={`${item[1]}-${idx}`}
-                  delay={0.08 * idx}
                   href={href}
                   originalPrice={originalPrice}
                   hoverImage={hoverImage}
@@ -344,7 +295,7 @@ export default function Home() {
           <div className="product-section product-section--best" id="best-selling">
             <Reveal>
               <div className="section-heading">
-                <Reveal variant="left"><div><p className="eyebrow"></p><h2>Best Selling</h2></div></Reveal>
+                <Reveal><div><p className="eyebrow"></p><h2>Best Selling</h2></div></Reveal>
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only product-grid--featured">
@@ -352,7 +303,6 @@ export default function Home() {
                 <ProductCard
                   item={item}
                   key={`${item[1]}-${idx}`}
-                  delay={0.08 * idx}
                   href={href}
                   originalPrice={originalPrice}
                   hoverImage={hoverImage}
@@ -365,32 +315,32 @@ export default function Home() {
 
         <div className="peach-wrapper">
           <div className="cooperate-options">
-            <Reveal variant="left" className="cooperate-option cooperate-option--corporate" id="corporate">
+            <Reveal className="cooperate-option cooperate-option--corporate" id="corporate">
               <div className="cooperate-option__copy">
                 <h2>Corporate</h2>
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img src="/products/hoodieicon.png" alt="Custom team hoodie" />
+              <img src="/products/hoodieicon.png" alt="Custom team hoodie" decoding="async" />
             </Reveal>
-            <Reveal variant="right" className="cooperate-option cooperate-option--custom" id="customize">
+            <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
                 <h2>Customize</h2>
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" />
+              <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" decoding="async" />
             </Reveal>
           </div>
         </div>
 
         <div className="essentials" id="essentials">
-          <Reveal variant="blur">
+          <Reveal>
             <div className="section-heading section-heading--light">
               <div><p className="eyebrow">The foundation</p><h2>OUR ESSENTIALS</h2></div>
             </div>
           </Reveal>
-          <Reveal variant="scale" stagger className="essentials-grid essentials-grid--compact">
+          <Reveal className="essentials-grid essentials-grid--compact">
             {[
               { label: "Oversized", alt: "Black oversized T-shirt front and back views", imageIndex: 0, theme: "oversized" },
               { label: "Hoodie", alt: "Black hoodie front and back views", imageIndex: 2, theme: "hoodie" },
@@ -400,7 +350,7 @@ export default function Home() {
                 <a key={item.label} href="#footer" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
                   <div className="essential-card__visual">
                     <div className="essential-card__backdrop" aria-hidden="true" />
-                    <img src={image} alt={item.alt} />
+                    <img src={image} alt={item.alt} decoding="async" />
                   </div>
                   <span>{item.label}</span>
                 </a>
@@ -410,17 +360,17 @@ export default function Home() {
         </div>
 
         <div className="bottom-visuals">
-          <Reveal variant="scale" stagger>
+          <Reveal>
             <div className="bottom-visuals__grid">
-              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(1)} alt="White T-shirt front and back views" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(1)} alt="White T-shirt front and back views" decoding="async" /></div>
               <div className="visual-block visual-block--cream"><span className="float-slow">Made for<br /><em>every day.</em></span></div>
-              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(0)} alt="Black T-shirt front and back views" /></div>
+              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(0)} alt="Black T-shirt front and back views" decoding="async" /></div>
             </div>
           </Reveal>
         </div>
 
         <section className="lifestyle-section" aria-labelledby="lifestyle-heading" ref={lifestyleSectionRef}>
-          <Reveal variant="blur">
+          <Reveal>
             <h2 id="lifestyle-heading">Shop by Lifestyle</h2>
           </Reveal>
           <div className="lifestyle-slider" onTouchStart={handleLifestyleTouchStart} onTouchEnd={handleLifestyleTouchEnd}>
@@ -449,7 +399,7 @@ export default function Home() {
                     key={`${video.id}-${index}`}
                     ref={index === 0 ? lifestyleSlideRef : undefined}
                   >
-                    <video src={lifestyleMediaReady ? video.url : undefined} poster={lifestyleMediaReady ? video.thumbnail : undefined} autoPlay loop muted playsInline preload={lifestyleMediaReady ? "metadata" : "none"} aria-label={`${video.title} lifestyle video`} />
+                    <video src={video.url} poster={video.thumbnail} autoPlay loop muted playsInline preload="metadata" aria-label={`${video.title} lifestyle video`} />
                   </div>
                 ))}
               </div>

@@ -203,14 +203,18 @@ function vitePluginStorageProxy(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector(), vitePluginStorageProxy()];
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, PROJECT_ROOT, ["CATEGORY_"]);
   const apiBaseUrl = (process.env.CATEGORY_API_URL || env.CATEGORY_API_URL || "").trim().replace(/\/+$/, "");
 
   return {
-  plugins,
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(mode === "development" ? [jsxLocPlugin(), vitePluginManusRuntime()] : []),
+    vitePluginManusDebugCollector(),
+    vitePluginStorageProxy(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "frontend", "src"),
