@@ -376,7 +376,7 @@ export default function Home() {
             <Reveal variant="right" className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
                 <h2>Customize</h2>
-                <p>Design your own t-shirts<br />hoodies &amp; more with Dudeme!</p>
+                <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
               <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" />
