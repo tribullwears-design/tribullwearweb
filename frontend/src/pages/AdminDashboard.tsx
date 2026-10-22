@@ -814,7 +814,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
 
   useEffect(() => { void refresh(); }, []);
   useEffect(() => {
-    if (!categories.some((category) => category.value === categoryId)) {
+    if (categoryId !== "home" && !categories.some((category) => category.value === categoryId)) {
       setCategoryId(categories[0]?.value || "");
     }
   }, [categories, categoryId]);
