@@ -48,7 +48,6 @@ export default function ProductPrice({ sellingPrice, originalPrice, productName,
         <del className="product-price__original">{formatProductPrice(originalValue)}</del>
       )}
       <strong className="product-price__selling">{formatProductPrice(sellingValue)}</strong>
-      {discount !== undefined && <span className="product-price__savings">Save {discount}%</span>}
     </span>
   );
 }

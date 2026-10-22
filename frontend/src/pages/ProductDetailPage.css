@@ -193,12 +193,6 @@
   font-size: 16px;
 }
 
-.product-detail-panel .product-price__savings {
-  color: #9a5c2d;
-  font-size: 12px;
-  font-weight: 700 !important;
-}
-
 .product-detail-page .product-detail-panel > .product-detail-qty {
   box-sizing: border-box;
   display: inline-flex;
@@ -765,11 +759,6 @@
 .product-detail-recommendation-card .product-price__original {
   color: rgba(27, 54, 45, .55);
   font-size: 12px;
-}
-
-.product-detail-recommendation-card .product-price__savings {
-  color: #9a5c2d;
-  font-size: 10px;
 }
 
 .product-detail-sticky-cart {

@@ -2,7 +2,6 @@ import { ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { fetchProducts, getCachedProducts } from "../lib/products";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
@@ -139,7 +138,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
   );
 }
 
-function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: (source: HTMLElement) => void; isAdded: boolean }) {
+function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
   const productLink = `/product/${encodeURIComponent(item.id)}`;
 
   return (
@@ -167,7 +166,7 @@ function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: {
           <button
             type="button"
             className={`category-catalog-card__cart ${isAdded ? "is-added" : ""}`}
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(event.currentTarget); }}
+            onClick={(event) => { event.preventDefault(); event.stopPropagation(); onAddToCart(); }}
             aria-label={isAdded ? `${item.name} added to cart` : `Add ${item.name} to cart`}
           >
             {isAdded ? <Check size={13} /> : <ShoppingCart size={13} />}
@@ -297,7 +296,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
   const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
-  const addToCart = (item: CategoryProduct, source?: HTMLElement) => {
+  const addToCart = (item: CategoryProduct) => {
     const key = productKey(item);
     try {
       const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
@@ -315,7 +314,6 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
       return nextCart;
     });
     setAddedProduct(key);
-    if (source) animateAddToCart(source, item.image);
     window.setTimeout(() => setAddedProduct((current) => current === key ? null : current), 1200);
   };
 
@@ -347,7 +345,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
       <div className="category-page__grid category-page__grid--products">
         {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item) => {
           const key = productKey(item);
-          return <ProductCard key={item.id} item={item} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={(source) => addToCart(item, source)} isAdded={addedProduct === key} />;
+          return <ProductCard key={item.id} item={item} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
       </div>
     </>

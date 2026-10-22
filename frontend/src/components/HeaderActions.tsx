@@ -16,7 +16,6 @@ import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianSta
 import type { Product } from "../../../shared/products";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { matchesProductSearch } from "../lib/productSearch";
-import { animateAddToCart } from "../lib/cartAnimation";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
 
 type Cart = Record<string, number>;
@@ -1135,7 +1134,7 @@ export default function HeaderActions() {
     }
   };
 
-  const updateCart = (productId: string, quantity: number, item?: CartItem, source?: HTMLElement) => {
+  const updateCart = (productId: string, quantity: number, item?: CartItem) => {
     const nextCart = { ...cart };
     const nextCartItems = { ...cartItems };
     if (quantity <= 0) delete nextCart[productId];
@@ -1148,14 +1147,13 @@ export default function HeaderActions() {
     setCartItems(nextCartItems);
     saveCart(nextCart);
     saveCartItems(nextCartItems);
-    if (item && source) animateAddToCart(source, item.image);
   };
 
   const toggleWishlist = (productId: string) => {
     void toggleWishlistItem(productId, !wishlist.includes(productId)).catch(() => undefined);
   };
 
-  const addSearchProductToCart = (product: Product, source?: HTMLElement) => updateCart(product.id, (cart[product.id] || 0) + 1, product, source);
+  const addSearchProductToCart = (product: Product) => updateCart(product.id, (cart[product.id] || 0) + 1, product);
   const submitSearch = (searchTerm = query) => {
     const normalizedQuery = searchTerm.trim();
     if (!normalizedQuery) return;
@@ -1194,7 +1192,7 @@ export default function HeaderActions() {
                   <img src={product.image} alt="" />
                   <span><strong>{product.name}</strong><small>{product.category}</small><b>{formatPrice(product.price)}</b></span>
                 </button>
-                <button className="header-search-result__add" type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button>
+                <button className="header-search-result__add" type="button" onClick={() => addSearchProductToCart(product)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button>
               </div>
             )) : <p className="header-empty-state">No products found. Try another name or category.</p>}
             {query.trim() && searchResults.length > 0 && <button className="header-search-all" type="button" onClick={() => submitSearch()}>View all {searchResults.length} results <ArrowRight size={15} /></button>}
@@ -1374,7 +1372,7 @@ export default function HeaderActions() {
                           </div>
                           <div className="header-account-card__actions header-account-card--wishlist__actions">
                             <button type="button" onClick={() => toggleWishlist(product.id)}>Remove</button>
-                            <button type="button" onClick={(event) => { updateCart(product.id, (cart[product.id] || 0) + 1, product, event.currentTarget); }}>Add to Cart</button>
+                            <button type="button" onClick={() => { updateCart(product.id, (cart[product.id] || 0) + 1, product); }}>Add to Cart</button>
                           </div>
                         </div>
                       )) : (
