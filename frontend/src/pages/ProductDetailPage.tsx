@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
@@ -93,7 +93,6 @@ export default function ProductDetailPage() {
       return {};
     }
   });
-  const [isAdded, setIsAdded] = useState(false);
   const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
   const [sizeError, setSizeError] = useState("");
   const [couponCode, setCouponCode] = useState("");
@@ -360,44 +359,6 @@ export default function ProductDetailPage() {
     },
   } as const;
 
-  const addCurrentProductToCart = () => {
-    if (isOutOfStock) return;
-    if (isAdded) {
-      window.dispatchEvent(new Event("tribull-open-cart"));
-      return;
-    }
-
-    if (availableSizes.length > 0 && !selectedSize) {
-      setSizeError("Please select a size before adding to cart.");
-      return;
-    }
-
-    const productId = product.id || id || "";
-    const metadata = {
-      productId,
-      name: product.name,
-      price: priceValue,
-      originalPrice: originalPriceNumber,
-      image: product.image,
-      size: selectedSize,
-      color: isTShirtColorVariant ? activeColor : "",
-      variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
-    };
-    try {
-      const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}");
-      window.localStorage.setItem("tribull-cart-items", JSON.stringify({ ...cartItems, [productId]: metadata }));
-    } catch {
-      console.error("Could not save product details with the cart item.");
-    }
-
-    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + quantity };
-    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
-    setCart(nextCart);
-    window.dispatchEvent(new Event("tribull-cart-updated"));
-    setSizeError("");
-    setIsAdded(true);
-  };
-
   const checkoutCurrentProduct = () => {
     if (isOutOfStock) return;
     if (availableSizes.length > 0 && !selectedSize) {
@@ -597,10 +558,10 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-cta-row">
-              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart} disabled={isOutOfStock}>
-                {isOutOfStock ? null : isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
-                {isOutOfStock ? "Out of stock" : isAdded ? "Go to cart" : "Add to cart"}
-                {!isOutOfStock && !isAdded && <ArrowRight size={18} />}
+              <button type="button" className="product-detail-add-to-cart" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
+                {isOutOfStock ? null : <ShoppingBag size={18} />}
+                {isOutOfStock ? "Out of stock" : "Buy now"}
+                {!isOutOfStock && <ArrowRight size={18} />}
               </button>
             </div>
 
