@@ -673,6 +673,8 @@ export default function CheckoutPage() {
       window.dispatchEvent(new Event("tribull-cart-updated"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to complete checkout. Please try again.";
+      const paymentWasDismissed = /^(payment was cancelled|you may have cancelled the payment or there was a delay in response from the upi app)/i.test(message.trim());
+      if (paymentWasDismissed) return;
       setCheckoutError(message);
       console.error("Checkout could not be completed.", message);
     } finally {
@@ -757,7 +759,7 @@ export default function CheckoutPage() {
             <p className="checkout-success__eyebrow">{placedPaymentMode === "razorpay" ? "PAYMENT CONFIRMED" : "ORDER PLACED — PAYMENT DUE ON DELIVERY"}</p>
             <h2>Thank you for your order!</h2>
             <p className="checkout-success__meta">Order #{orderNumber}</p>
-            <p className="checkout-success__message">{placedPaymentMode === "razorpay" ? "Your payment was verified and confirmed by Razorpay." : "Your order is recorded as pending. Payment has not been collected; pay upon delivery."}</p>
+            <p className="checkout-success__message">{placedPaymentMode === "razorpay" ? "Your payment was successful." : "Your order is recorded as pending. Payment has not been collected; pay upon delivery."}</p>
 
             <div className="checkout-success__items">
               {visibleOrder.entries.map((item) => (
@@ -857,30 +859,58 @@ export default function CheckoutPage() {
     <div className="checkout-page">
       <CheckoutStorefrontHeader onBack={goBackToCart} />
 
-      <main className="checkout-layout">
+      <main className={`checkout-layout${reviewMode ? " checkout-layout--review" : ""}`}>
         <section className="checkout-form-area">
-          <div className="checkout-test-notice" role="note">
-            <strong>SECURE ONLINE PAYMENT</strong>
-            <span>Online payments are processed securely by Razorpay Checkout.</span>
-          </div>
           {catalogLoadError && <p className="checkout-inline-error" role="alert">{catalogLoadError}</p>}
           {!catalogLoaded && !catalogLoadError && <p className="checkout-inline-note" role="status">Loading current product prices…</p>}
           {reviewMode ? (
             <div className="checkout-section checkout-review">
               <h3>Review Order</h3>
-              <p><strong>Deliver to</strong><br />{form.fullName}<br />{form.address}{form.apartment ? `, ${form.apartment}` : ""}<br />{form.city}, {form.state} {form.pinCode}, India<br />{form.phone} · {form.email}</p>
-              <p><strong>Payment method</strong><br />{`${getCheckoutPaymentLabel(paymentMethod)} — payment will be processed securely by Razorpay.`}</p>
+              <div className="checkout-review__details">
+                <div className="checkout-review__info">
+                  <strong>Deliver to</strong>
+                  <span>{form.fullName}</span>
+                  <span>{form.address}{form.apartment ? `, ${form.apartment}` : ""}</span>
+                  <span>{form.city}, {form.state} {form.pinCode}, India</span>
+                  <span>{form.phone} · {form.email}</span>
+                </div>
+                <div className="checkout-review__info checkout-review__payment">
+                  <strong>Payment method</strong>
+                  <span>{getCheckoutPaymentLabel(paymentMethod)}</span>
+                  <small>Payment will be processed securely.</small>
+                </div>
+              </div>
+              <div className="checkout-review__items" aria-label="Items in your order">
+                {cartDetails.entries.map((item) => (
+                  <div className="checkout-review__item" key={item.id}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>{item.variant ? `${item.variant} · ` : ""}Qty {item.quantity}</span>
+                    </div>
+                    <strong>{formatPrice(item.lineTotal)}</strong>
+                  </div>
+                ))}
+              </div>
               <div className="checkout-summary__totals">
                 <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
                 <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
-                <div><span>Standard delivery (estimated 3–7 business days)</span><strong>{cartDetails.shipping === 0 ? "Free" : formatPrice(cartDetails.shipping)}</strong></div>
-                <div><span>Tax</span><strong>Included in product prices</strong></div>
+                <div><span>Standard delivery</span><strong>{cartDetails.shipping === 0 ? "Free" : formatPrice(cartDetails.shipping)}</strong></div>
+                {cartDetails.entries.map((item) => (
+                  <div className="checkout-review__quantity-row" key={`quantity-${item.id}`}>
+                    <span>{item.name} · Quantity</span>
+                    <span className="checkout-item-controls">
+                      <button type="button" onClick={() => updateCartQuantity(item.id, item.quantity - 1)} aria-label={`Decrease ${item.name} quantity`}><Minus size={13} /></button>
+                      <span>{item.quantity}</span>
+                      <button type="button" onClick={() => updateCartQuantity(item.id, item.quantity + 1)} aria-label={`Increase ${item.name} quantity`}><Plus size={13} /></button>
+                    </span>
+                  </div>
+                ))}
                 <div className="checkout-summary__total-row"><span>Total payable</span><strong>{formatPrice(cartDetails.total)}</strong></div>
               </div>
               <div className="checkout-review__actions">
                 <button type="button" className="checkout-secondary-button" onClick={() => setReviewMode(false)}>Edit details</button>
                 <button type="button" className="checkout-primary-button" onClick={() => void handlePlaceOrder()} disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
-                  {isSubmitting ? "PROCESSING…" : "PAY WITH RAZORPAY"}
+                  {isSubmitting ? "PROCESSING…" : "PAY NOW"}
                 </button>
               </div>
               {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
@@ -977,7 +1007,7 @@ export default function CheckoutPage() {
               {checkoutPaymentMethods.map((option) => (
                 <label key={option.id} className={`checkout-payment-option ${paymentMethod === option.id ? "is-selected" : ""}`}>
                   <input type="radio" name="payment" value={option.id} checked={paymentMethod === option.id} onChange={() => { setPaymentMethod(option.id); setErrors((current) => ({ ...current, paymentMethod: "" })); }} />
-                  <span>{option.label} <small>Pay securely using Razorpay Checkout</small></span>
+                  <span>{option.label} <small>Pay securely online</small></span>
                 </label>
               ))}
             </div>
@@ -994,7 +1024,7 @@ export default function CheckoutPage() {
           )}
         </section>
 
-        <aside className="checkout-summary">
+        {!reviewMode && <aside className="checkout-summary">
           <h3>Order Summary</h3>
 
           <div className="checkout-summary__items">
@@ -1021,15 +1051,14 @@ export default function CheckoutPage() {
             <div><span>Items ({cartDetails.entries.reduce((sum, item) => sum + item.quantity, 0)})</span><strong>{formatPrice(cartDetails.subtotal)}</strong></div>
             <div><span>Discount</span><strong>{formatPrice(cartDetails.discount)}</strong></div>
             <div><span>Delivery</span><strong>{cartDetails.shipping === 0 ? "Free" : formatPrice(cartDetails.shipping)}</strong></div>
-            <div><span>Tax</span><strong>Included</strong></div>
             <div className="checkout-summary__total-row"><span>Total</span><strong>{formatPrice(visibleOrder.total)}</strong></div>
           </div>
-          <p className="checkout-summary__price-note">Prices are current catalog prices. Tax is included; free standard delivery.</p>
+          <p className="checkout-summary__price-note">Prices are current catalog prices. Free standard delivery.</p>
 
           <div className="checkout-summary__trust">
             <ShieldCheck size={16} /> Secure checkout protected
           </div>
-        </aside>
+        </aside>}
       </main>
     </div>
   );

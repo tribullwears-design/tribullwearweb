@@ -75,6 +75,7 @@ const order = {
   status: "Pending",
   createdAt: "2026-01-01T00:00:00.000Z",
 };
+const guestOrder = Object.fromEntries(Object.entries(order).filter(([key]) => key !== "customerId"));
 
 let baseUrl = "";
 let server: ReturnType<express.Application["listen"]>;
@@ -129,19 +130,28 @@ afterEach(async () => {
 });
 
 describe("Razorpay checkout routes", () => {
-  it("rejects unauthenticated order creation and payment verification", async () => {
+  it("allows guests to create and verify their checkout orders", async () => {
     mocks.getSessionCustomer.mockResolvedValue(null);
-    const createResponse = await fetch(`${baseUrl}/api/create-order`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ checkout: true }) });
-    expect(createResponse.status).toBe(401);
-    expect(mocks.prepareCheckoutOrder).not.toHaveBeenCalled();
+    mocks.buildCheckoutOrder.mockReturnValue(guestOrder);
+    const createResponse = await fetch(`${baseUrl}/api/create-order`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkout: true }),
+    });
+    expect(createResponse.status).toBe(201);
+    expect(mocks.prepareCheckoutOrder).toHaveBeenCalledWith({ checkout: true }, undefined);
+    expect(mocks.createOrder).toHaveBeenCalledWith(expect.not.objectContaining({ customerId: expect.anything() }));
 
+    mocks.findOrderByRazorpayOrderId.mockResolvedValue(guestOrder);
+    mocks.updateRazorpayPayment.mockResolvedValue({ ...guestOrder, payment: { method: "upi", status: "Paid" } });
     const verifyResponse = await fetch(`${baseUrl}/api/verify-payment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ razorpay_order_id: "order_test123", razorpay_payment_id: "pay_test123", razorpay_signature: "a".repeat(64) }),
     });
-    expect(verifyResponse.status).toBe(401);
-    expect(mocks.verifyPaymentSignature).not.toHaveBeenCalled();
+    expect(verifyResponse.status).toBe(200);
+    expect(await verifyResponse.json()).toMatchObject({ verified: true, captured: true });
+    expect(mocks.verifyPaymentSignature).toHaveBeenCalled();
   });
 
   it("returns a clear server configuration error without exposing credentials", async () => {

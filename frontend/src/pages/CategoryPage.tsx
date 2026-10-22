@@ -178,7 +178,7 @@ function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: {
   );
 }
 
-type CatalogTab = "round-neck" | "oversized" | "acid-oversized" | "hoodie";
+type CatalogTab = "oversized" | "hoodie";
 type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 
 function GlobalNavigation() {
@@ -225,14 +225,12 @@ function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string;
 }
 
 const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
-  { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
   { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
   { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
 ];
 
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
-  const [selectedTab, setSelectedTab] = useState<CatalogTab>("round-neck");
+  const [selectedTab, setSelectedTab] = useState<CatalogTab>("oversized");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, [entrySlug]));
   const [productsLoading, setProductsLoading] = useState(() => getCachedProducts().length === 0);

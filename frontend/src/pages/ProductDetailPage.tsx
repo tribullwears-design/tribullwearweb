@@ -1,11 +1,10 @@
-import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Heart, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { fetchProducts, getCachedProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
-import { toggleWishlistItem } from "../lib/wishlist";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import "./ProductDetailPage.css";
@@ -40,6 +39,22 @@ function readCachedProduct(id?: string): ProductData | null {
   }
 }
 
+function readCachedCatalogProduct(id?: string): ProductData | null {
+  if (!id) return null;
+  const product = getCachedProducts().find((cachedProduct) => cachedProduct.id === id);
+  if (!product) return null;
+  return {
+    id: product.id,
+    name: product.name,
+    price: `₹${product.price.toLocaleString("en-IN")}`,
+    originalPrice: product.originalPrice,
+    image: product.image,
+    category: product.category,
+    stock: product.stock,
+    basePrice: product.basePrice,
+  };
+}
+
 const tShirtColors = [
   { name: "Black", value: "#171717" },
   { name: "White", value: "#ffffff" },
@@ -48,7 +63,7 @@ const tShirtColors = [
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id));
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id) || readCachedCatalogProduct(id));
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getCachedProducts()
     .filter((product) => product.id !== id)
     .slice(0, 4)
@@ -65,14 +80,7 @@ export default function ProductDetailPage() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
-  const [isWishlisted, setIsWishlisted] = useState(() => {
-    try {
-      return (JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]).includes(id || "");
-    } catch {
-      return false;
-    }
-  });
-  const [isProductLoading, setIsProductLoading] = useState(() => !readCachedProduct(id));
+  const [isProductLoading, setIsProductLoading] = useState(() => !readCachedProduct(id) && !readCachedCatalogProduct(id));
   const [productLoadError, setProductLoadError] = useState(false);
   const [productRetry, setProductRetry] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
@@ -128,7 +136,7 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      const cachedProduct = readCachedProduct(id);
+      const cachedProduct = readCachedProduct(id) || readCachedCatalogProduct(id);
       setStoredProduct((current) => current?.id === id ? current : cachedProduct);
       setIsProductLoading(!cachedProduct);
       setProductLoadError(false);
@@ -220,19 +228,6 @@ export default function ProductDetailPage() {
   }, [id, productRetry]);
 
   useEffect(() => {
-    const syncWishlist = () => {
-      try {
-        setIsWishlisted((JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]).includes(id || ""));
-      } catch {
-        setIsWishlisted(false);
-      }
-    };
-    syncWishlist();
-    window.addEventListener("tribull-wishlist-updated", syncWishlist);
-    return () => window.removeEventListener("tribull-wishlist-updated", syncWishlist);
-  }, [id]);
-
-  useEffect(() => {
     let active = true;
     const loadRecommendations = () => {
       void fetchProducts()
@@ -319,7 +314,7 @@ export default function ProductDetailPage() {
   const originalPriceNumber = typeof originalPriceValue === "number" ? originalPriceValue : undefined;
   const originalProductPrice = typeof product.basePrice === "number" && product.basePrice > priceValue ? product.basePrice : priceValue;
   const productDiscountPerUnit = Math.max(0, originalProductPrice - priceValue);
-  const productDescription = product.description || "Product details have not been added yet.";
+  const productDescription = product.description?.trim();
 
   const applyCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
@@ -403,7 +398,7 @@ export default function ProductDetailPage() {
     setIsAdded(true);
   };
 
-  const checkoutCurrentProduct = async () => {
+  const checkoutCurrentProduct = () => {
     if (isOutOfStock) return;
     if (availableSizes.length > 0 && !selectedSize) {
       setSizeError("Please select a size before checking out.");
@@ -427,20 +422,25 @@ export default function ProductDetailPage() {
       variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
     };
     window.sessionStorage.setItem("tribull-checkout-selection", JSON.stringify({ productId, quantity, metadata }));
-    try {
-      const response = await apiFetch("/api/auth/me", { cache: "no-store" });
-      if (response.ok) setLocation("/checkout");
-      else if (response.status === 401) window.dispatchEvent(new Event("tribull-open-login"));
-      else setSizeError("Unable to verify your sign-in status. Please try again.");
-    } catch {
-      setSizeError("Unable to verify your sign-in status. Please try again.");
-    }
+    setLocation("/checkout");
   };
 
-  const toggleWishlist = () => {
-    const productId = product.id || id || "";
-    void toggleWishlistItem(productId, !isWishlisted).catch(() => undefined);
-  };
+  const quantityControl = (
+    <div className="product-detail-qty" aria-label="Quantity selector">
+      <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
+        <Minus size={16} />
+      </button>
+      <span>{quantity}</span>
+      <button
+        type="button"
+        onClick={() => setQuantity((current) => Math.min(product.stock ?? Number.MAX_SAFE_INTEGER, current + 1))}
+        aria-label="Increase quantity"
+        disabled={isOutOfStock || (typeof product.stock === "number" && quantity >= product.stock)}
+      >
+        <Plus size={16} />
+      </button>
+    </div>
+  );
 
   return (
     <div className="product-detail-page">
@@ -514,14 +514,14 @@ export default function ProductDetailPage() {
               productName={product.name}
               className="product-price--detail"
             />
-            <p className="product-detail-tax-note">Tax included.</p>
+            {quantityControl}
             {typeof product.stock === "number" && (
               <p className="product-detail-stock" aria-live="polite">
                 {product.stock > 0 ? `${product.stock} available` : "Currently out of stock"}
               </p>
             )}
 
-            <p className="product-detail-panel__description">{productDescription}</p>
+            {productDescription && <p className="product-detail-panel__description">{productDescription}</p>}
 
             {availableSizes.length > 0 && <div className="product-detail-option">
               <div className="product-detail-option__header">
@@ -549,11 +549,6 @@ export default function ProductDetailPage() {
               </div>
               {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
             </div>}
-
-            <div className="product-detail-return-note">
-              <ShieldCheck size={17} />
-              <span>Easy 10-day return and exchange on this product. No questions asked.</span>
-            </div>
 
             {hasProductColors ? (
               <div className="product-detail-color-option">
@@ -602,38 +597,10 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-cta-row">
-              <div className="product-detail-qty" aria-label="Quantity selector">
-                <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
-                  <Minus size={16} />
-                </button>
-                <span>{quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuantity((current) => Math.min(product.stock ?? Number.MAX_SAFE_INTEGER, current + 1))}
-                  aria-label="Increase quantity"
-                  disabled={isOutOfStock || (typeof product.stock === "number" && quantity >= product.stock)}
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
-
               <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart} disabled={isOutOfStock}>
                 {isOutOfStock ? null : isAdded ? <Check size={18} /> : <ShoppingBag size={18} />}
                 {isOutOfStock ? "Out of stock" : isAdded ? "Go to cart" : "Add to cart"}
                 {!isOutOfStock && !isAdded && <ArrowRight size={18} />}
-              </button>
-              <button type="button" className="product-detail-checkout" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
-                Checkout
-              </button>
-              <button
-                type="button"
-                className={`product-detail-wishlist${isWishlisted ? " is-active" : ""}`}
-                aria-label={isWishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                aria-pressed={isWishlisted}
-                onClick={toggleWishlist}
-              >
-                <Heart size={19} fill={isWishlisted ? "currentColor" : "none"} />
-                <span>{isWishlisted ? "Saved" : "Wishlist"}</span>
               </button>
             </div>
 
@@ -749,7 +716,7 @@ export default function ProductDetailPage() {
         </div>
       ) : null}
 
-      <div className="product-detail-sticky-cart" aria-label="Quick add to cart">
+      <div className="product-detail-sticky-cart" aria-label="Quick checkout">
         <div>
           <ProductPrice
             sellingPrice={product.price}
@@ -757,10 +724,9 @@ export default function ProductDetailPage() {
             productName={product.name}
             className="product-price--sticky"
           />
-          <small>Tax included.</small>
         </div>
-        <button type="button" onClick={addCurrentProductToCart} disabled={isOutOfStock}>
-          {isOutOfStock ? "Out of stock" : isAdded ? <><Check size={18} /> Go to cart</> : "Add to cart"}
+        <button type="button" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
+          {isOutOfStock ? "Out of stock" : "Buy now"}
         </button>
       </div>
     </div>

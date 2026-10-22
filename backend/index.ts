@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
+import { FeatureImageValidationError, featureImageTypes, listFeatureImages, saveFeatureImage, type FeatureImageType } from "./featureImageStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
@@ -501,6 +502,19 @@ async function startServer() {
       res.json({ deleted: true });
     } catch (error) { sendBannerError(res, error);     }
   });
+  app.get("/api/storefront/feature-images", async (_req, res) => {
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await listFeatureImages()); }
+    catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load homepage images" }); }
+  });
+  app.put("/api/admin/feature-images/:type", requireAdminPermission("products", "edit"), async (req, res) => {
+    const type = req.params.type;
+    if (!featureImageTypes.includes(type as FeatureImageType)) return res.status(404).json({ error: "Homepage image type not found" });
+    try { res.json(await saveFeatureImage(type as FeatureImageType, req.body?.image)); }
+    catch (error) {
+      if (error instanceof FeatureImageValidationError) return res.status(400).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unable to save homepage image" });
+    }
+  });
   app.get("/api/storefront/settings/social", async (_req, res) => {
     try { res.set("Cache-Control", publicCatalogCache); res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
   });
@@ -773,8 +787,7 @@ async function startServer() {
     }
     try {
       const sessionCustomer = await getSessionCustomer(req);
-      if (!sessionCustomer?._id) return res.status(401).json({ error: "Sign in to continue to checkout" });
-      const customerId = sessionCustomer._id.toString();
+      const customerId = sessionCustomer?._id?.toString();
       const existingOrder = await findOrderByIdempotencyKey(idempotencyKey);
       if (existingOrder) {
         if ((existingOrder.customerId || undefined) !== customerId) {

@@ -1,6 +1,6 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
@@ -11,6 +11,7 @@ import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, produc
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
+import { loadFeatureImages } from "../lib/featureImages";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -46,38 +47,12 @@ function Reveal({ children, className = "", id }: {
 }
 
 function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }: { item: string[]; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string }) {
-  const [, setLocation] = useLocation();
-  const [isOpening, setIsOpening] = useState(false);
   const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
-  const openingTimer = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (openingTimer.current !== null) window.clearTimeout(openingTimer.current);
-  }, []);
-
-  const handleProductClick = (event: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      event.defaultPrevented
-      || event.button !== 0
-      || event.metaKey
-      || event.ctrlKey
-      || event.shiftKey
-      || event.altKey
-      || event.detail === 0
-      || !window.matchMedia("(hover: none) and (pointer: coarse)").matches
-      || window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) return;
-
-    event.preventDefault();
-    if (isOpening) return;
-    setIsOpening(true);
-    openingTimer.current = window.setTimeout(() => setLocation(href), 520);
-  };
 
   return (
-    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`} onClick={handleProductClick}>
+    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`}>
       <article
-        className={cls("product-card", "parallax-tilt", isOpening ? "is-opening" : null, hoverImageLoaded ? "product-card--has-hover-image" : null)}
+        className={cls("product-card", "parallax-tilt", hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
         <div className="product-card__image">
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading="eager" decoding="async" />
@@ -98,6 +73,7 @@ export default function Home() {
   const [videosLoading, setVideosLoading] = useState(true);
   const [videosError, setVideosError] = useState("");
   const [homeBanner, setHomeBanner] = useState<{ image: string; title?: string; subtitle?: string; link?: string } | null>(null);
+  const [featureImages, setFeatureImages] = useState<{ customize: string | null; corporate: string | null }>({ customize: null, corporate: null });
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleSectionRef = useRef<HTMLElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
@@ -105,8 +81,19 @@ export default function Home() {
   const lifestyleSlideRef = useRef<HTMLDivElement>(null);
   const [lifestyleIndex, setLifestyleIndex] = useState(0);
   const [lifestyleStep, setLifestyleStep] = useState(0);
+  const [lifestyleVisibleCount, setLifestyleVisibleCount] = useState(3);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
   const touchStartX = useRef<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void loadFeatureImages().then((images) => {
+      if (active) setFeatureImages(images);
+    }).catch((error: unknown) => {
+      console.error("Could not load homepage feature images.", error);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -152,7 +139,7 @@ export default function Home() {
 
 
   const lifestyleSlides = homeVideos;
-  const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - 3);
+  const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - lifestyleVisibleCount);
 
   const scrollLifestyle = (direction: "left" | "right") => {
     if (lifestyleTransitioning) return;
@@ -168,15 +155,19 @@ export default function Home() {
     const updateLifestyleStep = () => {
       const slide = lifestyleSlideRef.current;
       const track = lifestyleTrackRef.current;
-      if (!slide || !track) return;
+      const viewport = lifestyleViewportRef.current;
+      if (!slide || !track || !viewport) return;
       const styles = window.getComputedStyle(track);
       const gap = Number.parseFloat(styles.columnGap || styles.gap || "0") || 0;
-      setLifestyleStep(slide.getBoundingClientRect().width + gap);
+      const slideWidth = slide.getBoundingClientRect().width;
+      setLifestyleStep(slideWidth + gap);
+      setLifestyleVisibleCount(Math.max(1, Math.floor((viewport.clientWidth + gap) / (slideWidth + gap))));
     };
 
     updateLifestyleStep();
     const observer = new ResizeObserver(updateLifestyleStep);
     if (lifestyleTrackRef.current) observer.observe(lifestyleTrackRef.current);
+    if (lifestyleViewportRef.current) observer.observe(lifestyleViewportRef.current);
     return () => observer.disconnect();
   }, [lifestyleSlides.length]);
 
@@ -323,7 +314,7 @@ export default function Home() {
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img src="/products/hoodieicon.png" alt="Custom team hoodie" decoding="async" />
+              <img src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" decoding="async" />
             </Reveal>
             <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
@@ -331,7 +322,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img src={getShowcaseProductImage(1)} alt="White T-shirt mockup ready for custom designs" decoding="async" />
+              <img src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" decoding="async" />
             </Reveal>
           </div>
         </div>

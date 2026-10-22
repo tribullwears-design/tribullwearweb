@@ -20,6 +20,7 @@ import { getCheckoutPaymentLabel } from "../../../shared/checkout";
 import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, type DashboardRange } from "../lib/adminDashboardData";
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
+import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
 import { defaultGeneralSettings, defaultSocialSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminSocialSettings, type GeneralSettings, type SocialSettings } from "../lib/storefrontSettings";
 import "./admin-dashboard.css";
 
@@ -475,6 +476,85 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError} {onRetryHierarchy && <button className="admin-text-button" type="button" onClick={onRetryHierarchy}>Retry</button>}</p>}
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={productSaving || hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0}>{productSaving ? "Saving..." : submitLabel}</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className={savedNotice.includes("saved") ? "admin-form-success" : "admin-image-error"} role="status">{savedNotice}</p>}
   </form>;
+}
+
+function HomeFeatureImageManagement({ canEdit }: { canEdit: boolean }) {
+  const [images, setImages] = useState<Record<FeatureImageType, string | null>>({ customize: null, corporate: null });
+  const [drafts, setDrafts] = useState<Record<FeatureImageType, string | null>>({ customize: null, corporate: null });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<FeatureImageType | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void loadFeatureImages().then((loaded) => {
+      if (active) setImages(loaded);
+    }).catch((loadError: unknown) => {
+      if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load homepage images");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const selectImage = (type: FeatureImageType, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setError("");
+    setNotice("");
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WEBP image.");
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      setError("Image must be smaller than 6 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setDrafts((current) => ({ ...current, [type]: reader.result as string }));
+    };
+    reader.onerror = () => setError("Could not read the selected image. Please try again.");
+    reader.readAsDataURL(file);
+  };
+
+  const save = async (type: FeatureImageType) => {
+    const image = drafts[type];
+    if (!image) return;
+    setSaving(type);
+    setError("");
+    setNotice("");
+    try {
+      const saved = await saveFeatureImage(type, image);
+      setImages((current) => ({ ...current, [type]: saved.image }));
+      setDrafts((current) => ({ ...current, [type]: null }));
+      setNotice(`${type === "customize" ? "Customize" : "Corporate"} image saved.`);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save homepage image");
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  return <AdminPanel title="Homepage Images">
+    <p className="admin-feature-image-help">Upload images for the Corporate and Customize cards shown on the homepage.</p>
+    {loading ? <p>Loading homepage images...</p> : <div className="admin-feature-image-grid">
+      {(["customize", "corporate"] as const).map((type) => {
+        const image = drafts[type] || images[type];
+        const label = type === "customize" ? "Customize" : "Corporate";
+        return <div className="admin-feature-image-card" key={type}>
+          <strong>{label} image</strong>
+          {image ? <img src={image} alt={`${label} homepage preview`} /> : <div className="admin-feature-image-empty">No image uploaded</div>}
+          <label className="admin-secondary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
+          <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save(type)}>{saving === type ? "Saving..." : "Save Image"}</button>
+        </div>;
+      })}
+    </div>}
+    {error && <p className="admin-image-error" role="alert">{error}</p>}
+    {notice && <p className="admin-form-success" role="status">{notice}</p>}
+  </AdminPanel>;
 }
 
 function readImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void) { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) { event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") onChange(reader.result); }; reader.readAsDataURL(file); event.target.value = ""; }
@@ -1953,7 +2033,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel>;
+    if (screen === "add-product") return <><AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel><HomeFeatureImageManagement canEdit={canEdit("products")} /></>;
     if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" />}</AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;

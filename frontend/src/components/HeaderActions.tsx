@@ -15,6 +15,7 @@ import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, togg
 import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianState } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import { matchesProductSearch } from "../lib/productSearch";
 import { animateAddToCart } from "../lib/cartAnimation";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
 
@@ -378,8 +379,8 @@ export default function HeaderActions() {
   const searchResults = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     if (!normalizedQuery) return products.slice(0, 6);
-    return products.filter((product) => `${product.name} ${product.category}`.toLowerCase().includes(normalizedQuery));
-  }, [query]);
+    return products.filter((product) => matchesProductSearch(product, normalizedQuery));
+  }, [products, query]);
 
   const wishlistProducts = products.filter((product) => wishlist.includes(product.id));
   const cartEntries = Object.entries(cart).filter(([, quantity]) => quantity > 0);
@@ -417,6 +418,15 @@ export default function HeaderActions() {
     }
     resetOverlay();
   };
+
+  useEffect(() => {
+    if (overlay !== "search") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeOverlay();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [overlay]);
 
   const persistUser = (nextUser: AuthUser) => {
     setAuthUser(nextUser);
@@ -1146,6 +1156,12 @@ export default function HeaderActions() {
   };
 
   const addSearchProductToCart = (product: Product, source?: HTMLElement) => updateCart(product.id, (cart[product.id] || 0) + 1, product, source);
+  const submitSearch = (searchTerm = query) => {
+    const normalizedQuery = searchTerm.trim();
+    if (!normalizedQuery) return;
+    closeOverlay();
+    setLocation(`/search?q=${encodeURIComponent(normalizedQuery)}`);
+  };
 
   return (
     <>
@@ -1160,10 +1176,29 @@ export default function HeaderActions() {
 
       {overlay && <button className={`header-overlay${isLoginPanelOpen ? " header-overlay--login" : ""}${loginClosing ? " is-closing" : ""}`} type="button" aria-label="Close panel" onClick={closeOverlay} />}
       {overlay === "search" && (
-        <section className="header-panel header-search-panel" aria-label="Search products">
-          <div className="header-panel__heading"><h2>Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
-          <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" /></label>
-          <div className="header-search-results">{searchResults.length ? searchResults.map((product) => <div className="header-search-result" key={product.id}><img src={product.image} alt="" /><div><strong>{product.name}</strong><span>{product.category} · {formatPrice(product.price)}</span></div><button type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button></div>) : <p className="header-empty-state">No products found.</p>}</div>
+        <section className="header-panel header-side-panel header-search-panel" role="dialog" aria-modal="true" aria-labelledby="header-search-title">
+          <div className="header-panel__heading"><h2 id="header-search-title">Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
+          <form className="header-search-form" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}>
+            <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" aria-label="Search products or categories" /></label>
+            <button className="header-search-submit" type="submit" aria-label="View search results"><ArrowRight size={19} /></button>
+          </form>
+          <div className="header-search-popular" aria-label="Popular searches">
+            <span>Popular searches</span>
+            <div>{["Oversized", "Hoodie"].map((term) => <button type="button" key={term} onClick={() => setQuery(term)}>{term}</button>)}</div>
+          </div>
+          <div className="header-search-results" aria-live="polite">
+            <h3>{query.trim() ? `Products (${searchResults.length})` : "Popular products"}</h3>
+            {searchResults.length ? searchResults.slice(0, 5).map((product) => (
+              <div className="header-search-result" key={product.id}>
+                <button className="header-search-result__product" type="button" onClick={() => { closeOverlay(); setLocation(`/product/${encodeURIComponent(product.id)}`); }}>
+                  <img src={product.image} alt="" />
+                  <span><strong>{product.name}</strong><small>{product.category}</small><b>{formatPrice(product.price)}</b></span>
+                </button>
+                <button className="header-search-result__add" type="button" onClick={(event) => addSearchProductToCart(product, event.currentTarget)} aria-label={`Add ${product.name} to cart`}><Plus size={16} /></button>
+              </div>
+            )) : <p className="header-empty-state">No products found. Try another name or category.</p>}
+            {query.trim() && searchResults.length > 0 && <button className="header-search-all" type="button" onClick={() => submitSearch()}>View all {searchResults.length} results <ArrowRight size={15} /></button>}
+          </div>
         </section>
       )}
       {overlay === "account" && (
