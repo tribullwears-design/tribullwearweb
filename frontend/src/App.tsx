@@ -31,6 +31,8 @@ function Router() {
       <Route path={"/admin26/products/best-selling"}>{() => <AdminRoute initialScreen="best-selling" />}</Route>
       <Route path={"/admin26/products/new-arrivals"}>{() => <AdminRoute initialScreen="new-arrivals" />}</Route>
       <Route path={"/admin26/products/add"}>{() => <AdminRoute initialScreen="add-product" />}</Route>
+      <Route path={"/admin26/products/customize-image"}>{() => <AdminRoute initialScreen="customize-image" />}</Route>
+      <Route path={"/admin26/products/corporate-image"}>{() => <AdminRoute initialScreen="corporate-image" />}</Route>
       <Route path={"/admin26/products/edit/:id"}>{(params) => <AdminRoute initialScreen="edit-product" productId={params.id} />}</Route>
       <Route path={"/admin26/products/categories"}>{() => <AdminRoute initialScreen="categories" />}</Route>
       <Route path={"/admin26/products/inventory"}>{() => <AdminRoute initialScreen="inventory" />}</Route>

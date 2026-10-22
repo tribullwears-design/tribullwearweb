@@ -75,7 +75,7 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Customize Image", icon: Image, screen: "customize-image" }, { label: "Corporate Image", icon: Image, screen: "corporate-image" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }] },
@@ -90,6 +90,8 @@ const adminRoutes: Record<string, string> = {
   "best-selling": "/admin26/products/best-selling",
   "new-arrivals": "/admin26/products/new-arrivals",
   "add-product": "/admin26/products/add",
+  "customize-image": "/admin26/products/customize-image",
+  "corporate-image": "/admin26/products/corporate-image",
   categories: "/admin26/products/categories",
   inventory: "/admin26/products/inventory",
   orders: "/admin26/orders",
@@ -133,7 +135,7 @@ const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Nec
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
 
 function permissionSectionForScreen(screen: string): AdminPermissionSection {
-  if (["products", "best-selling", "new-arrivals", "add-product", "edit-product", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
+  if (["products", "best-selling", "new-arrivals", "add-product", "edit-product", "customize-image", "corporate-image", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
@@ -478,7 +480,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
   </form>;
 }
 
-function HomeFeatureImageManagement({ canEdit }: { canEdit: boolean }) {
+function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType; canEdit: boolean }) {
   const [images, setImages] = useState<Record<FeatureImageType, string | null>>({ customize: null, corporate: null });
   const [drafts, setDrafts] = useState<Record<FeatureImageType, string | null>>({ customize: null, corporate: null });
   const [loading, setLoading] = useState(true);
@@ -520,7 +522,7 @@ function HomeFeatureImageManagement({ canEdit }: { canEdit: boolean }) {
     reader.readAsDataURL(file);
   };
 
-  const save = async (type: FeatureImageType) => {
+  const save = async () => {
     const image = drafts[type];
     if (!image) return;
     setSaving(type);
@@ -538,19 +540,16 @@ function HomeFeatureImageManagement({ canEdit }: { canEdit: boolean }) {
     }
   };
 
-  return <AdminPanel title="Homepage Images">
-    <p className="admin-feature-image-help">Upload images for the Corporate and Customize cards shown on the homepage.</p>
+  const label = type === "customize" ? "Customize" : "Corporate";
+  return <AdminPanel title={`${label} Image`}>
+    <p className="admin-feature-image-help">Upload the image shown in the {label} section on the homepage.</p>
     {loading ? <p>Loading homepage images...</p> : <div className="admin-feature-image-grid">
-      {(["customize", "corporate"] as const).map((type) => {
-        const image = drafts[type] || images[type];
-        const label = type === "customize" ? "Customize" : "Corporate";
-        return <div className="admin-feature-image-card" key={type}>
-          <strong>{label} image</strong>
-          {image ? <img src={image} alt={`${label} homepage preview`} /> : <div className="admin-feature-image-empty">No image uploaded</div>}
-          <label className="admin-secondary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
-          <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save(type)}>{saving === type ? "Saving..." : "Save Image"}</button>
-        </div>;
-      })}
+      <div className="admin-feature-image-card">
+        <strong>{label} image</strong>
+        {drafts[type] || images[type] ? <img src={drafts[type] || images[type] || ""} alt={`${label} homepage preview`} /> : <div className="admin-feature-image-empty">No image uploaded</div>}
+        <label className="admin-secondary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
+        <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save()}>{saving === type ? "Saving..." : "Save Image"}</button>
+      </div>
     </div>}
     {error && <p className="admin-image-error" role="alert">{error}</p>}
     {notice && <p className="admin-form-success" role="status">{notice}</p>}
@@ -2033,7 +2032,9 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
-    if (screen === "add-product") return <><AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel><HomeFeatureImageManagement canEdit={canEdit("products")} /></>;
+    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel>;
+    if (screen === "customize-image") return <HomeFeatureImageManagement type="customize" canEdit={canEdit("products")} />;
+    if (screen === "corporate-image") return <HomeFeatureImageManagement type="corporate" canEdit={canEdit("products")} />;
     if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" />}</AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
@@ -2182,7 +2183,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       <div className="admin-brand"><div className="admin-brand-mark">T</div><div className="admin-brand-copy"><strong>TRIBULL</strong><span>Admin</span></div><button className="admin-icon-button admin-sidebar-close" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)}><X size={18} /></button></div>
       <div className="admin-store-switcher"><div className="admin-store-icon"><Store size={17} /></div><div><strong>Tribull Store</strong><span>Online store</span></div><ChevronDown size={15} /></div>
       <nav className="admin-navigation" aria-label="Admin navigation">{navigation.map((section) => {
-        const items = section.items.filter(({ screen: itemScreen }) => (["account-settings", "help-center"].includes(itemScreen) || canView(permissionSectionForScreen(itemScreen))) && (itemScreen !== "add-product" || canEdit("products")));
+        const items = section.items.filter(({ screen: itemScreen }) => (["account-settings", "help-center"].includes(itemScreen) || canView(permissionSectionForScreen(itemScreen))) && (!["add-product", "customize-image", "corporate-image"].includes(itemScreen) || canEdit("products")));
         return items.length ? <div className="admin-nav-section" key={section.label}><p>{section.label}</p>{items.map(({ label, icon: NavIcon, screen: itemScreen }) => <button className={`admin-nav-item ${screen === itemScreen ? "admin-nav-item--active" : ""}`} type="button" key={`${section.label}-${label}`} onClick={() => navigate(itemScreen)} title={collapsed ? label : undefined}><NavIcon size={17} /><span>{label}</span></button>)}</div> : null;
       })}</nav>
       <button className="admin-sidebar-help" type="button" onClick={() => navigate("help-center")}><LifeBuoy size={18} /><div><strong>Need a hand?</strong><span>Visit help center</span></div><ChevronRight size={14} /></button><button className="admin-collapse-button" type="button" onClick={() => setCollapsed(!collapsed)}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}<span>{collapsed ? "Expand sidebar" : "Collapse sidebar"}</span></button>
