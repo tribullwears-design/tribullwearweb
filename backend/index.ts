@@ -503,7 +503,7 @@ async function startServer() {
     } catch (error) { sendBannerError(res, error);     }
   });
   app.get("/api/storefront/feature-images", async (_req, res) => {
-    try { res.set("Cache-Control", publicCatalogCache); res.json(await listFeatureImages()); }
+    try { res.set("Cache-Control", "no-store"); res.json(await listFeatureImages()); }
     catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load homepage images" }); }
   });
   app.put("/api/admin/feature-images/:type", requireAdminPermission("products", "edit"), async (req, res) => {

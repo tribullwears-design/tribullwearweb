@@ -13,7 +13,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function loadFeatureImages() {
-  return request<FeatureImages>("/api/storefront/feature-images");
+  return request<FeatureImages>("/api/storefront/feature-images", { cache: "no-store" });
 }
 
 export function saveFeatureImage(type: FeatureImageType, image: string) {
