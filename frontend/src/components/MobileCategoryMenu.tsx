@@ -1,6 +1,7 @@
 import { ChevronRight, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "wouter";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy } from "../lib/categoryHierarchy";
 
 export default function MobileCategoryMenu() {
@@ -71,7 +72,7 @@ export default function MobileCategoryMenu() {
                     aria-hidden={!cinemaExpanded}
                   >
                     {cinemaSubcategories.map(({ value, label, image }) => (
-                      <a
+                      <Link
                         key={value}
                         className="mobile-category-menu__subcategory"
                         href={`/category/cinema/${value}`}
@@ -80,7 +81,7 @@ export default function MobileCategoryMenu() {
                       >
                         {image && <img className="mobile-category-menu__icon" src={image} alt="" />}
                         {label}
-                      </a>
+                      </Link>
                     ))}
                   </div>
                 </div>

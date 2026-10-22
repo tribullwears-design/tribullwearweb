@@ -11,7 +11,7 @@ import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, produc
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
-import { loadFeatureImages } from "../lib/featureImages";
+import { featureImagesUpdatedEvent, loadFeatureImages } from "../lib/featureImages";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -101,10 +101,24 @@ export default function Home() {
       }
     };
     void refreshFeatureImages();
-    const refreshInterval = window.setInterval(() => void refreshFeatureImages(), 10_000);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "tribull-feature-images-updated") void refreshFeatureImages();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshFeatureImages();
+    };
+    window.addEventListener(featureImagesUpdatedEvent, refreshFeatureImages);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", refreshFeatureImages);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const refreshInterval = window.setInterval(() => void refreshFeatureImages(), 2_500);
     return () => {
       active = false;
       window.clearInterval(refreshInterval);
+      window.removeEventListener(featureImagesUpdatedEvent, refreshFeatureImages);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", refreshFeatureImages);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
 
