@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
-import { FeatureImageValidationError, featureImageTypes, listFeatureImages, saveFeatureImage, type FeatureImageType } from "./featureImageStore.js";
+import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listFeatureImages, saveFeatureImage } from "./featureImageStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
@@ -506,10 +506,21 @@ async function startServer() {
     try { res.set("Cache-Control", "no-store"); res.json(await listFeatureImages()); }
     catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load homepage images" }); }
   });
+  app.get("/api/storefront/feature-images/:type", async (req, res) => {
+    if (!isFeatureImageType(req.params.type)) return res.status(404).json({ error: "Homepage image not found" });
+    try {
+      const image = await getFeatureImage(req.params.type);
+      if (!image) return res.status(404).end();
+      res.set({ "Cache-Control": "no-store", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
+      res.send(image.data);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load homepage image" });
+    }
+  });
   app.put("/api/admin/feature-images/:type", requireAdminPermission("products", "edit"), async (req, res) => {
     const type = req.params.type;
-    if (!featureImageTypes.includes(type as FeatureImageType)) return res.status(404).json({ error: "Homepage image type not found" });
-    try { res.json(await saveFeatureImage(type as FeatureImageType, req.body?.image)); }
+    if (!isFeatureImageType(type)) return res.status(404).json({ error: "Homepage image type not found" });
+    try { res.json(await saveFeatureImage(type, req.body?.image)); }
     catch (error) {
       if (error instanceof FeatureImageValidationError) return res.status(400).json({ error: error.message });
       res.status(500).json({ error: error instanceof Error ? error.message : "Unable to save homepage image" });

@@ -11,6 +11,10 @@ const collections: Record<FeatureImageType, string> = {
   corporate: "corporate-image",
 };
 
+export function isFeatureImageType(value: string): value is FeatureImageType {
+  return featureImageTypes.some((type) => type === value);
+}
+
 function normalizeImage(value: unknown) {
   if (typeof value !== "string" || value.length > 8_500_000) {
     throw new FeatureImageValidationError("Image must be smaller than 6 MB");
@@ -25,10 +29,29 @@ function normalizeImage(value: unknown) {
 export async function listFeatureImages(): Promise<FeatureImages> {
   const db = await getDatabase();
   const entries = await Promise.all(featureImageTypes.map(async (type) => {
-    const document = await db.collection<{ _id: string; image: string }>(collections[type]).findOne({ _id: "current" });
-    return [type, document?.image ?? null] as const;
+    const document = await db.collection<{ _id: string; updatedAt?: string }>(collections[type]).findOne(
+      { _id: "current" },
+      { projection: { _id: 1, updatedAt: 1 } },
+    );
+    const imageUrl = document
+      ? `/api/storefront/feature-images/${type}?v=${encodeURIComponent(document.updatedAt || "initial")}`
+      : null;
+    return [type, imageUrl] as const;
   }));
   return Object.fromEntries(entries) as FeatureImages;
+}
+
+export async function getFeatureImage(type: FeatureImageType) {
+  const db = await getDatabase();
+  const document = await db.collection<{ _id: string; image: string }>(collections[type]).findOne(
+    { _id: "current" },
+    { projection: { image: 1 } },
+  );
+  if (!document) return null;
+
+  const match = document.image.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match?.[1] || !match[2]) throw new Error(`Stored ${type} image is invalid`);
+  return { mimeType: `image/${match[1].toLowerCase()}`, data: Buffer.from(match[2], "base64") };
 }
 
 export async function saveFeatureImage(type: FeatureImageType, value: unknown) {
@@ -40,5 +63,5 @@ export async function saveFeatureImage(type: FeatureImageType, value: unknown) {
     { $set: { image, updatedAt: now } },
     { upsert: true },
   );
-  return { type, image };
+  return { type, image: `/api/storefront/feature-images/${type}?v=${encodeURIComponent(now)}` };
 }

@@ -87,12 +87,25 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    void loadFeatureImages().then((images) => {
-      if (active) setFeatureImages(images);
-    }).catch((error: unknown) => {
-      console.error("Could not load homepage feature images.", error);
-    });
-    return () => { active = false; };
+    let loadingImages = false;
+    const refreshFeatureImages = async () => {
+      if (loadingImages) return;
+      loadingImages = true;
+      try {
+        const images = await loadFeatureImages();
+        if (active) setFeatureImages(images);
+      } catch (error: unknown) {
+        console.error("Could not load homepage feature images.", error);
+      } finally {
+        loadingImages = false;
+      }
+    };
+    void refreshFeatureImages();
+    const refreshInterval = window.setInterval(() => void refreshFeatureImages(), 10_000);
+    return () => {
+      active = false;
+      window.clearInterval(refreshInterval);
+    };
   }, []);
 
   useEffect(() => {
