@@ -163,7 +163,7 @@ function App() {
   }, []);
 
   useLayoutEffect(() => {
-    if (!location.startsWith("/product/")) return;
+    if (location.startsWith("/admin26")) return;
 
     const root = document.documentElement;
     const previousScrollBehavior = root.style.scrollBehavior;

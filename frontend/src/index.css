@@ -2094,7 +2094,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 
 @media (max-width: 640px) {
   .site-header { height:54px; }
-  .header-actions { right:12px; }
+  .header-actions { right:12px; gap:1px; }
   .mobile-menu { left:12px; right:auto; }
 }
 
