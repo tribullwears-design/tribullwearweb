@@ -547,8 +547,8 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
       <div className="admin-feature-image-card">
         <strong>{label} image</strong>
         {drafts[type] || images[type] ? <img src={drafts[type] || images[type] || ""} alt={`${label} homepage preview`} /> : <div className="admin-feature-image-empty">No image uploaded</div>}
-        <label className="admin-secondary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
-        <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save()}>{saving === type ? "Saving..." : "Save Image"}</button>
+        <label className="admin-secondary-button">Choose File<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
+        <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save()}>{saving === type ? "Uploading..." : "Upload Image"}</button>
       </div>
     </div>}
     {error && <p className="admin-image-error" role="alert">{error}</p>}
