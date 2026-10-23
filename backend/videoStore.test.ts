@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ createIndex: vi.fn(), find: vi.fn(), getDatabase: vi.fn() }));
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { listActiveVideos, MAX_VIDEO_UPLOAD_BYTES, validateVideoUpload } from "./videoStore.js";
+import { listActiveVideos, MAX_VIDEO_UPLOAD_BYTES, parseVideoByteRange, validateVideoUpload } from "./videoStore.js";
 
 describe("homepage videos", () => {
   beforeEach(() => {
@@ -25,5 +25,19 @@ describe("homepage videos", () => {
     expect(validateVideoUpload({ mimeType: "video/webm", size: MAX_VIDEO_UPLOAD_BYTES })).toBe("video/webm");
     expect(() => validateVideoUpload({ mimeType: "image/png", size: 1024 })).toThrow("MP4, WebM, or OGG");
     expect(() => validateVideoUpload({ mimeType: "video/mp4", size: MAX_VIDEO_UPLOAD_BYTES + 1 })).toThrow("100 MB");
+  });
+
+  it("parses standard, open-ended, and suffix video byte ranges", () => {
+    expect(parseVideoByteRange("bytes=10-19", 100)).toEqual({ start: 10, end: 19 });
+    expect(parseVideoByteRange("bytes=90-", 100)).toEqual({ start: 90, end: 99 });
+    expect(parseVideoByteRange("bytes=-10", 100)).toEqual({ start: 90, end: 99 });
+    expect(parseVideoByteRange("bytes=90-200", 100)).toEqual({ start: 90, end: 99 });
+    expect(parseVideoByteRange(undefined, 100)).toBeNull();
+  });
+
+  it("marks unsatisfiable video byte ranges", () => {
+    expect(parseVideoByteRange("bytes=100-", 100)).toEqual({ unsatisfiable: true });
+    expect(parseVideoByteRange("bytes=20-10", 100)).toEqual({ unsatisfiable: true });
+    expect(parseVideoByteRange("bytes=-0", 100)).toEqual({ unsatisfiable: true });
   });
 });

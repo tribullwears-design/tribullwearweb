@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchMovingNavbarSettings,
   getCachedMovingNavbarSettings,
@@ -12,6 +12,9 @@ type MovingNavbarProps = {
 
 export default function MovingNavbar({ className = "", trackClassName = "" }: MovingNavbarProps) {
   const [settings, setSettings] = useState<MovingNavbarSettings>(() => getCachedMovingNavbarSettings());
+  const [copiesPerGroup, setCopiesPerGroup] = useState(12);
+  const tickerRef = useRef<HTMLDivElement>(null);
+  const sampleRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -35,16 +38,46 @@ export default function MovingNavbar({ className = "", trackClassName = "" }: Mo
     };
   }, []);
 
+  useEffect(() => {
+    const ticker = tickerRef.current;
+    const sample = sampleRef.current;
+    if (!ticker || !sample) return;
+
+    const updateCopies = () => {
+      const itemWidth = sample.getBoundingClientRect().width;
+      if (itemWidth <= 0) return;
+      const requiredCopies = Math.ceil(ticker.clientWidth / itemWidth) + 1;
+      setCopiesPerGroup((current) => current === requiredCopies ? current : requiredCopies);
+    };
+
+    updateCopies();
+    const observer = new ResizeObserver(updateCopies);
+    observer.observe(ticker);
+    observer.observe(sample);
+    return () => observer.disconnect();
+  }, [settings]);
+
+  const renderAnnouncement = (groupIndex: number) => (
+    <div className="ticker__group" key={groupIndex} aria-hidden={groupIndex > 0}>
+      {Array.from({ length: copiesPerGroup }, (_, index) => (
+        <span
+          key={index}
+          ref={groupIndex === 0 && index === 0 ? sampleRef : undefined}
+          aria-hidden={index > 0}
+        >
+          {settings.message}
+          <a href={settings.linkUrl}><b>{settings.linkText}</b></a>
+          <i aria-hidden="true">✦</i>
+        </span>
+      ))}
+    </div>
+  );
+
   return (
-    <div className={`ticker ${className}`.trim()} aria-label="Announcement">
+    <div className={`ticker ${className}`.trim()} aria-label="Announcement" ref={tickerRef}>
       <div className={`ticker__track ${trackClassName}`.trim()}>
-        {Array.from({ length: 8 }, (_, index) => (
-          <span key={index}>
-            {settings.message}
-            <a href={settings.linkUrl}><b>{settings.linkText}</b></a>
-            <i aria-hidden="true">✦</i>
-          </span>
-        ))}
+        {renderAnnouncement(0)}
+        {renderAnnouncement(1)}
       </div>
     </div>
   );

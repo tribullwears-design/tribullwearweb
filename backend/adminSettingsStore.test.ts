@@ -2,16 +2,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defaultGeneralSettings,
   defaultMovingNavbarSettings,
+  defaultProductTypeCategories,
   defaultSocialSettings,
   getGeneralSettings,
+  getProductTypeCategories,
   saveGeneralSettings,
   getMovingNavbarSettings,
+  saveProductTypeCategories,
   saveMovingNavbarSettings,
   saveFeaturedProductIds,
   saveSocialSettings,
   validateFeaturedProductIds,
   validateGeneralSettings,
   validateMovingNavbarSettings,
+  validateProductTypeCategories,
   validateSocialSettings,
 } from "./adminSettingsStore.js";
 
@@ -59,6 +63,22 @@ describe("admin settings validation", () => {
     expect(() => validateMovingNavbarSettings({ ...defaultMovingNavbarSettings, message: " " })).toThrow("Announcement text");
   });
 
+  it("validates product type categories, images, and visibility", () => {
+    expect(validateProductTypeCategories(defaultProductTypeCategories)).toEqual(defaultProductTypeCategories);
+    expect(validateProductTypeCategories([
+      { ...defaultProductTypeCategories[0]!, image: "data:image/png;base64,aGVsbG8=", isVisible: false },
+    ])).toEqual([
+      { ...defaultProductTypeCategories[0]!, image: "data:image/png;base64,aGVsbG8=", isVisible: false },
+    ]);
+    expect(() => validateProductTypeCategories([
+      defaultProductTypeCategories[0]!,
+      defaultProductTypeCategories[0]!,
+    ])).toThrow("must be unique");
+    expect(() => validateProductTypeCategories([
+      { ...defaultProductTypeCategories[0]!, image: "https://example.com/icon.png" },
+    ])).toThrow("Upload a JPG");
+  });
+
   it("rejects malformed and duplicate featured product IDs", () => {
     expect(validateFeaturedProductIds(["abc", "product_2"])).toEqual(["abc", "product_2"]);
     expect(() => validateFeaturedProductIds(["same", "same"])).toThrow("must be unique");
@@ -92,6 +112,16 @@ describe("admin settings validation", () => {
     expect(mocks.updateOne).toHaveBeenLastCalledWith(
       { _id: "moving-navbar" },
       { $set: { value: { ...defaultMovingNavbarSettings, message: "NEW DROP" }, updatedAt: expect.any(String) } },
+      { upsert: true },
+    );
+    await expect(getProductTypeCategories()).resolves.toEqual(defaultProductTypeCategories);
+    const hiddenCategory = defaultProductTypeCategories.map((category) =>
+      category.id === "hoodie" ? { ...category, isVisible: false } : category,
+    );
+    await expect(saveProductTypeCategories(hiddenCategory)).resolves.toEqual(hiddenCategory);
+    expect(mocks.updateOne).toHaveBeenLastCalledWith(
+      { _id: "product-type-categories" },
+      { $set: { value: hiddenCategory, updatedAt: expect.any(String) } },
       { upsert: true },
     );
   });

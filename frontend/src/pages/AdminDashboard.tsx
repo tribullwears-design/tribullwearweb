@@ -8,6 +8,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { Product } from "../../../shared/products";
+import { defaultProductTypeCategories, type ProductTypeCategory } from "../../../shared/productTypeCategories";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation } from "wouter";
 import { apiFetch, apiUrl } from "../lib/api";
@@ -23,6 +24,7 @@ import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanne
 import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
 import { defaultGeneralSettings, defaultSocialSettings, defaultMovingNavbarSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminMovingNavbarSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminMovingNavbarSettings, saveAdminSocialSettings, type GeneralSettings, type MovingNavbarSettings, type SocialSettings } from "../lib/storefrontSettings";
 import { saveSiteLogo } from "../lib/siteLogo";
+import { fetchProductTypeCategories, saveProductTypeCategories as persistProductTypeCategories } from "../lib/productTypeCategories";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import "./admin-dashboard.css";
 
@@ -134,8 +136,6 @@ function summarizeAdminPermissions(permissions: AdminPermissions) {
     .map(({ key, label }) => `${label} (${permissions[key].edit ? "edit" : "view"})`)
     .join(", ") || "None";
 }
-type ProductTypeCategory = { label: string; image?: string };
-const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Neck" }, { label: "Oversized" }, { label: "Acid Oversized" }, { label: "Hoodie" }];
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
 
 function permissionSectionForScreen(screen: string): AdminPermissionSection {
@@ -692,6 +692,47 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
 
 function readImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void) { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) { event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") onChange(reader.result); }; reader.readAsDataURL(file); event.target.value = ""; }
 
+function readProductTypeImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void, onError: (message: string) => void) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    onError("Choose a JPG, PNG, or WEBP icon.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => onError("Could not read the selected product type image.");
+  reader.onload = () => {
+    if (typeof reader.result !== "string") {
+      onError("Could not read the selected product type image.");
+      return;
+    }
+    const image = new window.Image();
+    image.onerror = () => onError("The selected image could not be opened.");
+    image.onload = () => {
+      const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        onError("Could not prepare the selected product type image.");
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const compressedImage = canvas.toDataURL("image/webp", 0.82);
+      if (compressedImage.length > 1_500_000) {
+        onError("Product type icons must be smaller than 1 MB after compression.");
+        return;
+      }
+      onError("");
+      onChange(compressedImage);
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function CategoryImage({ image, onChange, onRemove, inputRef, showControls = true }: { image?: string; onChange: (event: React.ChangeEvent<HTMLInputElement>) => void; onRemove: () => void; inputRef?: React.RefObject<HTMLInputElement | null>; showControls?: boolean }) {
   const retryWithAvailablePublicImage = (event: React.SyntheticEvent<HTMLImageElement>) => {
     const img = event.currentTarget;
@@ -715,7 +756,7 @@ function CategoryVisibilityButton({ isVisible, label, saving, onClick }: { isVis
   return <button type="button" className="admin-small-button" disabled={saving} aria-label={`${isVisible ? "Hide" : "Show"} ${label}`} aria-pressed={isVisible} onClick={onClick}>{saving ? "Saving..." : isVisible ? "Visible" : "Hidden"}</button>;
 }
 
-function CategoryManagement({ productCategories, setProductCategories, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; setProductCategories: React.Dispatch<React.SetStateAction<ProductTypeCategory[]>>; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy: () => void; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => void }) {
+function CategoryManagement({ productCategories, onSaveProductCategories, productCategoriesLoading, productCategoriesError, productCategoriesActionError, onRetryProductCategories, productCategoriesSaving, hierarchy, setHierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, newCategory, setNewCategory, addCategory }: { productCategories: ProductTypeCategory[]; onSaveProductCategories: (categories: ProductTypeCategory[]) => Promise<void>; productCategoriesLoading: boolean; productCategoriesError: string; productCategoriesActionError: string; onRetryProductCategories: () => void; productCategoriesSaving: boolean; hierarchy: CategoryHierarchy; setHierarchy: React.Dispatch<React.SetStateAction<CategoryHierarchy>>; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy: () => void; newCategory: string; setNewCategory: React.Dispatch<React.SetStateAction<string>>; addCategory: (image?: string) => Promise<boolean> }) {
   const [parentCategory, setParentCategory] = useState(hierarchy.main[0]?.value || "");
   const [newMainCategory, setNewMainCategory] = useState("");
   const [newMainImage, setNewMainImage] = useState("");
@@ -840,7 +881,36 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
     try { await deleteSubcategoryApi(parent, value); await refreshHierarchy(); } catch (error) { setCategoryError(error instanceof Error ? error.message : "Could not delete subcategory. Please try again."); }
   };
   const saveSubcategoryEdit = async () => { setCategoryError(""); if (!editingSubcategory) return; const label = editingSubcategoryName.trim(); if (!label) return; const targetItems = hierarchy.subcategories[editingSubcategoryParent] || []; if (targetItems.some((item) => item.value !== editingSubcategory.value && item.label.toLowerCase() === label.toLowerCase())) return; try { if (editingSubcategoryParent === editingSubcategory.parent) { await updateSubcategory(editingSubcategory.parent, editingSubcategory.value, { label, image: editingSubcategoryImage }); await refreshHierarchy(); } else { const withoutCurrent = (hierarchy.subcategories[editingSubcategory.parent] || []).filter((item) => item.value !== editingSubcategory.value); const current = hierarchy.subcategories[editingSubcategory.parent]?.find((item) => item.value === editingSubcategory.value); if (!await saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [editingSubcategory.parent]: withoutCurrent, [editingSubcategoryParent]: [...targetItems.filter((item) => item.value !== editingSubcategory.value), { ...(current || { value: editingSubcategory.value }), label, image: editingSubcategoryImage }] } })) return; } setEditingSubcategory(null); setEditingSubcategoryName(""); } catch (error) { setCategoryError(error instanceof Error ? error.message : "Could not update subcategory. Please try again."); } };
-  const saveProductTypeImage = (label: string, image: string) => setProductCategories((current) => current.map((item) => item.label === label ? { ...item, image } : item));
+  const saveProductTypeCategories = async (next: ProductTypeCategory[]) => {
+    setCategoryError("");
+    try {
+      await onSaveProductCategories(next);
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : "Could not save product type categories.");
+    }
+  };
+  const saveProductTypeImage = (id: string, image: string) => {
+    void saveProductTypeCategories(productCategories.map((item) => item.id === id ? { ...item, image } : item));
+  };
+  const toggleProductTypeVisibility = async (category: ProductTypeCategory) => {
+    if (productCategoriesSaving || visibilityRequestRef.current) return;
+    visibilityRequestRef.current = true;
+    setSavingVisibility(`product-type:${category.id}`);
+    try {
+      await onSaveProductCategories(productCategories.map((item) =>
+        item.id === category.id ? { ...item, isVisible: !item.isVisible } : item,
+      ));
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : "Could not update product type visibility.");
+    } finally {
+      visibilityRequestRef.current = false;
+      setSavingVisibility(null);
+    }
+  };
+  const deleteProductType = async (category: ProductTypeCategory) => {
+    if (productCategoriesSaving || !window.confirm(`Delete ${category.label}? Existing products will not be deleted.`)) return;
+    await saveProductTypeCategories(productCategories.filter((item) => item.id !== category.id));
+  };
   const mainCategoryForm = <div className="admin-inline-form admin-main-category-form"><input value={newMainCategory} placeholder="New category name" onChange={(event) => setNewMainCategory(event.target.value)} /><CategoryImage image={newMainImage} inputRef={newMainImageInputRef} onChange={(event) => readImage(event, setNewMainImage)} onRemove={() => { setNewMainImage(""); if (newMainImageInputRef.current) newMainImageInputRef.current.value = ""; }} /><button className="admin-primary-button" type="button" onClick={addMainCategory}><Plus size={15} />Add category</button></div>;
   return <>
     {categoryError && <p className="admin-image-error">{categoryError}</p>}
@@ -914,7 +984,41 @@ function CategoryManagement({ productCategories, setProductCategories, hierarchy
         })}
       </div>
     </section>
-    <section className="admin-category-management"><SectionHeading title="Product Type Categories" /><div className="admin-inline-form"><input value={newCategory} placeholder="New product type" onChange={(event) => setNewCategory(event.target.value)} /><CategoryImage image={newProductTypeImage} onChange={(event) => readImage(event, setNewProductTypeImage)} onRemove={() => setNewProductTypeImage("")} /><button className="admin-primary-button" type="button" onClick={() => { addCategory(newProductTypeImage); setNewProductTypeImage(""); }}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{productCategories.map((category) => { const isEditing = editingProductType === category.label; return <div className={`admin-management-row admin-product-type-row ${isEditing ? "admin-product-type-row--editing" : ""}`} key={category.label}>{isEditing ? <><CategoryImage image={editingProductTypeImage} onChange={(event) => readImage(event, setEditingProductTypeImage)} onRemove={() => setEditingProductTypeImage("")} showControls={false} /><input className="admin-subcategory-edit-input" value={category.label} readOnly /><label className="admin-small-button admin-product-type-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingProductTypeImage)} /></label><button type="button" className="admin-small-button" onClick={() => { saveProductTypeImage(category.label, editingProductTypeImage); setEditingProductType(null); }}>Save</button><button type="button" className="admin-small-button" onClick={() => setEditingProductType(null)}>Cancel</button></> : <><CategoryImage image={category.image} onChange={(event) => readImage(event, (image) => saveProductTypeImage(category.label, image))} onRemove={() => saveProductTypeImage(category.label, "")} /><strong>{category.label}</strong><div className="admin-product-type-actions"><button type="button" className="admin-small-button" onClick={() => { setEditingProductType(category.label); setEditingProductTypeImage(category.image || ""); }}>Edit</button><button type="button" className="admin-small-button" onClick={() => setProductCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div></>}</div>; })}</div></section>
+    <section className="admin-category-management">
+      <SectionHeading title="Product Type Categories" />
+      <div className="admin-inline-form">
+        <input value={newCategory} placeholder="Product type (Round Neck, Oversized, Acid Oversized, Hoodie)" onChange={(event) => setNewCategory(event.target.value)} />
+        <CategoryImage image={newProductTypeImage} onChange={(event) => readProductTypeImage(event, setNewProductTypeImage, setCategoryError)} onRemove={() => setNewProductTypeImage("")} />
+        <button className="admin-primary-button" type="button" disabled={productCategoriesLoading || Boolean(productCategoriesError) || productCategoriesSaving} onClick={() => { void addCategory(newProductTypeImage).then((saved) => { if (saved) { setNewProductTypeImage(""); setNewCategory(""); } }); }}><Plus size={15} />Add category</button>
+      </div>
+      {productCategoriesError && <p className="admin-image-error" role="alert">{productCategoriesError} <button className="admin-text-button" type="button" onClick={onRetryProductCategories}>Retry</button></p>}
+      {productCategoriesActionError && <p className="admin-image-error" role="alert">{productCategoriesActionError}</p>}
+      {productCategoriesLoading ? <p>Loading product type categories...</p> : productCategoriesError ? null : (
+        <div className="admin-chip-list">
+          {productCategories.map((category) => {
+            const isEditing = editingProductType === category.id;
+            return <div className={`admin-management-row admin-product-type-row ${isEditing ? "admin-product-type-row--editing" : ""}`} key={category.id}>
+              {isEditing ? <>
+                <CategoryImage image={editingProductTypeImage} onChange={(event) => readProductTypeImage(event, setEditingProductTypeImage, setCategoryError)} onRemove={() => setEditingProductTypeImage("")} showControls={false} />
+                <input className="admin-subcategory-edit-input" value={category.label} readOnly />
+                <label className="admin-small-button admin-product-type-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => readProductTypeImage(event, setEditingProductTypeImage, setCategoryError)} /></label>
+                <button type="button" className="admin-small-button" disabled={productCategoriesSaving} onClick={() => { saveProductTypeImage(category.id, editingProductTypeImage); setEditingProductType(null); }}>Save</button>
+                <button type="button" className="admin-small-button" onClick={() => setEditingProductType(null)}>Cancel</button>
+              </> : <>
+                <CategoryImage image={category.image} onChange={(event) => readProductTypeImage(event, (image) => saveProductTypeImage(category.id, image), setCategoryError)} onRemove={() => saveProductTypeImage(category.id, "")} />
+                <strong>{category.label}</strong>
+                <div className="admin-product-type-actions">
+                  <CategoryVisibilityButton isVisible={category.isVisible} label={category.label} saving={savingVisibility === `product-type:${category.id}`} onClick={() => void toggleProductTypeVisibility(category)} />
+                  <button type="button" className="admin-small-button" disabled={productCategoriesSaving} onClick={() => { setEditingProductType(category.id); setEditingProductTypeImage(category.image || ""); }}>Edit</button>
+                  <button type="button" className="admin-small-button" disabled={productCategoriesSaving} onClick={() => void deleteProductType(category)}>Delete</button>
+                </div>
+              </>}
+            </div>;
+          })}
+          {productCategories.length === 0 && <p>No product type categories. Add one of the four supported product types.</p>}
+        </div>
+      )}
+    </section>
   </>;
 }
 
@@ -1167,6 +1271,11 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [inventoryAdjustmentSaving, setInventoryAdjustmentSaving] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [categories, setCategories] = useState<ProductTypeCategory[]>(defaultProductTypeCategories);
+  const [productTypeCategoriesLoading, setProductTypeCategoriesLoading] = useState(true);
+  const [productTypeCategoriesLoadError, setProductTypeCategoriesLoadError] = useState("");
+  const [productTypeCategoriesActionError, setProductTypeCategoriesActionError] = useState("");
+  const [productTypeCategoriesLoadVersion, setProductTypeCategoriesLoadVersion] = useState(0);
+  const [productTypeCategoriesSaving, setProductTypeCategoriesSaving] = useState(false);
   const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchy>({ main: [], subcategories: {} });
   const [categoryHierarchyLoading, setCategoryHierarchyLoading] = useState(true);
   const [categoryHierarchyError, setCategoryHierarchyError] = useState("");
@@ -1188,6 +1297,25 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [editProductError, setEditProductError] = useState("");
   const editProductRequest = useRef<AbortController | null>(null);
   useEffect(() => { setScreen(initialScreen); }, [initialScreen]);
+  useEffect(() => {
+    let active = true;
+    setProductTypeCategoriesLoading(true);
+    setProductTypeCategoriesLoadError("");
+    void fetchProductTypeCategories()
+      .then((savedCategories) => {
+        if (active) {
+          setCategories(savedCategories);
+          setProductTypeCategoriesLoadError("");
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) setProductTypeCategoriesLoadError(error instanceof Error ? error.message : "Could not load product type categories.");
+      })
+      .finally(() => {
+        if (active) setProductTypeCategoriesLoading(false);
+      });
+    return () => { active = false; };
+  }, [productTypeCategoriesLoadVersion]);
   useEffect(() => {
     void apiFetch("/api/admin/product-discounts", { cache: "no-store" }).then(async (response) => {
       if (response.ok) { const offers = await response.json() as AdminOffer[]; latestDiscountOffers = offers; setDiscountOffers(offers); }
@@ -1858,7 +1986,48 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     }
   };
   const handleProductImageChange = (event: React.ChangeEvent<HTMLInputElement>, updateForm: React.Dispatch<React.SetStateAction<ProductFormState>> = setProductForm) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setImageError("Please choose a JPG, PNG, or WEBP image."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { updateForm((current) => ({ ...current, image: reader.result as string })); setImageError(""); } }; reader.readAsDataURL(file); event.target.value = ""; };
-  const addCategory = (image = "") => { const value = newCategory.trim(); if (value && !categories.some((category) => category.label.toLowerCase() === value.toLowerCase())) { setCategories((current) => [...current, { label: value, image }]); setNewCategory(""); } };
+  const persistProductTypeCategoryList = async (nextCategories: ProductTypeCategory[]) => {
+    if (productTypeCategoriesSaving) throw new Error("Product type categories are already being saved.");
+    setProductTypeCategoriesSaving(true);
+    setProductTypeCategoriesActionError("");
+    try {
+      const savedCategories = await persistProductTypeCategories(nextCategories);
+      setCategories(savedCategories);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save product type categories.";
+      setProductTypeCategoriesActionError(message);
+      toast.error("Product type categories were not saved.", { description: message });
+      throw error;
+    } finally {
+      setProductTypeCategoriesSaving(false);
+    }
+  };
+  const addCategory = async (image = "") => {
+    const label = newCategory.trim();
+    if (!label) {
+      setProductTypeCategoriesActionError("Enter a product type name.");
+      return false;
+    }
+    const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const candidate = defaultProductTypeCategories.find((category) =>
+      category.label.toLowerCase().replace(/[^a-z0-9]/g, "") === normalizedLabel
+      || (category.id === "acid-oversized" && normalizedLabel === "acidwash"),
+    );
+    if (!candidate) {
+      setProductTypeCategoriesActionError("Use one of the supported types: Round Neck, Oversized, Acid Oversized, or Hoodie.");
+      return false;
+    }
+    if (categories.some((category) => category.id === candidate.id)) {
+      setProductTypeCategoriesActionError(`${candidate.label} is already in the list.`);
+      return false;
+    }
+    try {
+      await persistProductTypeCategoryList([...categories, { ...candidate, image: image || candidate.image, isVisible: true }]);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const toggleFeatured = async (id: string) => {
     if (featuredSaving) return;
     const next = featured.includes(id) ? featured.filter((item) => item !== id) : [...featured, id];
@@ -2171,7 +2340,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     if (screen === "customize-image") return <HomeFeatureImageManagement type="customize" canEdit={canEdit("products")} />;
     if (screen === "corporate-image") return <HomeFeatureImageManagement type="corporate" canEdit={canEdit("products")} />;
     if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" />}</AdminPanel>;
-    if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} setProductCategories={setCategories} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
+    if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} onSaveProductCategories={persistProductTypeCategoryList} productCategoriesLoading={productTypeCategoriesLoading} productCategoriesError={productTypeCategoriesLoadError} productCategoriesActionError={productTypeCategoriesActionError} onRetryProductCategories={() => setProductTypeCategoriesLoadVersion((version) => version + 1)} productCategoriesSaving={productTypeCategoriesSaving} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
     if (screen === "inventory") return <AdminPanel title="Inventory">
       {productsError ? <EmptyState title="Inventory unavailable" message={productsError} action="Retry" onAction={() => void refreshProducts()} /> : productsLoading ? <p>Loading inventory...</p> : <>

@@ -5,6 +5,27 @@ import { getDatabase } from "./database.js";
 export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
 const supportedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
 export type VideoDocument = { id: string; title: string; url: string; storageId?: string; mimeType?: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string; updatedAt: string };
+type VideoByteRange = { start: number; end: number } | { unsatisfiable: true } | null;
+
+export function parseVideoByteRange(header: string | undefined, length: number): VideoByteRange {
+  if (!header || !header.startsWith("bytes=") || header.includes(",")) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
+  if (!match || (!match[1] && !match[2]) || length <= 0) return { unsatisfiable: true };
+
+  const requestedStart = match[1] ? Number(match[1]) : null;
+  const requestedEnd = match[2] ? Number(match[2]) : null;
+  if ((requestedStart !== null && !Number.isSafeInteger(requestedStart)) || (requestedEnd !== null && !Number.isSafeInteger(requestedEnd))) {
+    return { unsatisfiable: true };
+  }
+
+  if (requestedStart === null) {
+    if (!requestedEnd) return { unsatisfiable: true };
+    return { start: Math.max(0, length - requestedEnd), end: length - 1 };
+  }
+  if (requestedStart >= length || (requestedEnd !== null && requestedEnd < requestedStart)) return { unsatisfiable: true };
+  return { start: requestedStart, end: Math.min(requestedEnd ?? length - 1, length - 1) };
+}
+
 async function getCollection(): Promise<Collection<VideoDocument>> { const collection = (await getDatabase()).collection<VideoDocument>("videos"); await collection.createIndex({ id: 1 }, { unique: true }); await collection.createIndex({ createdAt: -1 }); return collection; }
 function validateTitle(value: unknown) {
   const title = typeof value === "string" ? value.trim() : "";
@@ -80,16 +101,34 @@ export async function deleteVideo(id: string) {
   await collection.deleteOne({ id });
   return true;
 }
-export async function streamVideoFile(storageId: string, res: import("express").Response) {
+export async function streamVideoFile(storageId: string, res: import("express").Response, rangeHeader?: string) {
   const objectId = fileObjectId(storageId);
   if (!objectId) return false;
   const bucket = await getBucket();
   const files = await bucket.find({ _id: objectId }).toArray();
   if (!files[0]) return false;
   const metadata = files[0].metadata as { mimeType?: string } | undefined;
+  const file = files[0];
+  const range = parseVideoByteRange(rangeHeader, file.length);
   res.setHeader("Content-Type", metadata?.mimeType || "application/octet-stream");
-  res.setHeader("Content-Length", String(files[0].length));
   res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+
+  if (range && "unsatisfiable" in range) {
+    res.setHeader("Content-Range", `bytes */${file.length}`);
+    res.status(416).end();
+    return true;
+  }
+
+  if (range) {
+    res.status(206);
+    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${file.length}`);
+    res.setHeader("Content-Length", String(range.end - range.start + 1));
+    bucket.openDownloadStream(objectId, { start: range.start, end: range.end + 1 }).pipe(res);
+    return true;
+  }
+
+  res.setHeader("Content-Length", String(file.length));
   bucket.openDownloadStream(objectId).pipe(res);
   return true;
 }

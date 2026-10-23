@@ -19,14 +19,7 @@ import {
   useCategoryHierarchy,
 } from "../lib/categoryHierarchy";
 import type { StorefrontProduct } from "../lib/products";
-import { getProductSearchCategory } from "../lib/productSearch";
-
-type ProductType = "oversized" | "hoodie";
-
-const productTypes: { id: ProductType; label: string; icon: string }[] = [
-  { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
-];
+import { useProductTypeCategories } from "../lib/productTypeCategories";
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -45,11 +38,18 @@ export default function AllProductsPage() {
     readStorage("tribull-cart", {})
   );
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<ProductType>("oversized");
+  const [selectedType, setSelectedType] = useState("oversized");
+  const productTypes = useProductTypeCategories().filter((category) => category.isVisible);
   const [catalogProducts, setCatalogProducts] =
     useState<StorefrontProduct[]>(getCachedProducts);
   const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
+
+  useEffect(() => {
+    if (!productTypes.some((category) => category.id === selectedType) && productTypes[0]) {
+      setSelectedType(productTypes[0].id);
+    }
+  }, [productTypes, selectedType]);
 
   useEffect(() => {
     let active = true;
@@ -85,7 +85,7 @@ export default function AllProductsPage() {
       ? getEligibleStorefrontProducts(catalogProducts, hierarchy)
       : catalogProducts;
     return eligibleProducts
-      .filter(product => getProductSearchCategory(product) === selectedType)
+      .filter(product => productTypes.some((category) => category.id === selectedType) && product.category === selectedType)
       .map(product => ({
         id: product.id,
         name: product.name,
@@ -95,7 +95,7 @@ export default function AllProductsPage() {
           : { originalPrice: product.originalPrice }),
         image: product.image,
       }));
-  }, [catalogProducts, hierarchy, selectedType]);
+  }, [catalogProducts, hierarchy, productTypes, selectedType]);
 
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
@@ -169,7 +169,7 @@ export default function AllProductsPage() {
           className="category-catalog-tabs all-products-category-tabs"
           aria-label="Product types"
         >
-          {productTypes.map(({ id, label, icon }) => (
+          {productTypes.map(({ id, label, image }) => (
             <button
               key={id}
               type="button"
@@ -177,11 +177,12 @@ export default function AllProductsPage() {
               onClick={() => setSelectedType(id)}
               aria-pressed={selectedType === id}
             >
-              <img src={icon} alt="" />
+              {image && <img src={image} alt="" />}
               <span>{label}</span>
             </button>
           ))}
         </div>
+        {productTypes.length === 0 && <p role="status">No product types are currently visible.</p>}
 
         <section className="all-products-grid" aria-label="All products grid">
           {displayProducts.map(product => {

@@ -11,6 +11,7 @@ import HeaderActions from "../components/HeaderActions";
 import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
+import { useProductTypeCategories } from "../lib/productTypeCategories";
 
 export type CategoryProduct = {
   id: string;
@@ -179,7 +180,7 @@ function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: {
   );
 }
 
-type CatalogTab = "oversized" | "hoodie";
+type CatalogTab = string;
 type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 
 function GlobalNavigation() {
@@ -217,12 +218,8 @@ function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string;
   );
 }
 
-const catalogTabs: { id: CatalogTab; label: string; icon: string }[] = [
-  { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
-];
-
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
+  const catalogTabs = useProductTypeCategories().filter((category) => category.isVisible);
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("oversized");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, [entrySlug]));
@@ -234,6 +231,12 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     try { return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}"); } catch { return {}; }
   });
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!catalogTabs.some((tab) => tab.id === selectedTab) && catalogTabs[0]) {
+      setSelectedTab(catalogTabs[0].id);
+    }
+  }, [catalogTabs, selectedTab]);
 
   useEffect(() => {
     let active = true;
@@ -277,14 +280,16 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
   }, []);
 
   const visibleCatalog = useMemo(() => {
-    const items = storedCatalog.filter((product) => product.productType === selectedTab);
+    const items = catalogTabs.some((tab) => tab.id === selectedTab)
+      ? storedCatalog.filter((product) => product.productType === selectedTab)
+      : [];
     const price = (value: string) => Number(value.replace(/[^0-9]/g, ""));
     if (sort === "low") items.sort((a, b) => price(a.price) - price(b.price));
     if (sort === "high") items.sort((a, b) => price(b.price) - price(a.price));
     if (sort === "newest") items.reverse();
     if (sort === "selling") items.sort((a, b) => b.name.length - a.name.length);
     return items;
-  }, [storedCatalog, selectedTab, sort]);
+  }, [catalogTabs, storedCatalog, selectedTab, sort]);
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
@@ -315,13 +320,14 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     <>
       <div className="category-catalog-controls">
         <div className="category-catalog-tabs" aria-label="Product categories">
-          {catalogTabs.map(({ id, label, icon }) => (
+          {catalogTabs.map(({ id, label, image }) => (
             <button key={id} type="button" className={`category-catalog-tab ${selectedTab === id ? "is-active" : ""}`} onClick={() => setSelectedTab(id)} aria-pressed={selectedTab === id}>
-              <img src={icon} alt="" />
+              {image && <img src={image} alt="" />}
               <span>{label}</span>
             </button>
           ))}
         </div>
+        {catalogTabs.length === 0 && <p role="status">No product types are currently visible.</p>}
         <div className="category-catalog-toolbar">
           <p>Showing: <strong>{selectedLabel}</strong></p>
           <label>

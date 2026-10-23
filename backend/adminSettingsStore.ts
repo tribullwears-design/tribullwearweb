@@ -1,8 +1,9 @@
 import type { Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 import { getProduct } from "./productStore.js";
+import { defaultProductTypeCategories, type ProductTypeCategory } from "../shared/productTypeCategories.js";
 
-type SettingKey = "general" | "social" | "featured" | "moving-navbar";
+type SettingKey = "general" | "social" | "featured" | "moving-navbar" | "product-type-categories";
 type SettingDocument = { _id: SettingKey; value: unknown; updatedAt: string };
 
 export class AdminSettingsValidationError extends Error {
@@ -53,6 +54,8 @@ export const defaultMovingNavbarSettings: MovingNavbarSettings = {
   linkText: "SHOP NOW",
   linkUrl: "/products",
 };
+
+export { defaultProductTypeCategories };
 
 async function getCollection(): Promise<Collection<SettingDocument>> {
   return (await getDatabase()).collection<SettingDocument>("admin-settings");
@@ -155,6 +158,43 @@ export function getMovingNavbarSettings() {
 
 export async function saveMovingNavbarSettings(value: unknown) {
   return saveSetting("moving-navbar", validateMovingNavbarSettings(value));
+}
+
+export function validateProductTypeCategories(value: unknown): ProductTypeCategory[] {
+  if (!Array.isArray(value) || value.length > defaultProductTypeCategories.length) {
+    throw new AdminSettingsValidationError("Product type categories must be a list of up to four categories");
+  }
+  const allowedIds = new Set(defaultProductTypeCategories.map(({ id }) => id));
+  const ids = new Set<string>();
+  return value.map((entry) => {
+    const category = settingsRecord(entry);
+    const allowedKeys = ["id", "label", "image", "isVisible"];
+    if (Object.keys(category).some((key) => !allowedKeys.includes(key))) {
+      throw new AdminSettingsValidationError("Unsupported product type category setting");
+    }
+    const id = typeof category.id === "string" ? category.id.trim() : "";
+    const label = typeof category.label === "string" ? category.label.trim() : "";
+    const image = typeof category.image === "string" ? category.image.trim() : "";
+    if (!allowedIds.has(id)) throw new AdminSettingsValidationError("Product type category is not supported");
+    if (ids.has(id)) throw new AdminSettingsValidationError("Product type categories must be unique");
+    if (!label || label.length > 60) throw new AdminSettingsValidationError("Product type label must be between 1 and 60 characters");
+    if (typeof category.isVisible !== "boolean") throw new AdminSettingsValidationError("Product type visibility must be specified");
+    if (image.length > 1_500_000) throw new AdminSettingsValidationError("Product type image must be smaller than 1 MB");
+    const isDefaultImage = defaultProductTypeCategories.some((item) => item.image === image);
+    if (image && !isDefaultImage && !/^data:image\/(png|jpeg|webp);base64,[a-z0-9+/]+=*$/i.test(image)) {
+      throw new AdminSettingsValidationError("Upload a JPG, PNG, or WEBP product type image");
+    }
+    ids.add(id);
+    return { id, label, image, isVisible: category.isVisible };
+  });
+}
+
+export function getProductTypeCategories() {
+  return getSetting("product-type-categories", defaultProductTypeCategories);
+}
+
+export async function saveProductTypeCategories(value: unknown) {
+  return saveSetting("product-type-categories", validateProductTypeCategories(value));
 }
 
 export async function saveSocialSettings(value: unknown) {

@@ -9,7 +9,7 @@ import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listF
 import { getSiteLogoImage, getSiteLogoUrl, saveSiteLogo, SiteLogoValidationError } from "./siteLogoStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
-import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getMovingNavbarSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveMovingNavbarSettings, saveSocialSettings } from "./adminSettingsStore.js";
+import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getMovingNavbarSettings, getProductTypeCategories, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveMovingNavbarSettings, saveProductTypeCategories, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
@@ -589,6 +589,18 @@ async function startServer() {
       sendError(res, error);
     }
   });
+  app.get("/api/storefront/product-type-categories", async (_req, res) => {
+    try { res.set("Cache-Control", "no-store"); res.json(await getProductTypeCategories()); } catch (error) { sendError(res, error); }
+  });
+  app.get("/api/admin/product-type-categories", requireAdminPermission("products", "view"), async (_req, res) => {
+    try { res.json(await getProductTypeCategories()); } catch (error) { sendError(res, error); }
+  });
+  app.put("/api/admin/product-type-categories", requireAdminPermission("products", "edit"), async (req, res) => {
+    try { res.json(await saveProductTypeCategories(req.body)); } catch (error) {
+      if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
   app.get("/api/admin/settings/featured-products", requireAdminPermission("content", "view"), async (_req, res) => {
     try { res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
   });
@@ -748,7 +760,7 @@ async function startServer() {
     try { res.set("Cache-Control", publicCatalogCache); res.json(await listActiveVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
   });
   app.get("/api/videos/files/:storageId", async (req, res) => {
-    try { if (!await streamVideoFile(req.params.storageId, res)) res.status(404).end(); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load video" }); }
+    try { if (!await streamVideoFile(req.params.storageId, res, req.get("Range"))) res.status(404).end(); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load video" }); }
   });
   app.post("/api/admin/videos", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await createVideo(req.body)); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save video" }); }

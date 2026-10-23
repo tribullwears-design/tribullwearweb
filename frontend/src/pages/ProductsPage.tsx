@@ -13,18 +13,12 @@ import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
+import { useProductTypeCategories } from "../lib/productTypeCategories";
 
 export type { Product } from "../../../shared/products";
 
 type ProductCategory = Product["category"];
 type SortOption = "featured" | "newest" | "low" | "high" | "selling";
-
-const categories: { id: ProductCategory; label: string; icon: string }[] = [
-  { id: "round-neck", label: "Round Neck", icon: "/products/roundneckicon.png" },
-  { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
-  { id: "acid-oversized", label: "Acid Oversized", icon: "/products/acidoverwashicon.png" },
-  { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
-];
 
 const formatPrice = (price: number) => `₹${price.toLocaleString("en-IN")}`;
 
@@ -40,12 +34,19 @@ function readStorage<T>(key: string, fallback: T): T {
 export default function ProductsPage() {
   const logo = useSiteLogo();
   const [, setLocation] = useLocation();
+  const categories = useProductTypeCategories().filter((category) => category.isVisible);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!categories.some((category) => category.id === selectedCategory) && categories[0]) {
+      setSelectedCategory(categories[0].id);
+    }
+  }, [categories, selectedCategory]);
 
   useEffect(() => {
     let active = true;
@@ -83,7 +84,9 @@ export default function ProductsPage() {
   }, [cart]);
 
   const visibleProducts = useMemo(() => {
-    const filtered = catalogProducts.filter((product) => product.category === selectedCategory);
+    const filtered = categories.some((category) => category.id === selectedCategory)
+      ? catalogProducts.filter((product) => product.category === selectedCategory)
+      : [];
     return [...filtered].sort((a, b) => {
       if (sort === "newest") return b.created - a.created;
       if (sort === "low") return a.price - b.price;
@@ -91,10 +94,10 @@ export default function ProductsPage() {
       if (sort === "selling") return b.sold - a.sold;
       return catalogProducts.indexOf(a) - catalogProducts.indexOf(b);
     });
-  }, [catalogProducts, selectedCategory, sort]);
+  }, [catalogProducts, categories, selectedCategory, sort]);
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
-  const selectedLabel = categories.find((category) => category.id === selectedCategory)?.label;
+  const selectedLabel = categories.find((category) => category.id === selectedCategory)?.label || "Products";
 
   const goBack = () => {
     if (window.history.length > 1) window.history.back();
@@ -150,7 +153,7 @@ export default function ProductsPage() {
 
       <main className="products-page__content">
         <section className="product-category-tabs" aria-label="Product categories">
-          {categories.map(({ id, label, icon }) => (
+          {categories.map(({ id, label, image }) => (
             <button
               key={id}
               type="button"
@@ -159,12 +162,13 @@ export default function ProductsPage() {
               aria-pressed={selectedCategory === id}
             >
               <span className="product-category-tab__icon">
-                <img src={icon} alt="" style={{ width: 24, height: 24, objectFit: "contain", display: "block" }} />
+                {image && <img src={image} alt="" style={{ width: 24, height: 24, objectFit: "contain", display: "block" }} />}
               </span>
               <span>{label}</span>
             </button>
           ))}
         </section>
+        {categories.length === 0 && <p role="status">No product types are currently visible.</p>}
 
         <div className="products-page__toolbar">
           <p>Showing: <strong>{selectedLabel}</strong></p>

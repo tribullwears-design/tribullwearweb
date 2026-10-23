@@ -86,7 +86,10 @@ export default function Home() {
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleVisibleCount, setLifestyleVisibleCount] = useState(3);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
+  const [lifestyleMediaReady, setLifestyleMediaReady] = useState(false);
+  const [lifestyleSectionVisible, setLifestyleSectionVisible] = useState(false);
   const touchStartX = useRef<number | null>(null);
+  const lifestyleVideoRefs = useRef(new Map<string, HTMLVideoElement>());
 
   useEffect(() => {
     let active = true;
@@ -158,6 +161,51 @@ export default function Home() {
     }).finally(() => { if (active) setVideosLoading(false); });
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    const section = lifestyleSectionRef.current;
+    if (!section || typeof IntersectionObserver === "undefined") {
+      setLifestyleMediaReady(true);
+      setLifestyleSectionVisible(true);
+      return;
+    }
+
+    const preloadObserver = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) {
+        setLifestyleMediaReady(true);
+        preloadObserver.disconnect();
+      }
+    }, { rootMargin: "900px 0px" });
+    const visibilityObserver = new IntersectionObserver(([entry]) => {
+      setLifestyleSectionVisible(Boolean(entry?.isIntersecting));
+    }, { threshold: 0.05 });
+    preloadObserver.observe(section);
+    visibilityObserver.observe(section);
+
+    return () => {
+      preloadObserver.disconnect();
+      visibilityObserver.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    homeVideos.forEach((video, index) => {
+      const element = lifestyleVideoRefs.current.get(video.id);
+      if (!element) return;
+      const shouldPlay = lifestyleMediaReady
+        && lifestyleSectionVisible
+        && index >= lifestyleIndex
+        && index < lifestyleIndex + lifestyleVisibleCount;
+      if (!shouldPlay) {
+        element.pause();
+        return;
+      }
+      void element.play().catch((error: unknown) => {
+        if (error instanceof DOMException && (error.name === "AbortError" || error.name === "NotAllowedError")) return;
+        console.error(`Could not play lifestyle video "${video.title}".`, error);
+      });
+    });
+  }, [homeVideos, lifestyleIndex, lifestyleMediaReady, lifestyleSectionVisible, lifestyleVisibleCount]);
 
   useEffect(() => {
     let active = true;
@@ -416,7 +464,20 @@ export default function Home() {
                     key={`${video.id}-${index}`}
                     ref={index === 0 ? lifestyleSlideRef : undefined}
                   >
-                    <video src={video.url} poster={video.thumbnail} autoPlay loop muted playsInline preload="metadata" aria-label={`${video.title} lifestyle video`} />
+                    <video
+                      ref={(element) => {
+                        if (element) lifestyleVideoRefs.current.set(video.id, element);
+                        else lifestyleVideoRefs.current.delete(video.id);
+                      }}
+                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount + 1 ? video.url : undefined}
+                      poster={video.thumbnail}
+                      autoPlay={lifestyleMediaReady && lifestyleSectionVisible && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount}
+                      loop
+                      muted
+                      playsInline
+                      preload={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount + 1 ? "auto" : "none"}
+                      aria-label={`${video.title} lifestyle video`}
+                    />
                   </div>
                 ))}
               </div>
