@@ -1,7 +1,8 @@
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
+import MovingNavbar from "../components/MovingNavbar";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { fetchProducts, getCachedProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
@@ -76,6 +77,7 @@ export default function ProductDetailPage() {
       originalPrice: product.originalPrice,
       image: product.image,
       category: product.category,
+      stock: product.stock,
     })));
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
@@ -88,6 +90,7 @@ export default function ProductDetailPage() {
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
   const [isInfoOpen, setIsInfoOpen] = useState(true);
   const [headerCartCount, setHeaderCartCount] = useState(0);
+  const [addedRecommendation, setAddedRecommendation] = useState<string | null>(null);
   const [cart, setCart] = useState<Record<string, number>>(() => {
     try {
       return JSON.parse(window.localStorage.getItem("tribull-cart") || "{}");
@@ -243,6 +246,7 @@ export default function ProductDetailPage() {
               originalPrice: product.originalPrice,
               image: product.image,
               category: product.category,
+              stock: product.stock,
             })));
         })
         .catch((error: unknown) => console.error("Product recommendations request failed.", error));
@@ -405,17 +409,38 @@ export default function ProductDetailPage() {
     </div>
   );
 
+  const addRecommendationToCart = (recommendation: ProductData) => {
+    const productId = recommendation.id;
+    if (!productId || recommendation.stock === 0) return;
+
+    const price = Number(recommendation.price.replace(/[^0-9]/g, ""));
+    const nextCart = { ...cart, [productId]: (cart[productId] || 0) + 1 };
+    const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}") as Record<string, unknown>;
+    window.localStorage.setItem("tribull-cart-items", JSON.stringify({
+      ...cartItems,
+      [productId]: {
+        productId,
+        name: recommendation.name,
+        price,
+        originalPrice: resolveOriginalPrice(recommendation),
+        image: recommendation.image,
+        variant: "",
+        size: "",
+        color: "",
+      },
+    }));
+    window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+    setCart(nextCart);
+    window.dispatchEvent(new Event("tribull-cart-updated"));
+    setAddedRecommendation(productId);
+    window.setTimeout(() => {
+      setAddedRecommendation((current) => current === productId ? null : current);
+    }, 1200);
+  };
+
   return (
     <div className="product-detail-page">
-      <div className="product-detail-page__announcement" aria-label="Announcement">
-        <div className="product-detail-page__announcement-track">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <span key={index}>
-              100% cotton <b>shop now</b> <i>✦</i>
-            </span>
-          ))}
-        </div>
-      </div>
+      <MovingNavbar className="product-detail-page__announcement" />
 
       <header className="site-header" aria-label="Main nav">
         <MobileCategoryMenu />
@@ -629,23 +654,35 @@ export default function ProductDetailPage() {
 
           <div className="product-detail-recommendations__grid">
             {recommendationProducts.map((recommendation) => (
-              <Link
+              <article
                 key={recommendation.id}
-                href={`/product/${encodeURIComponent(recommendation.id || "")}`}
                 className="product-detail-recommendation-card"
               >
-                <div className="product-detail-recommendation-card__image">
-                  <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" decoding="async" />
+                <Link href={`/product/${encodeURIComponent(recommendation.id || "")}`}>
+                  <div className="product-detail-recommendation-card__image">
+                    <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" decoding="async" />
+                  </div>
+                </Link>
+                <div className="product-detail-recommendation-card__details">
+                  <Link href={`/product/${encodeURIComponent(recommendation.id || "")}`} className="product-detail-recommendation-card__info">
+                    <h3>{recommendation.name}</h3>
+                    <ProductPrice
+                      sellingPrice={recommendation.price}
+                      originalPrice={resolveOriginalPrice(recommendation)}
+                      productName={recommendation.name}
+                    />
+                  </Link>
+                  <button
+                    type="button"
+                    className="product-detail-recommendation-card__cart"
+                    aria-label={addedRecommendation === recommendation.id ? `${recommendation.name} added to cart` : `Add ${recommendation.name} to cart`}
+                    disabled={recommendation.stock === 0}
+                    onClick={() => addRecommendationToCart(recommendation)}
+                  >
+                    {addedRecommendation === recommendation.id ? <Check size={18} /> : <ShoppingCart size={18} />}
+                  </button>
                 </div>
-                <div>
-                  <h3>{recommendation.name}</h3>
-                  <ProductPrice
-                    sellingPrice={recommendation.price}
-                    originalPrice={resolveOriginalPrice(recommendation)}
-                    productName={recommendation.name}
-                  />
-                </div>
-              </Link>
+              </article>
             ))}
           </div>
         </section>

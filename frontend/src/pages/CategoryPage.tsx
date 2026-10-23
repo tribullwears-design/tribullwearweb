@@ -8,6 +8,7 @@ import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHi
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
+import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
@@ -185,16 +186,7 @@ function GlobalNavigation() {
   const logo = useSiteLogo();
   return (
     <div className="cinema-page-header">
-      <div className="cinema-marketbar" aria-label="Announcement">
-        <div className="cinema-marketbar__track">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <span key={i}>
-              <b>100% COTTON.</b> SHOP NOW
-              <i>✦</i>
-            </span>
-          ))}
-        </div>
-      </div>
+      <MovingNavbar className="cinema-marketbar" trackClassName="cinema-marketbar__track" />
 
       <header className="site-header cinema-site-header">
         <MobileCategoryMenu />

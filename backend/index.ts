@@ -9,7 +9,7 @@ import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listF
 import { getSiteLogoImage, getSiteLogoUrl, saveSiteLogo, SiteLogoValidationError } from "./siteLogoStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
-import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
+import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getMovingNavbarSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveMovingNavbarSettings, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
 import { getDatabase } from "./database.js";
@@ -556,6 +556,9 @@ async function startServer() {
   app.get("/api/storefront/settings/social", async (_req, res) => {
     try { res.set("Cache-Control", publicCatalogCache); res.json(await getSocialSettings()); } catch (error) { sendError(res, error); }
   });
+  app.get("/api/storefront/settings/moving-navbar", async (_req, res) => {
+    try { res.set("Cache-Control", publicCatalogCache); res.json(await getMovingNavbarSettings()); } catch (error) { sendError(res, error); }
+  });
   app.get("/api/storefront/featured-products", async (_req, res) => {
     try { res.set("Cache-Control", publicCatalogCache); res.json(await getFeaturedProductIds()); } catch (error) { sendError(res, error); }
   });
@@ -573,6 +576,15 @@ async function startServer() {
   });
   app.put("/api/admin/settings/social", requireAdminPermission("content", "edit"), async (req, res) => {
     try { res.json(await saveSocialSettings(req.body)); } catch (error) {
+      if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
+      sendError(res, error);
+    }
+  });
+  app.get("/api/admin/settings/moving-navbar", requireAdminPermission("content", "view"), async (_req, res) => {
+    try { res.json(await getMovingNavbarSettings()); } catch (error) { sendError(res, error); }
+  });
+  app.put("/api/admin/settings/moving-navbar", requireAdminPermission("content", "edit"), async (req, res) => {
+    try { res.json(await saveMovingNavbarSettings(req.body)); } catch (error) {
       if (error instanceof AdminSettingsValidationError) return res.status(400).json({ error: error.message });
       sendError(res, error);
     }

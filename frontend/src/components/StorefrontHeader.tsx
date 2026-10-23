@@ -1,20 +1,14 @@
 import type { ReactNode } from "react";
-import { Link } from "wouter";
 import HeaderActions from "./HeaderActions";
 import MobileCategoryMenu from "./MobileCategoryMenu";
+import MovingNavbar from "./MovingNavbar";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 export default function StorefrontHeader({ children }: { children?: ReactNode }) {
   const logo = useSiteLogo();
   return (
     <>
-      <div className="ticker" aria-label="Announcement">
-        <div className="ticker__track">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <span key={index}>100% COTTON.<Link href="/products"><b>SHOP NOW</b></Link><i>✦</i></span>
-          ))}
-        </div>
-      </div>
+      <MovingNavbar />
 
       <header className="site-header">
         <MobileCategoryMenu />

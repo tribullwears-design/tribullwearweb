@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
+import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
@@ -239,13 +240,7 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      <div className="ticker" aria-label="Announcement">
-        <div className="ticker__track">
-          {Array.from({ length: 8 }).map((_, index) => (
-            <span key={index}>100% COTTON.<b>SHOP NOW</b><i>✦</i></span>
-          ))}
-        </div>
-      </div>
+      <MovingNavbar />
 
       <header className="site-header">
         <MobileCategoryMenu />

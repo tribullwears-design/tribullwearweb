@@ -563,6 +563,7 @@ body.header-overlay-open { overflow:hidden; }
   display: grid;
   gap: 14px;
 }
+.checkout-grid + .checkout-grid { margin-top: 14px; }
 .checkout-grid--two {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1861,6 +1862,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   letter-spacing: -0.04em;
   text-transform: uppercase;
 }
+.all-products-category-tabs { margin-bottom: 28px; }
 .all-products-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1974,6 +1976,7 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .footer__logo { display:flex; align-items:center; justify-content:center; width:min(120px, 100%); height:48px; margin:0 0 18px; padding:0; background:transparent; }
 .footer__logo img { display:block; width:100%; height:100%; object-fit:contain; }
 .footer__top { display:grid; grid-template-columns:repeat(4, 1fr); gap:36px; margin-bottom:40px; }
+.site-footer .footer__top { grid-template-columns:minmax(0, 1fr); gap:28px; }
 .footer__col-title { margin:0 0 18px; font:700 13px/1.15 "Playfair Display",serif; letter-spacing:.04em; text-transform:uppercase; color:var(--tribull-cream); }
 .footer__col .footer__links { display:flex; flex-direction:column; gap:10px; }
 .footer__col .footer__links a { font:400 10.5px/1.5 Montserrat,sans-serif; color:var(--tribull-cream); opacity:.85; transition:opacity .25s ease, transform .25s ease; }

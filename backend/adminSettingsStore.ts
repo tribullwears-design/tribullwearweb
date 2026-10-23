@@ -2,7 +2,7 @@ import type { Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 import { getProduct } from "./productStore.js";
 
-type SettingKey = "general" | "social" | "featured";
+type SettingKey = "general" | "social" | "featured" | "moving-navbar";
 type SettingDocument = { _id: SettingKey; value: unknown; updatedAt: string };
 
 export class AdminSettingsValidationError extends Error {
@@ -27,6 +27,12 @@ export type SocialSettings = {
   linkedin: string;
 };
 
+export type MovingNavbarSettings = {
+  message: string;
+  linkText: string;
+  linkUrl: string;
+};
+
 export const defaultGeneralSettings: GeneralSettings = {
   storeName: "Tribull Store",
   email: "",
@@ -40,6 +46,12 @@ export const defaultSocialSettings: SocialSettings = {
   pinterest: "https://pin.it/5UqZJvyWI",
   whatsapp: "https://wa.me/916385400605",
   linkedin: "",
+};
+
+export const defaultMovingNavbarSettings: MovingNavbarSettings = {
+  message: "100% COTTON.",
+  linkText: "SHOP NOW",
+  linkUrl: "/products",
 };
 
 async function getCollection(): Promise<Collection<SettingDocument>> {
@@ -99,6 +111,24 @@ export function validateSocialSettings(value: unknown): SocialSettings {
   return result;
 }
 
+export function validateMovingNavbarSettings(value: unknown): MovingNavbarSettings {
+  const settings = settingsRecord(value);
+  const keys: (keyof MovingNavbarSettings)[] = ["message", "linkText", "linkUrl"];
+  if (Object.keys(settings).some((key) => !keys.includes(key as keyof MovingNavbarSettings))) {
+    throw new AdminSettingsValidationError("Unsupported moving navbar setting");
+  }
+  const message = typeof settings.message === "string" ? settings.message.trim() : "";
+  const linkText = typeof settings.linkText === "string" ? settings.linkText.trim() : "";
+  const linkUrl = typeof settings.linkUrl === "string" ? settings.linkUrl.trim() : "";
+  if (!message || message.length > 100) throw new AdminSettingsValidationError("Announcement text must be between 1 and 100 characters");
+  if (!linkText || linkText.length > 40) throw new AdminSettingsValidationError("Announcement link text must be between 1 and 40 characters");
+  if (linkUrl.length > 512) throw new AdminSettingsValidationError("Announcement link must be 512 characters or fewer");
+  if (!linkUrl.startsWith("/") || linkUrl.startsWith("//")) {
+    throw new AdminSettingsValidationError("Announcement link must be an internal store path");
+  }
+  return { message, linkText, linkUrl };
+}
+
 export function validateFeaturedProductIds(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 24 || !value.every((id) => typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id))) {
     throw new AdminSettingsValidationError("Featured products must be a list of up to 24 valid product IDs");
@@ -117,6 +147,14 @@ export async function saveGeneralSettings(value: unknown) {
 
 export function getSocialSettings() {
   return getSetting("social", defaultSocialSettings);
+}
+
+export function getMovingNavbarSettings() {
+  return getSetting("moving-navbar", defaultMovingNavbarSettings);
+}
+
+export async function saveMovingNavbarSettings(value: unknown) {
+  return saveSetting("moving-navbar", validateMovingNavbarSettings(value));
 }
 
 export async function saveSocialSettings(value: unknown) {

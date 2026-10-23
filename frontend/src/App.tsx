@@ -22,8 +22,7 @@ const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 
 function Router() {
   return (
-    <Suspense fallback={<main role="status">Loading page...</main>}>
-      <Switch>
+    <Switch>
       <Route path={"/"} component={Home} />
       <Route path={"/admin26/category"}>{() => <LegacyCategoryRedirect />}</Route>
       <Route path={"/admin26"}>{() => <AdminRoute />}</Route>
@@ -32,6 +31,7 @@ function Router() {
       <Route path={"/admin26/products/best-selling"}>{() => <AdminRoute initialScreen="best-selling" />}</Route>
       <Route path={"/admin26/products/new-arrivals"}>{() => <AdminRoute initialScreen="new-arrivals" />}</Route>
       <Route path={"/admin26/products/add"}>{() => <AdminRoute initialScreen="add-product" />}</Route>
+      <Route path={"/admin26/products/moving-navbar"}>{() => <AdminRoute initialScreen="moving-navbar" />}</Route>
       <Route path={"/admin26/products/logo"}>{() => <AdminRoute initialScreen="logo-update" />}</Route>
       <Route path={"/admin26/products/customize-image"}>{() => <AdminRoute initialScreen="customize-image" />}</Route>
       <Route path={"/admin26/products/corporate-image"}>{() => <AdminRoute initialScreen="corporate-image" />}</Route>
@@ -71,8 +71,7 @@ function Router() {
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />
-      </Switch>
-    </Suspense>
+    </Switch>
   );
 }
 
@@ -172,16 +171,7 @@ function App() {
     const previousScrollBehavior = root.style.scrollBehavior;
     root.style.scrollBehavior = "auto";
     window.scrollTo(0, 0);
-
-    const frame = window.requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
-      root.style.scrollBehavior = previousScrollBehavior;
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-      root.style.scrollBehavior = previousScrollBehavior;
-    };
+    root.style.scrollBehavior = previousScrollBehavior;
   }, [location]);
 
   return (
@@ -193,8 +183,10 @@ function App() {
         <SiteLogoProvider>
           <TooltipProvider>
             <Toaster />
-            <Router />
+            <Suspense fallback={null}>
+              <Router />
               {!location.startsWith("/admin26") && <SiteFooter />}
+            </Suspense>
           </TooltipProvider>
         </SiteLogoProvider>
       </ThemeProvider>

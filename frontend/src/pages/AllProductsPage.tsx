@@ -7,10 +7,26 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import type { AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
-import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import {
+  fetchProducts,
+  getCachedProducts,
+  refreshProducts,
+} from "../lib/products";
 import { getEligibleStorefrontProducts } from "../lib/products";
-import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy } from "../lib/categoryHierarchy";
+import {
+  defaultCategoryHierarchy,
+  getStorefrontCategoryHierarchy,
+  useCategoryHierarchy,
+} from "../lib/categoryHierarchy";
 import type { StorefrontProduct } from "../lib/products";
+import { getProductSearchCategory } from "../lib/productSearch";
+
+type ProductType = "oversized" | "hoodie";
+
+const productTypes: { id: ProductType; label: string; icon: string }[] = [
+  { id: "oversized", label: "Oversized", icon: "/products/oversizedicon.png" },
+  { id: "hoodie", label: "Hoodie", icon: "/products/hoodieicon.png" },
+];
 
 function readStorage<T>(key: string, fallback: T): T {
   try {
@@ -22,10 +38,16 @@ function readStorage<T>(key: string, fallback: T): T {
 }
 
 export default function AllProductsPage() {
-  const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
-  const [cart, setCart] = useState<Record<string, number>>(() => readStorage("tribull-cart", {}));
+  const [wishlist, setWishlist] = useState<string[]>(() =>
+    readStorage("tribull-wishlist", [])
+  );
+  const [cart, setCart] = useState<Record<string, number>>(() =>
+    readStorage("tribull-cart", {})
+  );
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
+  const [selectedType, setSelectedType] = useState<ProductType>("oversized");
+  const [catalogProducts, setCatalogProducts] =
+    useState<StorefrontProduct[]>(getCachedProducts);
   const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
 
@@ -33,11 +55,16 @@ export default function AllProductsPage() {
     let active = true;
     const syncProducts = (refresh = false) => {
       const request = refresh ? refreshProducts() : fetchProducts();
-      void request.then((products) => {
-        if (active) setCatalogProducts(products);
-      }).catch((error: unknown) => {
-        console.error("Could not load products for the all-products page.", error);
-      });
+      void request
+        .then(products => {
+          if (active) setCatalogProducts(products);
+        })
+        .catch((error: unknown) => {
+          console.error(
+            "Could not load products for the all-products page.",
+            error
+          );
+        });
     };
     syncProducts();
     const refreshCatalog = () => syncProducts();
@@ -46,25 +73,29 @@ export default function AllProductsPage() {
     return () => {
       active = false;
       window.removeEventListener("tribull-products-updated", refreshCatalog);
-      window.removeEventListener("tribull-products-cache-updated", refreshCatalog);
+      window.removeEventListener(
+        "tribull-products-cache-updated",
+        refreshCatalog
+      );
     };
   }, []);
 
-  const displayProducts = useMemo<AllProduct[]>(() => hierarchy.loaded ? [
-    ...getEligibleStorefrontProducts(catalogProducts, hierarchy).map((product) => ({
-      id: product.id,
-      name: product.name,
-      price: `₹${product.price.toLocaleString("en-IN")}`,
-      ...(product.originalPrice === undefined ? {} : { originalPrice: product.originalPrice }),
-      image: product.image,
-    })),
-  ] : catalogProducts.map((product) => ({
-    id: product.id,
-    name: product.name,
-    price: `₹${product.price.toLocaleString("en-IN")}`,
-    ...(product.originalPrice === undefined ? {} : { originalPrice: product.originalPrice }),
-    image: product.image,
-  })), [catalogProducts, hierarchy]);
+  const displayProducts = useMemo<AllProduct[]>(() => {
+    const eligibleProducts = hierarchy.loaded
+      ? getEligibleStorefrontProducts(catalogProducts, hierarchy)
+      : catalogProducts;
+    return eligibleProducts
+      .filter(product => getProductSearchCategory(product) === selectedType)
+      .map(product => ({
+        id: product.id,
+        name: product.name,
+        price: `₹${product.price.toLocaleString("en-IN")}`,
+        ...(product.originalPrice === undefined
+          ? {}
+          : { originalPrice: product.originalPrice }),
+        image: product.image,
+      }));
+  }, [catalogProducts, hierarchy, selectedType]);
 
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
@@ -93,20 +124,26 @@ export default function AllProductsPage() {
       return;
     }
 
-    const product = displayProducts.find((item) => item.id === productId);
+    const product = displayProducts.find(item => item.id === productId);
     if (!product) return;
 
     try {
-      const cartItems = readStorage<Record<string, unknown>>("tribull-cart-items", {});
-      window.localStorage.setItem("tribull-cart-items", JSON.stringify({
-        ...cartItems,
-        [productId]: {
-          name: product.name,
-          price: Number(product.price.replace(/[^0-9]/g, "")),
-          originalPrice: resolveOriginalPrice(product),
-          image: product.image,
-        },
-      }));
+      const cartItems = readStorage<Record<string, unknown>>(
+        "tribull-cart-items",
+        {}
+      );
+      window.localStorage.setItem(
+        "tribull-cart-items",
+        JSON.stringify({
+          ...cartItems,
+          [productId]: {
+            name: product.name,
+            price: Number(product.price.replace(/[^0-9]/g, "")),
+            originalPrice: resolveOriginalPrice(product),
+            image: product.image,
+          },
+        })
+      );
     } catch (error) {
       console.error("Could not save product details to the cart.", error);
     }
@@ -128,36 +165,89 @@ export default function AllProductsPage() {
           <h1>All Products</h1>
         </div>
 
+        <div
+          className="category-catalog-tabs all-products-category-tabs"
+          aria-label="Product types"
+        >
+          {productTypes.map(({ id, label, icon }) => (
+            <button
+              key={id}
+              type="button"
+              className={`category-catalog-tab ${selectedType === id ? "is-active" : ""}`}
+              onClick={() => setSelectedType(id)}
+              aria-pressed={selectedType === id}
+            >
+              <img src={icon} alt="" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
         <section className="all-products-grid" aria-label="All products grid">
-          {displayProducts.map((product) => {
+          {displayProducts.map(product => {
             const productHref = `/product/${encodeURIComponent(product.id)}`;
             return (
               <article className="all-products-card" key={product.id}>
                 <div className="all-products-card__image">
-                  <Link href={productHref} className="all-products-card__product-link" aria-label={`View ${product.name}`}>
-                    <img src={product.image} alt={product.name} className="product-image-primary" decoding="async" />
+                  <Link
+                    href={productHref}
+                    className="all-products-card__product-link"
+                    aria-label={`View ${product.name}`}
+                  >
+                    <img
+                      src={product.image}
+                      alt={product.name}
+                      className="product-image-primary"
+                      decoding="async"
+                    />
                   </Link>
                   <button
                     className={`all-products-card__wishlist ${wishlist.includes(product.id) ? "is-active" : ""}`}
                     type="button"
-                    aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+                    aria-label={
+                      wishlist.includes(product.id)
+                        ? `Remove ${product.name} from wishlist`
+                        : `Add ${product.name} to wishlist`
+                    }
                     aria-pressed={wishlist.includes(product.id)}
-                    onClick={(event) => toggleWishlist(product.id, event.currentTarget)}
+                    onClick={event =>
+                      toggleWishlist(product.id, event.currentTarget)
+                    }
                   >
-                    <Heart size={18} fill={wishlist.includes(product.id) ? "currentColor" : "none"} />
+                    <Heart
+                      size={18}
+                      fill={
+                        wishlist.includes(product.id) ? "currentColor" : "none"
+                      }
+                    />
                   </button>
                   <button
                     className={`all-products-card__cart ${addedProduct === product.id ? "is-added" : ""}`}
                     type="button"
-                    aria-label={addedProduct === product.id ? `Go to cart with ${product.name}` : `Add ${product.name} to cart`}
+                    aria-label={
+                      addedProduct === product.id
+                        ? `Go to cart with ${product.name}`
+                        : `Add ${product.name} to cart`
+                    }
                     onClick={() => addToCart(product.id)}
                   >
-                    {addedProduct === product.id ? <Check size={17} /> : <ShoppingCart size={17} />}
+                    {addedProduct === product.id ? (
+                      <Check size={17} />
+                    ) : (
+                      <ShoppingCart size={17} />
+                    )}
                   </button>
                 </div>
-                <Link href={productHref} className="all-products-card__meta all-products-card__meta-link">
+                <Link
+                  href={productHref}
+                  className="all-products-card__meta all-products-card__meta-link"
+                >
                   <h2>{product.name}</h2>
-                  <ProductPrice sellingPrice={product.price} originalPrice={resolveOriginalPrice(product)} productName={product.name} />
+                  <ProductPrice
+                    sellingPrice={product.price}
+                    originalPrice={resolveOriginalPrice(product)}
+                    productName={product.name}
+                  />
                 </Link>
               </article>
             );

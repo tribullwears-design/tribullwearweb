@@ -15,6 +15,21 @@ export type GeneralSettings = {
   currency: "INR";
 };
 
+export type MovingNavbarSettings = {
+  message: string;
+  linkText: string;
+  linkUrl: string;
+};
+
+export const defaultMovingNavbarSettings: MovingNavbarSettings = {
+  message: "100% COTTON.",
+  linkText: "SHOP NOW",
+  linkUrl: "/products",
+};
+
+let cachedMovingNavbarSettings = defaultMovingNavbarSettings;
+let movingNavbarRequest: Promise<MovingNavbarSettings> | undefined;
+
 export const defaultSocialSettings: SocialSettings = {
   facebook: "https://www.facebook.com/share/18tqYR5pxD/",
   instagram: "https://instagram.com/tribull.in?obrf=MWdtZG9ycWc0dmVkaQ%3D%3D",
@@ -49,6 +64,36 @@ function write<T>(path: string, value: T) {
 
 export function fetchSocialSettings() {
   return request<SocialSettings>("/api/storefront/settings/social", { cache: "no-store" });
+}
+
+export function getCachedMovingNavbarSettings() {
+  return cachedMovingNavbarSettings;
+}
+
+export function fetchMovingNavbarSettings() {
+  if (!movingNavbarRequest) {
+    movingNavbarRequest = request<MovingNavbarSettings>("/api/storefront/settings/moving-navbar", { cache: "no-store" })
+      .then((settings) => {
+        cachedMovingNavbarSettings = settings;
+        return settings;
+      })
+      .finally(() => {
+        movingNavbarRequest = undefined;
+      });
+  }
+  return movingNavbarRequest;
+}
+
+export function fetchAdminMovingNavbarSettings() {
+  return request<MovingNavbarSettings>("/api/admin/settings/moving-navbar", { cache: "no-store" });
+}
+
+export function saveAdminMovingNavbarSettings(value: MovingNavbarSettings) {
+  return write<MovingNavbarSettings>("/api/admin/settings/moving-navbar", value).then((settings) => {
+    cachedMovingNavbarSettings = settings;
+    window.dispatchEvent(new Event("tribull-moving-navbar-updated"));
+    return settings;
+  });
 }
 
 export function fetchAdminSocialSettings() {

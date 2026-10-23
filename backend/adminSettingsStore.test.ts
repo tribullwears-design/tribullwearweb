@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   defaultGeneralSettings,
+  defaultMovingNavbarSettings,
   defaultSocialSettings,
   getGeneralSettings,
   saveGeneralSettings,
+  getMovingNavbarSettings,
+  saveMovingNavbarSettings,
   saveFeaturedProductIds,
   saveSocialSettings,
   validateFeaturedProductIds,
   validateGeneralSettings,
+  validateMovingNavbarSettings,
   validateSocialSettings,
 } from "./adminSettingsStore.js";
 
@@ -49,6 +53,12 @@ describe("admin settings validation", () => {
     expect(() => validateSocialSettings({ ...defaultSocialSettings, instagram: "javascript:alert(1)" })).toThrow("must use HTTPS");
   });
 
+  it("validates moving navbar text and internal links", () => {
+    expect(validateMovingNavbarSettings(defaultMovingNavbarSettings)).toEqual(defaultMovingNavbarSettings);
+    expect(() => validateMovingNavbarSettings({ ...defaultMovingNavbarSettings, linkUrl: "javascript:alert(1)" })).toThrow("internal store path");
+    expect(() => validateMovingNavbarSettings({ ...defaultMovingNavbarSettings, message: " " })).toThrow("Announcement text");
+  });
+
   it("rejects malformed and duplicate featured product IDs", () => {
     expect(validateFeaturedProductIds(["abc", "product_2"])).toEqual(["abc", "product_2"]);
     expect(() => validateFeaturedProductIds(["same", "same"])).toThrow("must be unique");
@@ -72,6 +82,16 @@ describe("admin settings validation", () => {
     expect(mocks.updateOne).toHaveBeenLastCalledWith(
       { _id: "general" },
       { $set: { value: defaultGeneralSettings, updatedAt: expect.any(String) } },
+      { upsert: true },
+    );
+    await expect(getMovingNavbarSettings()).resolves.toEqual(defaultMovingNavbarSettings);
+    await expect(saveMovingNavbarSettings({ ...defaultMovingNavbarSettings, message: "NEW DROP" })).resolves.toEqual({
+      ...defaultMovingNavbarSettings,
+      message: "NEW DROP",
+    });
+    expect(mocks.updateOne).toHaveBeenLastCalledWith(
+      { _id: "moving-navbar" },
+      { $set: { value: { ...defaultMovingNavbarSettings, message: "NEW DROP" }, updatedAt: expect.any(String) } },
       { upsert: true },
     );
   });

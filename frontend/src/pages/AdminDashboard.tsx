@@ -1,5 +1,5 @@
 import {
-  Activity, AlertTriangle, Archive, BarChart3, Bell, Box, Boxes, ChevronDown, ChevronRight, Eye, EyeOff,
+  Activity, AlertTriangle, Archive, BarChart3, Bell, Box, Boxes, ChevronDown, ChevronRight, Eye, EyeOff, Megaphone,
   ClipboardList, DollarSign, FileText, Globe2, Image, LayoutDashboard,
   LifeBuoy, Menu, MoreHorizontal, PackageCheck, PackageOpen, PanelLeftClose, PanelLeftOpen,
   Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Store, Tag, Truck,
@@ -21,7 +21,7 @@ import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, typ
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
-import { defaultGeneralSettings, defaultSocialSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminSocialSettings, type GeneralSettings, type SocialSettings } from "../lib/storefrontSettings";
+import { defaultGeneralSettings, defaultSocialSettings, defaultMovingNavbarSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminMovingNavbarSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminMovingNavbarSettings, saveAdminSocialSettings, type GeneralSettings, type MovingNavbarSettings, type SocialSettings } from "../lib/storefrontSettings";
 import { saveSiteLogo } from "../lib/siteLogo";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import "./admin-dashboard.css";
@@ -77,7 +77,7 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Customize Image", icon: Image, screen: "customize-image" }, { label: "Corporate Image", icon: Image, screen: "corporate-image" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Moving Navbar", icon: Megaphone, screen: "moving-navbar" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Customize Image", icon: Image, screen: "customize-image" }, { label: "Corporate Image", icon: Image, screen: "corporate-image" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }] },
@@ -92,6 +92,7 @@ const adminRoutes: Record<string, string> = {
   "best-selling": "/admin26/products/best-selling",
   "new-arrivals": "/admin26/products/new-arrivals",
   "add-product": "/admin26/products/add",
+  "moving-navbar": "/admin26/products/moving-navbar",
   "logo-update": "/admin26/products/logo",
   "customize-image": "/admin26/products/customize-image",
   "corporate-image": "/admin26/products/corporate-image",
@@ -142,7 +143,7 @@ function permissionSectionForScreen(screen: string): AdminPermissionSection {
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
-  if (["collections", "featured", "social-media"].includes(screen)) return "content";
+  if (["collections", "featured", "social-media", "moving-navbar"].includes(screen)) return "content";
   if (["analytics", "sales-reports", "product-reports"].includes(screen)) return "analytics";
   if (screen === "admin-users") return "adminUsers";
   if (screen === "general-settings") return "settings";
@@ -451,6 +452,79 @@ function VideoManagement() {
   return <AdminPanel title="Videos"><form className="admin-form" onSubmit={save}><label><span>Video Name</span><input required maxLength={120} value={title} disabled={saving} onChange={(event) => setTitle(event.target.value)} /></label>{!editingId && <label><span>Upload Video</span><input required type="file" accept="video/mp4,video/webm,video/ogg,.mp4,.webm,.ogg" disabled={saving} onChange={selectFile} />{selectedFile && <small>{selectedFile.name}</small>}</label>}{previewUrl && <video controls muted preload="metadata" src={previewUrl} style={{ width: "100%", maxHeight: 220 }} aria-label="Selected video preview" />}{saving && !editingId && <progress value={uploadProgress} max={100} aria-label="Video upload progress">{uploadProgress}%</progress>}<div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={saving}>{saving ? editingId ? "Saving..." : `Uploading ${uploadProgress}%...` : editingId ? "Save Name" : "Upload Video"}</button>{editingId && <button type="button" className="admin-secondary-button" disabled={saving} onClick={reset}>Cancel</button>}</div></form>{error && <p className="admin-image-error" role="alert">{error}</p>}<div className="admin-collection-list"><SectionHeading title="Saved videos" />{loading ? <p>Loading videos...</p> : videos.length ? videos.map((video) => <div className="admin-management-row" key={video.id}><div><strong>{video.title}</strong><video controls preload="metadata" src={video.url} style={{ width: "min(320px, 100%)", maxHeight: 180 }} aria-label={`${video.title} preview`} /></div><div className="admin-admin-actions"><a className="admin-small-button" href={video.url} target="_blank" rel="noreferrer">View</a><button className="admin-small-button" type="button" onClick={() => { setEditingId(video.id); setTitle(video.title); setSelectedFile(null); setPreviewUrl(""); }}>Edit name</button><button className="admin-small-button" type="button" onClick={() => void remove(video)}>Delete</button></div></div>) : <p>No videos saved.</p>}</div></AdminPanel>;
 }
 function AdminPanel({ title, action, onAction, children }: { title: string; action?: string; onAction?: () => void; children: ReactNode }) { return <section className="admin-panel admin-workspace-panel"><SectionHeading title={title} action={action} onAction={onAction} />{children}</section>; }
+
+function MovingNavbarManagement({ canEdit }: { canEdit: boolean }) {
+  const [settings, setSettings] = useState<MovingNavbarSettings>(defaultMovingNavbarSettings);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [loadVersion, setLoadVersion] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError("");
+    void fetchAdminMovingNavbarSettings()
+      .then((saved) => {
+        if (active) setSettings(saved);
+      })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Unable to load moving navbar settings.");
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [loadVersion]);
+
+  const save = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      setSettings(await saveAdminMovingNavbarSettings(settings));
+      setNotice("Moving navbar saved.");
+      toast.success("Moving navbar saved.");
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : "Unable to save moving navbar settings.";
+      setError(message);
+      toast.error("Moving navbar was not saved.", { description: message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <AdminPanel title="Moving Navbar">
+      <p className="admin-data-caption">Set the scrolling announcement text, its underlined link label, and where customers go when they click it.</p>
+      {loading ? <p>Loading saved settings...</p> : (
+        <form className="admin-form" onSubmit={save}>
+          <label>
+            <span>Enter words</span>
+            <input required maxLength={100} value={settings.message} disabled={Boolean(error) || saving || !canEdit} onChange={(event) => setSettings((current) => ({ ...current, message: event.target.value }))} />
+          </label>
+          <label>
+            <span>Link text (underlined)</span>
+            <input required maxLength={40} value={settings.linkText} disabled={Boolean(error) || saving || !canEdit} onChange={(event) => setSettings((current) => ({ ...current, linkText: event.target.value }))} />
+          </label>
+          <label>
+            <span>Link URL (internal path)</span>
+            <input required maxLength={512} placeholder="/products" value={settings.linkUrl} disabled={Boolean(error) || saving || !canEdit} onChange={(event) => setSettings((current) => ({ ...current, linkUrl: event.target.value }))} />
+          </label>
+          <div className="admin-moving-navbar-preview">
+            <span>Preview</span>
+            <div>{settings.message} <a href={settings.linkUrl || "/products"}>{settings.linkText || "SHOP NOW"}</a> ✦</div>
+          </div>
+          {error && <><p className="admin-image-error" role="alert">{error}. Reload the saved values before editing.</p><button className="admin-secondary-button" type="button" onClick={() => setLoadVersion((version) => version + 1)}>Retry loading</button></>}
+          {canEdit && <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={Boolean(error) || saving}>{saving ? "Saving..." : "Save Moving Navbar"}</button></div>}
+          {notice && <p className="admin-form-success" role="status">{notice}</p>}
+        </form>
+      )}
+    </AdminPanel>
+  );
+}
 
 type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean; discountOfferId: string };
 const productTypeOptions = [
@@ -2125,6 +2199,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       })() : customers.length ? <><p className="admin-data-caption">Registered customer profiles from the protected customer collection. Order totals include only loaded orders; spend counts paid, non-test, non-cancelled orders.</p><div className="admin-table-scroll admin-customers-table-scroll"><table className="admin-table admin-customers-table"><thead><tr><th>Customer</th><th>Phone</th><th>Email</th><th>Orders</th><th>Verified Spend</th><th>Profile</th><th>Details</th></tr></thead><tbody>{pagedCustomers.items.map((customer) => <tr key={customer.id}><td><div className="admin-customer-name"><span className="admin-customer-list-avatar" aria-hidden="true">{customer.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2)}</span><strong>{customer.name}</strong></div></td><td>{customer.mobile || "—"}</td><td>{customer.email}</td><td>{customer.orderCount}</td><td><strong>₹{customer.verifiedSpend.toLocaleString("en-IN")}</strong></td><td>{customer.isProfileComplete ? "Complete" : "Incomplete"}</td><td><button className="admin-small-button" type="button" onClick={() => setSelectedCustomer(customer.id)}>View</button></td></tr>)}</tbody></table></div><PaginationControls page={pagedCustomers.page} totalPages={pagedCustomers.totalPages} totalItems={pagedCustomers.totalItems} pageSize={10} onPageChange={setCustomerPage} /></> : <EmptyState title="No customer records found" message="Registered customers will appear here after they create an account." />}
     </AdminPanel>;
     if (screen === "collections") return <CollectionManagement products={databaseProducts} productsLoading={productsLoading} productsError={productsError} onRefreshProducts={() => void refreshProducts()} />;
+    if (screen === "moving-navbar") return <MovingNavbarManagement canEdit={canEdit("content")} />;
     if (screen === "discounts") return <OfferManagement kind="discount" />;
     if (screen === "coupons") return <OfferManagement kind="coupon" />;
     if (screen === "promotions") return <OfferManagement kind="promotion" />;

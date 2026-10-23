@@ -368,3 +368,7 @@
   .admin-help-center { padding: 0; }
   .admin-help-faq summary { padding-top: 13px; padding-bottom: 13px; }
 }
+.admin-moving-navbar-preview { display: grid; gap: 8px; grid-column: 1 / -1; }
+.admin-moving-navbar-preview > span { color: var(--admin-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.admin-moving-navbar-preview > div { overflow: hidden; padding: 10px 14px; background: #1b362d; color: #f1e8cb; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+.admin-moving-navbar-preview a { margin-left: 8px; color: inherit; text-decoration: underline; text-underline-offset: 3px; }

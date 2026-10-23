@@ -10,6 +10,7 @@ import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
+import MovingNavbar from "../components/MovingNavbar";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
@@ -130,7 +131,7 @@ export default function ProductsPage() {
 
   return (
     <div className="products-page">
-      <div className="ticker" aria-label="Announcement"><div className="ticker__track">{Array.from({ length: 7 }).map((_, i) => <span key={i}>100% Cotton.<b>Shop Now</b><i>✦</i></span>)}</div></div>
+      <MovingNavbar />
       <div className="products-page__topbar">
         <button type="button" className="products-page__back" onClick={goBack} aria-label="Go back">
           <ArrowLeft size={18} />

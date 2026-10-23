@@ -7,7 +7,7 @@ type SiteFooterProps = {
   className?: string;
 };
 
-type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "careers" | "vouchers" | "community";
+type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "careers" | "vouchers" | "community" | "terms" | "privacy" | "shipping" | "exchange";
 
 const footerTopicContent: Record<FooterTopic, { title: string; description: string; action: string }> = {
   contact: {
@@ -49,6 +49,26 @@ const footerTopicContent: Record<FooterTopic, { title: string; description: stri
     title: "Community Initiatives",
     description: "For community collaborations or initiatives, tell the Tribull team what you have in mind.",
     action: "Discuss a collaboration",
+  },
+  terms: {
+    title: "Terms & Conditions",
+    description: "Product availability, prices, payment options, and delivery details are shown during checkout and may vary by order. Please review your order details before placing it.",
+    action: "Ask about our terms",
+  },
+  privacy: {
+    title: "Privacy Policy",
+    description: "We use the contact and delivery details you provide to manage your account, process orders, arrange delivery, and respond to support requests. Payment details are entered through the checkout payment provider.",
+    action: "Ask about privacy",
+  },
+  shipping: {
+    title: "Shipping Policy",
+    description: "Shipping options and estimated delivery details are shown at checkout and in your order information. Contact support with your order number if you need help with a delivery.",
+    action: "Ask about shipping",
+  },
+  exchange: {
+    title: "Returns & Exchange Policy",
+    description: "Tribull supports exchanges only; returns and refunds are not available. Contact support with your order number for exchange assistance.",
+    action: "Ask about an exchange",
   },
 };
 
@@ -132,6 +152,16 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
             <button type="button" onClick={openTopic("careers")}>Careers</button>
             <button type="button" onClick={openTopic("vouchers")}>Gift Vouchers</button>
             <button type="button" onClick={openTopic("community")}>Community Initiatives</button>
+          </div>
+        </div>
+
+        <div className="footer__col">
+          <h3 className="footer__col-title">Terms &amp; Policies</h3>
+          <div className="footer__links">
+            <button type="button" onClick={openTopic("terms")}>Terms &amp; Conditions</button>
+            <button type="button" onClick={openTopic("privacy")}>Privacy Policy</button>
+            <button type="button" onClick={openTopic("shipping")}>Shipping Policy</button>
+            <button type="button" onClick={openTopic("exchange")}>Returns &amp; Exchange Policy</button>
           </div>
         </div>
       </div>
