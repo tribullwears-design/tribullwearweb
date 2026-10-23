@@ -6,6 +6,7 @@ import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
 import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listFeatureImages, saveFeatureImage } from "./featureImageStore.js";
+import { getSiteLogoImage, getSiteLogoUrl, saveSiteLogo, SiteLogoValidationError } from "./siteLogoStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
 import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveSocialSettings } from "./adminSettingsStore.js";
@@ -524,6 +525,32 @@ async function startServer() {
     catch (error) {
       if (error instanceof FeatureImageValidationError) return res.status(400).json({ error: error.message });
       res.status(500).json({ error: error instanceof Error ? error.message : "Unable to save homepage image" });
+    }
+  });
+  app.get("/api/storefront/logo", async (_req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json({ image: await getSiteLogoUrl() });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load the store logo" });
+    }
+  });
+  app.get("/api/storefront/logo/image", async (_req, res) => {
+    try {
+      const image = await getSiteLogoImage();
+      if (!image) return res.status(404).end();
+      res.set({ "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
+      res.send(image.data);
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load the store logo" });
+    }
+  });
+  app.put("/api/admin/site-logo", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      res.json(await saveSiteLogo(req.body?.image));
+    } catch (error) {
+      if (error instanceof SiteLogoValidationError) return res.status(400).json({ error: error.message });
+      res.status(500).json({ error: error instanceof Error ? error.message : "Unable to save the store logo" });
     }
   });
   app.get("/api/storefront/settings/social", async (_req, res) => {

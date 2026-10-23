@@ -1,6 +1,7 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { X } from "lucide-react";
 import { defaultSocialSettings, fetchSocialSettings, type SocialSettings } from "../lib/storefrontSettings";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 type SiteFooterProps = {
   className?: string;
@@ -59,6 +60,7 @@ const faqItems = [
 ];
 
 export default function SiteFooter({ className = "" }: SiteFooterProps) {
+  const logo = useSiteLogo();
   const [socialLinks, setSocialLinks] = useState<SocialSettings>(() => ({ ...defaultSocialSettings }));
   const [activeTopic, setActiveTopic] = useState<FooterTopic | null>(null);
 
@@ -104,7 +106,7 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
   return (
     <footer className={`site-footer ${className}`.trim()} id="footer">
       <a className="footer__logo" href="#top" aria-label="Tribull home">
-        <img src="/products/logo.png" alt="TRIBULL" />
+        <img src={logo} alt="TRIBULL" />
       </a>
       <div className="footer__top">
         <div className="footer__col">

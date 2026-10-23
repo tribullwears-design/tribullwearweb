@@ -12,6 +12,7 @@ import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import { featureImagesUpdatedEvent, loadFeatureImages } from "../lib/featureImages";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 const brandAssets = {
   logo: "/products/logo.png",
@@ -31,9 +32,10 @@ function cls(...names: (string | false | null | undefined)[]) {
 }
 
 function Wordmark({ inverse = false }: { inverse?: boolean }) {
+  const logo = useSiteLogo();
   return (
     <a className={`wordmark ${inverse ? "wordmark--inverse" : ""}`} href="#top" aria-label="Tribull home">
-      <img src={brandAssets.logo} alt="TRIBULL" />
+      <img src={logo} alt="TRIBULL" />
     </a>
   );
 }

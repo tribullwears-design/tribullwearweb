@@ -17,6 +17,7 @@ import type { Product } from "../../../shared/products";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
 import { matchesProductSearch } from "../lib/productSearch";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 type Cart = Record<string, number>;
 type CartItem = { productId?: string; name: string; price: number; image: string; variant?: string };
@@ -107,6 +108,7 @@ function saveCartItems(items: CartItems) {
 }
 
 export default function HeaderActions() {
+  const logo = useSiteLogo();
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const [query, setQuery] = useState("");
@@ -1457,7 +1459,7 @@ export default function HeaderActions() {
           ) : (
             <div className="header-login-content">
               <button className="header-account-modal__close" type="button" aria-label="Close login" onClick={closeOverlay}><X size={20} /></button>
-              <img className="header-login-logo" src="/products/logo.png" alt="TRIBULL" />
+              <img className="header-login-logo" src={logo} alt="TRIBULL" />
               <p className="eyebrow">{loginStep === "signup" ? "Join the Tribe" : loginStep === "forgot" || loginStep === "verify-otp" || loginStep === "new-password" ? "Account Recovery" : loginStep === "google-profile" ? "One Last Step" : "Welcome Back"}</p>
               <h2>{loginStep === "signup" ? "Sign Up" : loginStep === "forgot" ? "Account Recovery" : loginStep === "verify-otp" ? "Verify Your Email" : loginStep === "new-password" ? "New Password" : loginStep === "google-profile" ? "Complete Profile" : "Login"}</h2>
               <span className="header-login-heading-rule" aria-hidden="true" />

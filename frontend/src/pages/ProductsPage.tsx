@@ -11,6 +11,7 @@ import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 export type { Product } from "../../../shared/products";
 
@@ -36,6 +37,7 @@ function readStorage<T>(key: string, fallback: T): T {
 }
 
 export default function ProductsPage() {
+  const logo = useSiteLogo();
   const [, setLocation] = useLocation();
   const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
@@ -135,7 +137,7 @@ export default function ProductsPage() {
           <span>Back</span>
         </button>
         <Link href="/" className="products-page__brand" aria-label="Back to Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
+          <img src={logo} alt="TRIBULL" />
         </Link>
         <div className="products-page__top-actions">
           <button className="products-page__top-icon" aria-label="Wishlist">

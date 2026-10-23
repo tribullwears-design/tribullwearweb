@@ -7,6 +7,7 @@ import { fetchProducts, getCachedProducts } from "../lib/products";
 import { apiFetch } from "../lib/api";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 import "./ProductDetailPage.css";
 
 interface ProductData extends OriginalPriceFields {
@@ -61,6 +62,7 @@ const tShirtColors = [
 ] as const;
 
 export default function ProductDetailPage() {
+  const logo = useSiteLogo();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id) || readCachedCatalogProduct(id));
@@ -418,7 +420,7 @@ export default function ProductDetailPage() {
       <header className="site-header" aria-label="Main nav">
         <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
+          <img src={logo} alt="TRIBULL" />
         </a>
         <HeaderActions />
       </header>

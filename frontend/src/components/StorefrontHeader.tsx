@@ -2,8 +2,10 @@ import type { ReactNode } from "react";
 import { Link } from "wouter";
 import HeaderActions from "./HeaderActions";
 import MobileCategoryMenu from "./MobileCategoryMenu";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 export default function StorefrontHeader({ children }: { children?: ReactNode }) {
+  const logo = useSiteLogo();
   return (
     <>
       <div className="ticker" aria-label="Announcement">
@@ -17,7 +19,7 @@ export default function StorefrontHeader({ children }: { children?: ReactNode })
       <header className="site-header">
         <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
+          <img src={logo} alt="TRIBULL" />
         </a>
         <HeaderActions />
       </header>

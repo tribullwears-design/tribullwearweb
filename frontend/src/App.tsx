@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
+import { SiteLogoProvider, useSiteLogo } from "./contexts/SiteLogoContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import { apiFetch } from "./lib/api";
@@ -31,6 +32,7 @@ function Router() {
       <Route path={"/admin26/products/best-selling"}>{() => <AdminRoute initialScreen="best-selling" />}</Route>
       <Route path={"/admin26/products/new-arrivals"}>{() => <AdminRoute initialScreen="new-arrivals" />}</Route>
       <Route path={"/admin26/products/add"}>{() => <AdminRoute initialScreen="add-product" />}</Route>
+      <Route path={"/admin26/products/logo"}>{() => <AdminRoute initialScreen="logo-update" />}</Route>
       <Route path={"/admin26/products/customize-image"}>{() => <AdminRoute initialScreen="customize-image" />}</Route>
       <Route path={"/admin26/products/corporate-image"}>{() => <AdminRoute initialScreen="corporate-image" />}</Route>
       <Route path={"/admin26/products/edit/:id"}>{(params) => <AdminRoute initialScreen="edit-product" productId={params.id} />}</Route>
@@ -95,6 +97,7 @@ function AdminRoute({ initialScreen = "dashboard", productId }: { initialScreen?
 }
 
 function AdminSignIn({ initialError }: { initialError: string }) {
+  const logo = useSiteLogo();
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -117,7 +120,7 @@ function AdminSignIn({ initialError }: { initialError: string }) {
     } finally { setLoading(false); }
   };
   return <main className="admin-login-shell"><section className="admin-login-card" aria-labelledby="admin-login-title">
-    <div className="admin-login-brand">T</div><p className="admin-login-eyebrow">Tribull administration</p><h1 id="admin-login-title">Sign in</h1><p className="admin-login-subtitle">Use your authorized admin account to continue.</p>
+    <img className="admin-login-brand" src={logo} alt="TRIBULL" /><p className="admin-login-eyebrow">Tribull administration</p><h1 id="admin-login-title">Sign in</h1><p className="admin-login-subtitle">Use your authorized admin account to continue.</p>
     {(initialError && initialError !== "Not signed in") && <p className="admin-login-notice" role="status">{initialError}</p>}
     <form onSubmit={submit} noValidate><label htmlFor="admin-email">Email</label><input id="admin-email" type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
       <label htmlFor="admin-password">Password</label><div className="admin-password-wrap"><input id="admin-password" type={showPassword ? "text" : "password"} autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required /><button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Hide password" : "Show password"}>{showPassword ? "Hide" : "Show"}</button></div>
@@ -187,11 +190,13 @@ function App() {
         defaultTheme="light"
         // switchable
       >
-        <TooltipProvider>
-          <Toaster />
-          <Router />
-            {!location.startsWith("/admin26") && <SiteFooter />}
-        </TooltipProvider>
+        <SiteLogoProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Router />
+              {!location.startsWith("/admin26") && <SiteFooter />}
+          </TooltipProvider>
+        </SiteLogoProvider>
       </ThemeProvider>
     </ErrorBoundary>
   );

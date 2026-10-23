@@ -9,6 +9,7 @@ import { resolveOriginalPrice } from "../lib/productPrice";
 import { createCheckoutSubmission } from "../lib/checkout";
 import { getRazorpayPaymentConfig, openRazorpayCheckout } from "../lib/razorpayCheckout";
 import { checkoutPaymentMethods, getCheckoutPaymentLabel, indianStatesAndTerritories, isIndianState, normalizeIndianState, type CheckoutPaymentMethod } from "../../../shared/checkout";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 type CartEntry = {
   id: string;
@@ -81,9 +82,9 @@ function readCheckoutSelection(): CheckoutSelection | null {
   }
 }
 
-async function loadInvoiceLogo() {
+async function loadInvoiceLogo(logoUrl: string) {
   const image = new Image();
-  image.src = "/products/logo.png";
+  image.src = logoUrl;
   await image.decode();
   const canvas = document.createElement("canvas");
   canvas.width = image.naturalWidth;
@@ -204,6 +205,7 @@ function CheckoutStorefrontHeader({ onBack }: { onBack: () => void }) {
 }
 
 export default function CheckoutPage() {
+  const siteLogo = useSiteLogo();
   const [, setLocation] = useLocation();
   const [form, setForm] = useState<CheckoutForm>({
     fullName: "",
@@ -352,7 +354,7 @@ export default function CheckoutPage() {
       const item = metadata || product || {};
 
       const price = Number(product?.price ?? 0);
-      const image = product?.image ?? item.image ?? "/products/logo.png";
+      const image = product?.image ?? item.image ?? siteLogo;
       const lineTotal = price * quantity;
 
       entries.push({
@@ -715,7 +717,7 @@ export default function CheckoutPage() {
     ];
     try {
       setInvoiceError("");
-      const logo = await loadInvoiceLogo();
+      const logo = await loadInvoiceLogo(siteLogo);
       const pdf = createInvoicePdf(invoiceLines, logo);
       const downloadUrl = URL.createObjectURL(pdf);
       const link = document.createElement("a");

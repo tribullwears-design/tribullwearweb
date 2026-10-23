@@ -22,6 +22,8 @@ import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCate
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
 import { defaultGeneralSettings, defaultSocialSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminSocialSettings, type GeneralSettings, type SocialSettings } from "../lib/storefrontSettings";
+import { saveSiteLogo } from "../lib/siteLogo";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 import "./admin-dashboard.css";
 
 type Icon = typeof LayoutDashboard;
@@ -75,11 +77,11 @@ type NavSection = { label: string; items: NavItem[] };
 
 const navigation: NavSection[] = [
   { label: "Dashboard", items: [{ label: "Dashboard", icon: LayoutDashboard, screen: "dashboard" }] },
-  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Customize Image", icon: Image, screen: "customize-image" }, { label: "Corporate Image", icon: Image, screen: "corporate-image" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
+  { label: "Products", items: [{ label: "All Products", icon: ShoppingBag, screen: "products" }, { label: "Best Selling", icon: BarChart3, screen: "best-selling" }, { label: "New Arrivals", icon: Tag, screen: "new-arrivals" }, { label: "Add Product", icon: Plus, screen: "add-product" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Customize Image", icon: Image, screen: "customize-image" }, { label: "Corporate Image", icon: Image, screen: "corporate-image" }, { label: "Categories", icon: Tag, screen: "categories" }, { label: "Inventory", icon: Box, screen: "inventory" }, { label: "Videos", icon: Video, screen: "videos" }, { label: "Banners", icon: Image, screen: "banners" }] },
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }] },
-  { label: "Content", items: [{ label: "Social Media", icon: Globe2, screen: "social-media" }] },
+  { label: "Content", items: [{ label: "Collections", icon: Boxes, screen: "collections" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
   { label: "Analytics", items: [{ label: "Analytics", icon: BarChart3, screen: "analytics" }, { label: "Sales Reports", icon: Activity, screen: "sales-reports" }, { label: "Product Reports", icon: FileText, screen: "product-reports" }] },
   { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Account Settings", icon: UserRound, screen: "account-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
   { label: "Help", items: [{ label: "Help Center", icon: LifeBuoy, screen: "help-center" }] },
@@ -90,6 +92,7 @@ const adminRoutes: Record<string, string> = {
   "best-selling": "/admin26/products/best-selling",
   "new-arrivals": "/admin26/products/new-arrivals",
   "add-product": "/admin26/products/add",
+  "logo-update": "/admin26/products/logo",
   "customize-image": "/admin26/products/customize-image",
   "corporate-image": "/admin26/products/corporate-image",
   categories: "/admin26/products/categories",
@@ -135,7 +138,7 @@ const defaultProductTypeCategories: ProductTypeCategory[] = [{ label: "Round Nec
 type CurrentAdmin = { id?: string; role: AdminRoleTitle; status: "Active" | "Inactive"; permissions: AdminPermissions };
 
 function permissionSectionForScreen(screen: string): AdminPermissionSection {
-  if (["products", "best-selling", "new-arrivals", "add-product", "edit-product", "customize-image", "corporate-image", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
+  if (["products", "best-selling", "new-arrivals", "add-product", "edit-product", "logo-update", "customize-image", "corporate-image", "categories", "inventory", "videos", "banners"].includes(screen)) return "products";
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
@@ -478,6 +481,63 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     {hierarchyError && <p className="admin-image-error" role="alert">{hierarchyError} {onRetryHierarchy && <button className="admin-text-button" type="button" onClick={onRetryHierarchy}>Retry</button>}</p>}
     <div className="admin-form-actions"><button className="admin-primary-button" type="submit" disabled={productSaving || hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0}>{productSaving ? "Saving..." : submitLabel}</button><button className="admin-secondary-button" type="button" onClick={onCancel}>Cancel</button></div>{savedNotice && <p className={savedNotice.includes("saved") ? "admin-form-success" : "admin-image-error"} role="status">{savedNotice}</p>}
   </form>;
+}
+
+function SiteLogoManagement({ canEdit }: { canEdit: boolean }) {
+  const logo = useSiteLogo();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const uploadLogo = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    setError("");
+    setNotice("");
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WEBP logo.");
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      setError("Logo must be smaller than 6 MB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => setError("The selected logo could not be read.");
+    reader.onload = async () => {
+      if (typeof reader.result !== "string") {
+        setError("The selected logo could not be read.");
+        return;
+      }
+      setSaving(true);
+      try {
+        await saveSiteLogo(reader.result);
+        setNotice("Logo updated across the storefront.");
+        toast.success("Store logo updated.");
+      } catch (uploadError) {
+        const message = uploadError instanceof Error ? uploadError.message : "Unable to update the store logo.";
+        setError(message);
+        toast.error("Store logo was not updated.", { description: message });
+      } finally {
+        setSaving(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  return <AdminPanel title="Logo Update">
+    <div className="admin-logo-management">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "min(100%, 360px)", height: 150, padding: 20, border: "1px solid #dbe3e5", borderRadius: 7, background: "#f8faf9" }}>
+        <img src={logo} alt="Current store logo" style={{ display: "block", maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+      </div>
+      <p className="admin-data-caption">This logo is used on the home page, product pages, checkout, login, and footer.</p>
+      {canEdit ? <label className="admin-primary-button">{saving ? "Uploading..." : "Upload Logo"}<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={saving} onChange={uploadLogo} /></label> : <p className="admin-data-caption">You have view-only access to this setting.</p>}
+      {error && <p className="admin-image-error" role="alert">{error}</p>}
+      {notice && <p className="admin-form-success" role="status">{notice}</p>}
+    </div>
+  </AdminPanel>;
 }
 
 function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType; canEdit: boolean }) {
@@ -2032,6 +2092,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
+    if (screen === "logo-update") return <SiteLogoManagement canEdit={canEdit("products")} />;
     if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel>;
     if (screen === "customize-image") return <HomeFeatureImageManagement type="customize" canEdit={canEdit("products")} />;
     if (screen === "corporate-image") return <HomeFeatureImageManagement type="corporate" canEdit={canEdit("products")} />;

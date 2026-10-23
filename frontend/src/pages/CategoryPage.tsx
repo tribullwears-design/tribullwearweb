@@ -9,6 +9,7 @@ import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import ProductPrice from "../components/ProductPrice";
+import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 export type CategoryProduct = {
   id: string;
@@ -181,6 +182,7 @@ type CatalogTab = "oversized" | "hoodie";
 type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 
 function GlobalNavigation() {
+  const logo = useSiteLogo();
   return (
     <div className="cinema-page-header">
       <div className="cinema-marketbar" aria-label="Announcement">
@@ -197,7 +199,7 @@ function GlobalNavigation() {
       <header className="site-header cinema-site-header">
         <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home">
-          <img src="/products/logo.png" alt="TRIBULL" />
+          <img src={logo} alt="TRIBULL" />
         </a>
         <HeaderActions />
       </header>
