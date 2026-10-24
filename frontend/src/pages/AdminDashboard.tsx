@@ -692,6 +692,60 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
 
 function readImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void) { const file = event.target.files?.[0]; if (!file) return; if (!file.type.startsWith("image/")) { event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") onChange(reader.result); }; reader.readAsDataURL(file); event.target.value = ""; }
 
+function readSubcategoryImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void, onError: (message: string) => void, onReadingChange: (reading: boolean) => void) {
+  const file = event.target.files?.[0];
+  event.target.value = "";
+  if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    onError("Choose a JPG, PNG, or WEBP image.");
+    return;
+  }
+
+  onError("");
+  onReadingChange(true);
+  const reader = new FileReader();
+  const finish = () => onReadingChange(false);
+  reader.onerror = () => {
+    onError("Could not read the selected subcategory image.");
+    finish();
+  };
+  reader.onload = () => {
+    if (typeof reader.result !== "string") {
+      onError("Could not read the selected subcategory image.");
+      finish();
+      return;
+    }
+    const image = new window.Image();
+    image.onerror = () => {
+      onError("The selected subcategory image could not be opened.");
+      finish();
+    };
+    image.onload = () => {
+      const scale = Math.min(1, 512 / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        onError("Could not prepare the selected subcategory image.");
+        finish();
+        return;
+      }
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const compressedImage = canvas.toDataURL("image/webp", 0.82);
+      if (compressedImage.length > 1_500_000) {
+        onError("The subcategory image is too large after compression.");
+        finish();
+        return;
+      }
+      onChange(compressedImage);
+      finish();
+    };
+    image.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function readProductTypeImage(event: React.ChangeEvent<HTMLInputElement>, onChange: (image: string) => void, onError: (message: string) => void) {
   const file = event.target.files?.[0];
   event.target.value = "";
@@ -775,6 +829,8 @@ function CategoryManagement({ productCategories, onSaveProductCategories, produc
   const [editingSubcategoryName, setEditingSubcategoryName] = useState("");
   const [editingSubcategoryParent, setEditingSubcategoryParent] = useState("");
   const [editingSubcategoryImage, setEditingSubcategoryImage] = useState("");
+  const [editingSubcategoryImageReading, setEditingSubcategoryImageReading] = useState(false);
+  const [savingSubcategoryEdit, setSavingSubcategoryEdit] = useState(false);
   const [editingProductType, setEditingProductType] = useState<string | null>(null);
   const [editingProductTypeImage, setEditingProductTypeImage] = useState("");
   const [newProductTypeImage, setNewProductTypeImage] = useState("");
@@ -880,7 +936,36 @@ function CategoryManagement({ productCategories, onSaveProductCategories, produc
     if (!subcategory || !window.confirm(`Delete ${subcategory.label}? Existing products will not be deleted.`)) return;
     try { await deleteSubcategoryApi(parent, value); await refreshHierarchy(); } catch (error) { setCategoryError(error instanceof Error ? error.message : "Could not delete subcategory. Please try again."); }
   };
-  const saveSubcategoryEdit = async () => { setCategoryError(""); if (!editingSubcategory) return; const label = editingSubcategoryName.trim(); if (!label) return; const targetItems = hierarchy.subcategories[editingSubcategoryParent] || []; if (targetItems.some((item) => item.value !== editingSubcategory.value && item.label.toLowerCase() === label.toLowerCase())) return; try { if (editingSubcategoryParent === editingSubcategory.parent) { await updateSubcategory(editingSubcategory.parent, editingSubcategory.value, { label, image: editingSubcategoryImage }); await refreshHierarchy(); } else { const withoutCurrent = (hierarchy.subcategories[editingSubcategory.parent] || []).filter((item) => item.value !== editingSubcategory.value); const current = hierarchy.subcategories[editingSubcategory.parent]?.find((item) => item.value === editingSubcategory.value); if (!await saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [editingSubcategory.parent]: withoutCurrent, [editingSubcategoryParent]: [...targetItems.filter((item) => item.value !== editingSubcategory.value), { ...(current || { value: editingSubcategory.value }), label, image: editingSubcategoryImage }] } })) return; } setEditingSubcategory(null); setEditingSubcategoryName(""); } catch (error) { setCategoryError(error instanceof Error ? error.message : "Could not update subcategory. Please try again."); } };
+  const saveSubcategoryEdit = async () => {
+    setCategoryError("");
+    if (!editingSubcategory || editingSubcategoryImageReading || savingSubcategoryEdit) return;
+    const label = editingSubcategoryName.trim();
+    if (!label) { setCategoryError("Subcategory name is required."); return; }
+    const targetItems = hierarchy.subcategories[editingSubcategoryParent] || [];
+    if (targetItems.some((item) => item.value !== editingSubcategory.value && item.label.toLowerCase() === label.toLowerCase())) {
+      setCategoryError("Subcategory already exists for this category.");
+      return;
+    }
+    setSavingSubcategoryEdit(true);
+    try {
+      if (editingSubcategoryParent === editingSubcategory.parent) {
+        await updateSubcategory(editingSubcategory.parent, editingSubcategory.value, { label, image: editingSubcategoryImage });
+        await refreshHierarchy();
+      } else {
+        const withoutCurrent = (hierarchy.subcategories[editingSubcategory.parent] || []).filter((item) => item.value !== editingSubcategory.value);
+        const current = hierarchy.subcategories[editingSubcategory.parent]?.find((item) => item.value === editingSubcategory.value);
+        if (!await saveHierarchy({ ...hierarchy, subcategories: { ...hierarchy.subcategories, [editingSubcategory.parent]: withoutCurrent, [editingSubcategoryParent]: [...targetItems.filter((item) => item.value !== editingSubcategory.value), { ...(current || { value: editingSubcategory.value }), label, image: editingSubcategoryImage }] } })) return;
+      }
+      setEditingSubcategory(null);
+      setEditingSubcategoryName("");
+      setEditingSubcategoryImage("");
+      toast.success("Subcategory updated.");
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : "Could not update subcategory. Please try again.");
+    } finally {
+      setSavingSubcategoryEdit(false);
+    }
+  };
   const saveProductTypeCategories = async (next: ProductTypeCategory[]) => {
     setCategoryError("");
     try {
@@ -957,12 +1042,12 @@ function CategoryManagement({ productCategories, onSaveProductCategories, produc
           const isEditing = editingSubcategory?.parent === parentCategory && editingSubcategory.value === subcategory.value;
           return <div className={`admin-subcategory-row ${isEditing ? "admin-subcategory-row--editing" : ""}`} key={`${parentCategory}-${subcategory.value}`}>
             {isEditing ? <>
-              <CategoryImage image={editingSubcategoryImage} onChange={(event) => readImage(event, setEditingSubcategoryImage)} onRemove={() => setEditingSubcategoryImage("")} showControls={false} />
+              <CategoryImage image={editingSubcategoryImage} onChange={(event) => readSubcategoryImage(event, setEditingSubcategoryImage, setCategoryError, setEditingSubcategoryImageReading)} onRemove={() => setEditingSubcategoryImage("")} showControls={false} />
               <select className="admin-category-edit-select" value={editingSubcategoryParent} onChange={(event) => setEditingSubcategoryParent(event.target.value)}>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select>
               <input className="admin-subcategory-edit-input" value={editingSubcategoryName} onChange={(event) => setEditingSubcategoryName(event.target.value)} />
-              <label className="admin-small-button admin-subcategory-upload-button">Upload<input className="admin-product-image-input" type="file" accept="image/*" onChange={(event) => readImage(event, setEditingSubcategoryImage)} /></label>
-              <button type="button" className="admin-small-button" onClick={saveSubcategoryEdit}>Save</button>
-              <button type="button" className="admin-small-button" onClick={() => setEditingSubcategory(null)}>Cancel</button>
+              <label className="admin-small-button admin-subcategory-upload-button">{editingSubcategoryImageReading ? "Preparing..." : "Upload"}<input className="admin-product-image-input" type="file" accept="image/jpeg,image/png,image/webp" disabled={editingSubcategoryImageReading || savingSubcategoryEdit} onChange={(event) => readSubcategoryImage(event, setEditingSubcategoryImage, setCategoryError, setEditingSubcategoryImageReading)} /></label>
+              <button type="button" className="admin-small-button" disabled={editingSubcategoryImageReading || savingSubcategoryEdit} onClick={() => void saveSubcategoryEdit()}>{savingSubcategoryEdit ? "Saving..." : "Save"}</button>
+              <button type="button" className="admin-small-button" disabled={editingSubcategoryImageReading || savingSubcategoryEdit} onClick={() => { setEditingSubcategory(null); setCategoryError(""); }}>Cancel</button>
             </> : <>
               <strong>{parent?.label}</strong>
               <CategoryImage
