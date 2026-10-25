@@ -5,6 +5,7 @@ import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
 import { fetchProducts, getCachedProducts } from "../lib/products";
+import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
@@ -22,6 +23,19 @@ interface ProductData extends OriginalPriceFields {
   colors?: string[];
   stock?: number;
   basePrice?: number;
+}
+
+function getRecommendationProducts(products: ReturnType<typeof getCachedProducts>, productId: string): ProductData[] {
+  return getFrequentlyBoughtTogether(products, productId)
+    .map((product) => ({
+      id: product.id,
+      name: product.name,
+      price: `₹${product.price.toLocaleString("en-IN")}`,
+      originalPrice: product.originalPrice,
+      image: product.image,
+      category: product.category,
+      stock: product.stock,
+    }));
 }
 
 function readCachedProduct(id?: string): ProductData | null {
@@ -67,18 +81,7 @@ export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id) || readCachedCatalogProduct(id));
-  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getCachedProducts()
-    .filter((product) => product.id !== id)
-    .slice(0, 4)
-    .map((product) => ({
-      id: product.id,
-      name: product.name,
-      price: `₹${product.price.toLocaleString("en-IN")}`,
-      originalPrice: product.originalPrice,
-      image: product.image,
-      category: product.category,
-      stock: product.stock,
-    })));
+  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getRecommendationProducts(getCachedProducts(), id));
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -236,18 +239,7 @@ export default function ProductDetailPage() {
     const loadRecommendations = () => {
       void fetchProducts()
         .then((products) => {
-          if (active) setRecommendationProducts(products
-            .filter((product) => product.id !== id)
-            .slice(0, 4)
-            .map((product) => ({
-              id: product.id,
-              name: product.name,
-              price: `₹${product.price.toLocaleString("en-IN")}`,
-              originalPrice: product.originalPrice,
-              image: product.image,
-              category: product.category,
-              stock: product.stock,
-            })));
+          if (active) setRecommendationProducts(getRecommendationProducts(products, id));
         })
         .catch((error: unknown) => console.error("Product recommendations request failed.", error));
     };

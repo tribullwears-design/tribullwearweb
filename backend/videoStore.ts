@@ -5,6 +5,7 @@ import { getDatabase } from "./database.js";
 export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
 const supportedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
 export type VideoDocument = { id: string; title: string; url: string; storageId?: string; mimeType?: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string; updatedAt: string };
+export type UploadedVideoResult = { video: VideoDocument; replaced: boolean; cleanupWarning?: string };
 type VideoByteRange = { start: number; end: number } | { unsatisfiable: true } | null;
 
 export function parseVideoByteRange(header: string | undefined, length: number): VideoByteRange {
@@ -57,27 +58,88 @@ export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeTyp
   const safeTitle = validateTitle(title);
   const safeMimeType = validateVideoUpload({ mimeType, size: bytes.length });
   const bucket = await getBucket();
+  const collection = await getCollection();
+  const existing = await collection.find({ title: safeTitle }).collation({ locale: "en", strength: 2 }).toArray();
+  const current = existing[0];
   const upload = bucket.openUploadStream(`${randomUUID()}.video`, { metadata: { mimeType: safeMimeType } });
   const fileId = upload.id as ObjectId;
+  const video: VideoDocument = {
+    id: current?.id || randomUUID(),
+    title: safeTitle,
+    url: `/api/videos/files/${fileId.toHexString()}`,
+    storageId: fileId.toHexString(),
+    mimeType: safeMimeType,
+    ...(current?.thumbnail ? { thumbnail: current.thumbnail } : {}),
+    ...(current?.category ? { category: current.category } : {}),
+    isActive: true,
+    createdAt: current?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
   try {
     await new Promise<void>((resolve, reject) => {
       upload.once("finish", resolve);
       upload.once("error", reject);
       upload.end(bytes);
     });
-    const now = new Date().toISOString();
-    const video: VideoDocument = { id: randomUUID(), title: safeTitle, url: `/api/videos/files/${fileId.toHexString()}`, storageId: fileId.toHexString(), mimeType: safeMimeType, isActive: true, createdAt: now, updatedAt: now };
-    try {
-      await (await getCollection()).insertOne(video);
-      return video;
-    } catch (error) {
-      await bucket.delete(fileId).catch(() => undefined);
-      throw error;
-    }
   } catch (error) {
-    await bucket.delete(fileId).catch(() => undefined);
+    try {
+      await bucket.delete(fileId);
+    } catch (cleanupError) {
+      console.error("Could not remove the incomplete uploaded video file.", cleanupError);
+    }
     throw error;
   }
+
+  try {
+    if (current) {
+      const update = await collection.updateOne({ id: current.id }, { $set: video });
+      if (!update.matchedCount) throw new Error("The existing video changed during upload. Please upload it again.");
+    } else {
+      await collection.insertOne(video);
+    }
+  } catch (error) {
+    try {
+      await bucket.delete(fileId);
+    } catch (cleanupError) {
+      console.error("Could not remove the uploaded video after its collection update failed.", cleanupError);
+    }
+    throw error;
+  }
+
+  let duplicateRecordsRemoved = true;
+  if (current && existing.length > 1) {
+    try {
+      await collection.deleteMany(
+        { title: safeTitle, id: { $ne: current.id } },
+        { collation: { locale: "en", strength: 2 } },
+      );
+    } catch (error) {
+      duplicateRecordsRemoved = false;
+      console.error(`Could not remove duplicate video records for "${safeTitle}".`, error);
+    }
+  }
+
+  const oldVideos = current ? existing.filter((oldVideo) => oldVideo.id === current.id || duplicateRecordsRemoved) : [];
+  const cleanupFailures: string[] = [];
+  for (const oldVideo of oldVideos) {
+    if (!oldVideo.storageId || oldVideo.storageId === video.storageId) continue;
+    const oldFileId = fileObjectId(oldVideo.storageId);
+    if (!oldFileId) continue;
+    try {
+      await bucket.delete(oldFileId);
+    } catch (error) {
+      console.error(`Could not remove the replaced video file for "${safeTitle}".`, error);
+      cleanupFailures.push(oldVideo.storageId);
+    }
+  }
+
+  return {
+    video,
+    replaced: Boolean(current),
+    ...(cleanupFailures.length || !duplicateRecordsRemoved ? {
+      cleanupWarning: "The new video was saved, but one or more old video files or duplicate records could not be deleted.",
+    } : {}),
+  };
 }
 export async function updateVideo(id: string, value: unknown) {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error("Video identifier is invalid");

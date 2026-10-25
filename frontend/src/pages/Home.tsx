@@ -1,14 +1,14 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
 import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -53,7 +53,7 @@ function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }:
   const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
 
   return (
-    <Link href={href} className="product-card-link" aria-label={`Open ${item[1]} product page`}>
+    <Link href={href} className="product-card-link" aria-label={`Browse products, including ${item[1]}`}>
       <article
         className={cls("product-card", "parallax-tilt", hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
@@ -194,8 +194,7 @@ export default function Home() {
       if (!element) return;
       const shouldPlay = lifestyleMediaReady
         && lifestyleSectionVisible
-        && index >= lifestyleIndex
-        && index < lifestyleIndex + lifestyleVisibleCount;
+        && index === lifestyleIndex;
       if (!shouldPlay) {
         element.pause();
         return;
@@ -270,18 +269,17 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  const productLink = productHref;
   const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-    href: productLink(product),
+    href: "/products",
     originalPrice: product.originalPrice,
     hoverImage: getAlternateProductImage(product),
   }));
   const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-      href: productLink(product),
+      href: "/products",
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));
@@ -469,13 +467,13 @@ export default function Home() {
                         if (element) lifestyleVideoRefs.current.set(video.id, element);
                         else lifestyleVideoRefs.current.delete(video.id);
                       }}
-                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount + 1 ? video.url : undefined}
+                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + 2 ? video.url : undefined}
                       poster={video.thumbnail}
-                      autoPlay={lifestyleMediaReady && lifestyleSectionVisible && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount}
+                      autoPlay={lifestyleMediaReady && lifestyleSectionVisible && index === lifestyleIndex}
                       loop
                       muted
                       playsInline
-                      preload={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + lifestyleVisibleCount + 1 ? "auto" : "none"}
+                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestyleIndex + 2 ? "none" : index === lifestyleIndex ? "auto" : "metadata"}
                       aria-label={`${video.title} lifestyle video`}
                     />
                   </div>

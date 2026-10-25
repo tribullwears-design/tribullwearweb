@@ -1,5 +1,5 @@
 import { ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
 import { validateCustomerAddress } from "../lib/customerAddress";
@@ -111,6 +111,7 @@ export default function HeaderActions() {
   const logo = useSiteLogo();
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const overlayScrollYRef = useRef(0);
   const [query, setQuery] = useState("");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
@@ -348,24 +349,35 @@ export default function HeaderActions() {
     };
   }, [overlay, accountSection, authUser.isAuthenticated, ordersPage]);
 
-  useEffect(() => {
-    document.body.classList.toggle("header-overlay-open", overlay !== null);
-    return () => document.body.classList.remove("header-overlay-open");
+  useLayoutEffect(() => {
+    if (overlay === null) return;
+    const body = document.body;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const scrollY = overlay === "account" ? overlayScrollYRef.current : window.scrollY;
+    const previousStyles = {
+      position: body.style.position,
+      top: body.style.top,
+      left: body.style.left,
+      right: body.style.right,
+      width: body.style.width,
+      paddingRight: body.style.paddingRight,
+      boxSizing: body.style.boxSizing,
+    };
+    body.classList.add("header-overlay-open");
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.left = "0";
+    body.style.right = "0";
+    body.style.width = "100%";
+    body.style.paddingRight = `${scrollbarWidth}px`;
+    body.style.boxSizing = "border-box";
+    return () => {
+      body.classList.remove("header-overlay-open");
+      Object.assign(body.style, previousStyles);
+      window.scrollTo(0, scrollY);
+    };
   }, [overlay]);
 
-  useEffect(() => {
-    const body = document.body;
-    body.classList.toggle("header-login-overlay-open", isLoginPanelOpen);
-    if (isLoginPanelOpen) {
-      body.style.setProperty("--header-scrollbar-compensation", `${window.innerWidth - document.documentElement.clientWidth}px`);
-    } else {
-      body.style.removeProperty("--header-scrollbar-compensation");
-    }
-    return () => {
-      body.classList.remove("header-login-overlay-open");
-      body.style.removeProperty("--header-scrollbar-compensation");
-    };
-  }, [isLoginPanelOpen]);
   useEffect(() => () => {
     if (loginCloseTimerRef.current !== undefined) window.clearTimeout(loginCloseTimerRef.current);
     if (resetRedirectTimerRef.current !== undefined) window.clearTimeout(resetRedirectTimerRef.current);
@@ -436,6 +448,7 @@ export default function HeaderActions() {
   };
 
   const openAccount = () => {
+    overlayScrollYRef.current = window.scrollY;
     setLoginSuccess("");
     if (loginCloseTimerRef.current !== undefined) {
       window.clearTimeout(loginCloseTimerRef.current);
