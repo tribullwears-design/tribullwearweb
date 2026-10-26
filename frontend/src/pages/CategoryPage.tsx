@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
-import { loadCategoryBanner } from "../lib/categoryBanners";
+import { getCachedCategoryBanner, loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import MovingNavbar from "../components/MovingNavbar";
@@ -116,7 +116,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
     <section className="hero category-hero-section" aria-label={`${title} collection`}>
       <div className="hero__images">
         <div className="hero__image">
-          {image && <img ref={heroImgRef} src={image} alt={`${title} collection hero`} />}
+          {image && <img key={image} ref={heroImgRef} src={image} alt={`${title} collection hero`} />}
         </div>
       </div>
       <div className="hero__wash" />
@@ -416,16 +416,20 @@ export default function CategoryPage() {
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [normalizeCategorySlug(value), liveCategoryDefinition(normalizeCategorySlug(value), hierarchy)])) as Record<string, CategoryDefinition | undefined>;
   const categoryImage = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === categorySlug)?.image || "";
   const heroFallback = existingHeroBanners[categorySlug] || categoryImage;
-  const [heroBanner, setHeroBanner] = useState(heroFallback);
+  const [heroBanner, setHeroBanner] = useState(() => {
+    const banner = getCachedCategoryBanner(categorySlug);
+    return banner ? { categorySlug, image: banner.image } : null;
+  });
+  const currentHeroBanner = heroBanner?.categorySlug === categorySlug ? heroBanner.image : heroFallback;
   useEffect(() => {
     let active = true;
-    setHeroBanner(heroFallback);
     void loadCategoryBanner(categorySlug)
       .then((banner) => {
-        if (active) setHeroBanner(banner?.image || categoryImage);
+        if (active) setHeroBanner({ categorySlug, image: banner?.image || heroFallback });
       })
       .catch((error: unknown) => {
         console.error("Category banner request failed.", error);
+        if (active) setHeroBanner({ categorySlug, image: heroFallback });
       });
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
@@ -446,7 +450,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image={heroBanner}
+          image={currentHeroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -473,7 +477,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image={heroBanner}
+          image={currentHeroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -500,7 +504,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image={heroBanner}
+          image={currentHeroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -527,7 +531,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
-          image={heroBanner}
+          image={currentHeroBanner}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -580,7 +584,7 @@ export default function CategoryPage() {
       <CategoryHero
         title={fallback.title}
         subtitle={fallback.subtitle}
-        image={heroBanner}
+        image={currentHeroBanner}
       />
 
       <div className="section-heading category-best-selling-heading">

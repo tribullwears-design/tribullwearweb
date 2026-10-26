@@ -11,8 +11,8 @@ import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
-import { loadCategoryBanner } from "../lib/categoryBanners";
-import { featureImagesUpdatedEvent, loadFeatureImages } from "../lib/featureImages";
+import { getCachedCategoryBanner, loadCategoryBanner } from "../lib/categoryBanners";
+import { featureImagesUpdatedEvent, getCachedFeatureImages, loadFeatureImages } from "../lib/featureImages";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 const brandAssets = {
@@ -27,6 +27,29 @@ const brandAssets = {
 const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${encodeURIComponent(message)}`;
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
+type HomeVideo = { id: string; title: string; url: string; thumbnail?: string; category?: string };
+const HOME_VIDEOS_CACHE_KEY = "tribull-home-videos";
+
+function getCachedHomeVideos(): HomeVideo[] {
+  try {
+    const cached = window.sessionStorage.getItem(HOME_VIDEOS_CACHE_KEY);
+    if (!cached) return [];
+    const videos: unknown = JSON.parse(cached);
+    if (!Array.isArray(videos)) return [];
+    return videos.filter((video): video is HomeVideo =>
+      Boolean(video && typeof video === "object"
+        && typeof video.id === "string"
+        && typeof video.title === "string"
+        && typeof video.url === "string"),
+    );
+  } catch {
+    return [];
+  }
+}
+
+function hasCachedHomeVideos() {
+  return getCachedHomeVideos().length > 0;
+}
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -72,11 +95,11 @@ export default function Home() {
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
-  const [homeVideos, setHomeVideos] = useState<Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>>([]);
-  const [videosLoading, setVideosLoading] = useState(true);
+  const [homeVideos, setHomeVideos] = useState<HomeVideo[]>(getCachedHomeVideos);
+  const [videosLoading, setVideosLoading] = useState(() => !hasCachedHomeVideos());
   const [videosError, setVideosError] = useState("");
-  const [homeBanner, setHomeBanner] = useState<{ image: string; title?: string; subtitle?: string; link?: string } | null>(null);
-  const [featureImages, setFeatureImages] = useState<{ customize: string | null; corporate: string | null }>({ customize: null, corporate: null });
+  const [homeBanner, setHomeBanner] = useState(() => getCachedCategoryBanner("home"));
+  const [featureImages, setFeatureImages] = useState(getCachedFeatureImages);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleSectionRef = useRef<HTMLElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
@@ -94,11 +117,11 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     let loadingImages = false;
-    const refreshFeatureImages = async () => {
+    const refreshFeatureImages = async (refresh = false) => {
       if (loadingImages) return;
       loadingImages = true;
       try {
-        const images = await loadFeatureImages();
+        const images = await loadFeatureImages(refresh);
         if (active) setFeatureImages(images);
       } catch (error: unknown) {
         console.error("Could not load homepage feature images.", error);
@@ -108,22 +131,22 @@ export default function Home() {
     };
     void refreshFeatureImages();
     const onStorage = (event: StorageEvent) => {
-      if (event.key === "tribull-feature-images-updated") void refreshFeatureImages();
+      if (event.key === "tribull-feature-images-updated") void refreshFeatureImages(true);
     };
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") void refreshFeatureImages();
     };
-    window.addEventListener(featureImagesUpdatedEvent, refreshFeatureImages);
+    const onFeatureImagesUpdated = () => void refreshFeatureImages(true);
+    const onFocus = () => void refreshFeatureImages();
+    window.addEventListener(featureImagesUpdatedEvent, onFeatureImagesUpdated);
     window.addEventListener("storage", onStorage);
-    window.addEventListener("focus", refreshFeatureImages);
+    window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
-    const refreshInterval = window.setInterval(() => void refreshFeatureImages(), 2_500);
     return () => {
       active = false;
-      window.clearInterval(refreshInterval);
-      window.removeEventListener(featureImagesUpdatedEvent, refreshFeatureImages);
+      window.removeEventListener(featureImagesUpdatedEvent, onFeatureImagesUpdated);
       window.removeEventListener("storage", onStorage);
-      window.removeEventListener("focus", refreshFeatureImages);
+      window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, []);
@@ -151,10 +174,14 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    setVideosLoading(true);
     void fetch("/api/videos").then(async (response) => {
       if (!response.ok) throw new Error("Videos could not be loaded.");
-      const savedVideos = await response.json() as Array<{ id: string; title: string; url: string; thumbnail?: string; category?: string }>;
+      const savedVideos = await response.json() as HomeVideo[];
+      try {
+        window.sessionStorage.setItem(HOME_VIDEOS_CACHE_KEY, JSON.stringify(savedVideos));
+      } catch {
+        // Keep the fetched videos available even when browser storage is unavailable.
+      }
       if (active) setHomeVideos(savedVideos);
     }).catch((error: unknown) => {
       if (active) setVideosError(error instanceof Error ? error.message : "Videos could not be loaded.");
@@ -175,7 +202,7 @@ export default function Home() {
         setLifestyleMediaReady(true);
         preloadObserver.disconnect();
       }
-    }, { rootMargin: "900px 0px" });
+    }, { rootMargin: "3000px 0px" });
     const visibilityObserver = new IntersectionObserver(([entry]) => {
       setLifestyleSectionVisible(Boolean(entry?.isIntersecting));
     }, { threshold: 0.05 });
@@ -210,13 +237,16 @@ export default function Home() {
     let active = true;
     void loadCategoryBanner("home").then((banner) => {
       if (active) setHomeBanner(banner);
-    }).catch(() => undefined);
+    }).catch((error: unknown) => {
+      console.error("Homepage banner request failed.", error);
+    });
     return () => { active = false; };
   }, []);
 
 
   const lifestyleSlides = homeVideos;
   const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - lifestyleVisibleCount);
+  const lifestylePreloadEnd = lifestyleIndex + Math.max(lifestyleVisibleCount, 2) + 1;
 
   const scrollLifestyle = (direction: "left" | "right") => {
     if (lifestyleTransitioning) return;
@@ -311,7 +341,7 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className="hero__images">
             <div className="hero__image">
-              <img src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} fetchPriority="high" decoding="async" />
+              <img key={homeBanner?.image || brandAssets.hero} src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} fetchPriority="high" decoding="async" />
             </div>
           </div>
           <div className="hero__wash" />
@@ -384,7 +414,7 @@ export default function Home() {
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" decoding="async" />
+              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" decoding="async" />
             </Reveal>
             <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
@@ -392,7 +422,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" decoding="async" />
+              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" decoding="async" />
             </Reveal>
           </div>
         </div>
@@ -467,13 +497,13 @@ export default function Home() {
                         if (element) lifestyleVideoRefs.current.set(video.id, element);
                         else lifestyleVideoRefs.current.delete(video.id);
                       }}
-                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestyleIndex + 2 ? video.url : undefined}
+                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestylePreloadEnd ? video.url : undefined}
                       poster={video.thumbnail}
                       autoPlay={lifestyleMediaReady && lifestyleSectionVisible && index === lifestyleIndex}
                       loop
                       muted
                       playsInline
-                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestyleIndex + 2 ? "none" : index === lifestyleIndex ? "auto" : "metadata"}
+                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestylePreloadEnd ? "none" : "metadata"}
                       aria-label={`${video.title} lifestyle video`}
                     />
                   </div>

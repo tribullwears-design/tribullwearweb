@@ -234,7 +234,7 @@ export default defineConfig(({ mode }) => {
     strictPort: true,
     host: true,
     proxy: {
-      "/api": { target: apiBaseUrl || "http://localhost:5001", changeOrigin: true },
+      "/api": { target: apiBaseUrl || "http://localhost:5000", changeOrigin: true },
     },
     allowedHosts: [
       ".manuspre.computer",

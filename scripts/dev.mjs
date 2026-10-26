@@ -117,7 +117,7 @@ async function waitForBackend(child) {
     }
     try {
       await new Promise((resolve, reject) => {
-        const socket = net.createConnection({ host: "127.0.0.1", port: 5001 });
+        const socket = net.createConnection({ host: "127.0.0.1", port: 5000 });
         socket.once("connect", () => {
           socket.destroy();
           resolve();
@@ -132,7 +132,7 @@ async function waitForBackend(child) {
       ]);
     }
   }
-  throw new Error("Timed out waiting for the Tribull backend on port 5001.");
+  throw new Error("Timed out waiting for the Tribull backend on port 5000.");
 }
 
 async function startFrontend(port) {
@@ -170,11 +170,11 @@ async function startFrontend(port) {
 
 async function main() {
   const processes = getProcessTree();
-  const backendListeners = verifyServiceListeners(5001, processes, "backend");
+  const backendListeners = verifyServiceListeners(5000, processes, "backend");
   if (backendListeners.length > 0) {
-    console.log(`Reusing verified Tribull backend on http://192.168.31.155:5001 (PID ${backendListeners.map(({ pid }) => pid).join(", ")}).`);
+    console.log(`Reusing verified Tribull backend on http://192.168.31.155:5000 (PID ${backendListeners.map(({ pid }) => pid).join(", ")}).`);
   } else {
-    console.log("Starting Tribull backend on 0.0.0.0:5001...");
+    console.log("Starting Tribull backend on 0.0.0.0:5000...");
     const backend = startChild("Tribull backend", [
       path.join(projectRoot, "node_modules", "tsx", "dist", "cli.mjs"),
       "backend/index.ts",
@@ -233,7 +233,7 @@ async function main() {
 
   console.log(`Frontend: http://localhost:${frontendPort}`);
   console.log(`LAN frontend: http://192.168.31.155:${frontendPort}`);
-  console.log("Backend: http://192.168.31.155:5001");
+  console.log("Backend: http://192.168.31.155:5000");
 
   const activeChildren = [...ownedChildren];
   const unexpectedExit = Promise.race(activeChildren.map(async (child) => {

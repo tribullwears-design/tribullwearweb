@@ -119,6 +119,25 @@ export async function getBanner(categoryId: string) {
   } : null;
 }
 
+export async function getStorefrontBanner(categoryId: string) {
+  const banner = await getBanner(categoryId);
+  if (!banner || !banner.image.startsWith("data:image/")) return banner;
+  const imageUrl = `/api/banners/${encodeURIComponent(banner.categoryId)}/image?v=${encodeURIComponent(banner.updatedAt)}`;
+  return { ...banner, image: imageUrl, imageUrl };
+}
+
+export async function getBannerImage(categoryId: string) {
+  const category = await resolveCategory(categoryId);
+  const collection = await getCollection();
+  await seedExistingHeroBanners(collection);
+  const document = await collection.findOne({ categoryId: category.value });
+  if (!document) return null;
+
+  const match = document.image.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match?.[1] || !match[2]) return null;
+  return { mimeType: `image/${match[1].toLowerCase()}`, data: Buffer.from(match[2], "base64") };
+}
+
 function normalizeBannerFields(value: unknown) {
   const input = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const text = (name: string, max: number) => input[name] === undefined ? undefined : typeof input[name] === "string" ? input[name].trim().slice(0, max) : (() => { throw new Error(`${name} must be text`); })();

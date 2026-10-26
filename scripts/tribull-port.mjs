@@ -92,7 +92,7 @@ export function belongsToTribullService(pid, processes, service) {
   return sameProject && serviceProcess;
 }
 
-export async function stopTribullBackend(port = 5001) {
+export async function stopTribullBackend(port = 5000) {
   const pids = getListenerPids(port);
   if (pids.size === 0) return;
 

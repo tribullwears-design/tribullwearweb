@@ -1,4 +1,5 @@
 import { MongoClient, type Db } from "mongodb";
+import dns from "node:dns";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -25,6 +26,11 @@ function getMongoUri() {
 export async function getDatabase(): Promise<Db> {
   const uri = getMongoUri();
   if (!uri) throw new Error("MONGODB_URI is not configured");
+  const dnsServers = process.env.MONGODB_DNS_SERVERS
+    ?.split(",")
+    .map((server) => server.trim())
+    .filter(Boolean);
+  if (dnsServers?.length) dns.setServers(dnsServers);
   if (!clientPromise) {
     clientPromise = new MongoClient(uri).connect().catch((error: unknown) => {
       clientPromise = undefined;

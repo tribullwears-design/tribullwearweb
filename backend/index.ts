@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import path from "path";
 import { addSubcategory, CategoryConflictError, createCategory, deleteCategory, editSubcategory, listCategories, removeSubcategory, replaceCategories, setCategoryVisibility, setSubcategoryVisibility, updateCategory } from "./categoryStore.js";
-import { deleteBanner, getBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
+import { deleteBanner, getBannerImage, getStorefrontBanner, listBanners, saveBanner, updateBanner } from "./bannerStore.js";
 import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listFeatureImages, saveFeatureImage } from "./featureImageStore.js";
 import { getSiteLogoImage, getSiteLogoUrl, saveSiteLogo, SiteLogoValidationError } from "./siteLogoStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
@@ -489,7 +489,15 @@ async function startServer() {
     try { res.set("Cache-Control", publicCatalogCache); res.json(await listBanners()); } catch (error) { sendBannerError(res, error); }
   });
   app.get("/api/banners/:categoryId", async (req, res) => {
-    try { res.set("Cache-Control", publicCatalogCache); res.json(await getBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
+    try { res.set("Cache-Control", "no-store"); res.json(await getStorefrontBanner(req.params.categoryId)); } catch (error) { sendBannerError(res, error); }
+  });
+  app.get("/api/banners/:categoryId/image", async (req, res) => {
+    try {
+      const image = await getBannerImage(req.params.categoryId);
+      if (!image) return res.status(404).end();
+      res.set({ "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
+      res.send(image.data);
+    } catch (error) { sendBannerError(res, error); }
   });
   app.post("/api/banners", requireAdminPermission("products", "edit"), async (req, res) => {
     try { res.status(201).json(await saveBanner(req.body?.categoryId, req.body?.image, req.body)); } catch (error) { sendBannerError(res, error); }
@@ -512,7 +520,7 @@ async function startServer() {
     try {
       const image = await getFeatureImage(req.params.type);
       if (!image) return res.status(404).end();
-      res.set({ "Cache-Control": "no-store", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
+      res.set({ "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
       res.send(image.data);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load homepage image" });
@@ -1016,7 +1024,7 @@ async function startServer() {
     throw new Error("MongoDB connection failed; verify MONGODB_URI, Atlas network access, and the database user");
   }
 
-  const port = Number(process.env.PORT || 5001);
+  const port = Number(process.env.PORT || 5000);
 
   server.listen(port, "0.0.0.0", () => {
     console.log(`Backend running on port ${port}`);
