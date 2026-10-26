@@ -1,5 +1,5 @@
 // Tribull Home — Figma node 103:83 with rich scroll-triggered animations, staggered reveals, and parallax.
-import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Instagram, MapPin, Star } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
@@ -98,6 +98,7 @@ export default function Home() {
   const [homeVideos, setHomeVideos] = useState<HomeVideo[]>(getCachedHomeVideos);
   const [videosLoading, setVideosLoading] = useState(() => !hasCachedHomeVideos());
   const [videosError, setVideosError] = useState("");
+  const [customerReviewPage, setCustomerReviewPage] = useState(0);
   const [homeBanner, setHomeBanner] = useState(() => getCachedCategoryBanner("home"));
   const [featureImages, setFeatureImages] = useState(getCachedFeatureImages);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -313,6 +314,18 @@ export default function Home() {
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));
+  const customerReviews = [
+      { customerName: "Arun Kumar", comment: "Good product!" },
+      { customerName: "Priya S", comment: "Nice product!" },
+      { customerName: "Karthik R", comment: "Love the fit!" },
+      { customerName: "Nisha M", comment: "Great quality!" },
+  ].map((review, index) => {
+    const product = eligibleProducts[index];
+    return {
+      ...review,
+      productImage: product?.image || getShowcaseProductImage(index),
+    };
+  });
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
@@ -452,15 +465,50 @@ export default function Home() {
           </Reveal>
         </div>
 
-        <div className="bottom-visuals">
-          <Reveal>
-            <div className="bottom-visuals__grid">
-              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(1)} alt="White T-shirt front and back views" decoding="async" /></div>
-              <div className="visual-block visual-block--cream"><span className="float-slow">Made for<br /><em>every day.</em></span></div>
-              <div className="visual-block visual-block--green"><img src={getShowcaseProductImage(0)} alt="Black T-shirt front and back views" decoding="async" /></div>
+        <section className="customer-reviews" aria-labelledby="customer-reviews-heading">
+          <div className="customer-reviews__heading">
+            <h2 id="customer-reviews-heading">Our Customers Feel</h2>
+          </div>
+          <div className="customer-reviews__carousel">
+            <div className="customer-reviews__grid">
+              {customerReviews.map((review, index) => (
+                <article
+                  className={cls("customer-review-card", Math.floor(index / 2) !== customerReviewPage ? "customer-review-card--mobile-hidden" : null)}
+                  key={`${review.customerName}-${index}`}
+                >
+                  <img className="customer-review-card__image" src={review.productImage} alt="" loading="lazy" decoding="async" />
+                  <div className="customer-review-card__content">
+                    <h3>{review.customerName}</h3>
+                    <div className="customer-review-card__stars" aria-label="5 out of 5 stars">
+                      {Array.from({ length: 5 }, (_, index) => <Star key={index} size={16} fill="currentColor" aria-hidden="true" />)}
+                    </div>
+                    <p className="customer-review-card__comment">“{review.comment}”</p>
+                  </div>
+                </article>
+              ))}
             </div>
-          </Reveal>
-        </div>
+            <div className="customer-reviews__controls" aria-label="Customer review pages">
+              <button
+                className="customer-reviews__arrow"
+                type="button"
+                aria-label="Previous customer reviews"
+                disabled={customerReviewPage === 0}
+                onClick={() => setCustomerReviewPage((page) => Math.max(0, page - 1))}
+              >
+                <ArrowLeft size={18} strokeWidth={1.5} />
+              </button>
+              <button
+                className="customer-reviews__arrow"
+                type="button"
+                aria-label="Next customer reviews"
+                disabled={customerReviewPage >= Math.ceil(customerReviews.length / 2) - 1}
+                onClick={() => setCustomerReviewPage((page) => Math.min(Math.ceil(customerReviews.length / 2) - 1, page + 1))}
+              >
+                <ArrowRight size={18} strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
+        </section>
 
         <section className="lifestyle-section" aria-labelledby="lifestyle-heading" ref={lifestyleSectionRef}>
           <Reveal>
