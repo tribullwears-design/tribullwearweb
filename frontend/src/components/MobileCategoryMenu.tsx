@@ -79,8 +79,8 @@ export default function MobileCategoryMenu() {
                         onClick={closeMenu}
                         tabIndex={cinemaExpanded ? 0 : -1}
                       >
-                        {image && <img className="mobile-category-menu__icon" src={image} alt="" />}
-                        {label}
+                        {image && <img className="mobile-category-menu__subcategory-image" src={image} alt="" />}
+                        <span>{label}</span>
                       </Link>
                     ))}
                   </div>

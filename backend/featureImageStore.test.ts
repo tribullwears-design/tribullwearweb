@@ -27,9 +27,13 @@ describe("feature image storage", () => {
     expect(mocks.findOne).toHaveBeenCalledWith("corporate-image", { _id: "current" }, { projection: { _id: 1, updatedAt: 1 } });
   });
 
-  it("reads image bytes separately from the listing response", async () => {
+  it("caches image bytes after the first database read", async () => {
     mocks.findOne.mockResolvedValue({ image: "data:image/png;base64,aGVsbG8=" });
 
+    await expect(getFeatureImage("customize")).resolves.toEqual({
+      mimeType: "image/png",
+      data: Buffer.from("hello"),
+    });
     await expect(getFeatureImage("customize")).resolves.toEqual({
       mimeType: "image/png",
       data: Buffer.from("hello"),
@@ -39,6 +43,7 @@ describe("feature image storage", () => {
       { _id: "current" },
       { projection: { image: 1 } },
     );
+    expect(mocks.findOne).toHaveBeenCalledTimes(1);
   });
 
   it("upserts each supported image into its matching collection", async () => {

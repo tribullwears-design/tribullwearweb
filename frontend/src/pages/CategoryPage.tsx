@@ -98,11 +98,13 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y < 800) {
-          if (heroImgRef.current) heroImgRef.current.style.transform = `translate3d(0, ${y * 0.22}px, 0) scale(1.04)`;
-          if (heroCopyRef.current) heroCopyRef.current.style.transform = `translate3d(0, ${y * 0.1}px, 0)`;
-          if (heroStampRef.current) heroStampRef.current.style.transform = `translate3d(0, ${y * 0.16}px, 0) rotate(${y * 0.04}deg)`;
+        if (!document.body.classList.contains("header-overlay-open")) {
+          const y = window.scrollY;
+          if (y < 800) {
+            if (heroImgRef.current) heroImgRef.current.style.transform = `translate3d(0, ${y * 0.22}px, 0) scale(1.04)`;
+            if (heroCopyRef.current) heroCopyRef.current.style.transform = `translate3d(0, ${y * 0.1}px, 0)`;
+            if (heroStampRef.current) heroStampRef.current.style.transform = `translate3d(0, ${y * 0.16}px, 0) rotate(${y * 0.04}deg)`;
+          }
         }
         raf = 0;
       });
@@ -116,7 +118,7 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
     <section className="hero category-hero-section" aria-label={`${title} collection`}>
       <div className="hero__images">
         <div className="hero__image">
-          {image && <img key={image} ref={heroImgRef} src={image} alt={`${title} collection hero`} />}
+          {image && <img key={image} ref={heroImgRef} src={image} alt={`${title} collection hero`} fetchPriority="high" decoding="async" />}
         </div>
       </div>
       <div className="hero__wash" />
@@ -186,17 +188,17 @@ type CatalogSort = "featured" | "newest" | "low" | "high" | "selling";
 function GlobalNavigation() {
   const logo = useSiteLogo();
   return (
-    <div className="cinema-page-header">
-      <MovingNavbar className="cinema-marketbar" trackClassName="cinema-marketbar__track" />
+    <>
+      <MovingNavbar />
 
-      <header className="site-header cinema-site-header">
+      <header className="site-header">
         <MobileCategoryMenu />
         <a className="wordmark" href="/" aria-label="Tribull home">
           <img src={logo} alt="TRIBULL" />
         </a>
         <HeaderActions />
       </header>
-    </div>
+    </>
   );
 }
 
@@ -205,7 +207,7 @@ function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string;
   if (!definition) return null;
 
   return (
-    <nav className="category-nav cinema-category-nav" aria-label={`${definition.title} categories`}>
+    <nav className="category-nav" aria-label={`${definition.title} categories`}>
       <div className="category-nav__track">
         {definition.subcategories.map(({ label, slug, image }) => (
           <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>

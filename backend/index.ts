@@ -23,6 +23,7 @@ import { requireAdminPermission } from "./adminAuth.js";
 import { createUploadedVideo, createVideo, deleteVideo, listActiveVideos, listVideos, streamVideoFile, updateVideo } from "./videoStore.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import { getAdminAnalytics, isDashboardRange } from "./adminAnalyticsStore.js";
+import { createReview, getReviewPhoto, listPublicReviews, ReviewValidationError } from "./reviewStore.js";
 import { isCheckoutPaymentMethod, isIndianState, normalizeIndianState } from "../shared/checkout.js";
 import { rateLimit } from "express-rate-limit";
 import {
@@ -128,6 +129,7 @@ async function startServer() {
   const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
   const recoveryRequestLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });
   const recoveryVerifyLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 15, standardHeaders: "draft-8", legacyHeaders: false });
+  const reviewSubmissionLimiter = rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: "draft-8", legacyHeaders: false });
   app.use("/api/auth", (_req, res, next) => {
     try {
       validateCustomerAuthConfiguration();
@@ -754,6 +756,39 @@ async function startServer() {
   });
   app.get("/api/marketing/coupons/:code", async (req, res) => {
     try { const offer = await findActiveCoupon(req.params.code); if (!offer) return res.status(404).json({ error: "Coupon is invalid or inactive" }); res.json(offer); } catch (error) { res.status(400).json({ error: error instanceof Error ? error.message : "Coupon validation failed" }); }
+  });
+  app.get("/api/reviews", async (_req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json(await listPublicReviews());
+    } catch (error) {
+      console.error("Could not load customer reviews.", error);
+      res.status(500).json({ error: "Unable to load reviews right now" });
+    }
+  });
+  app.post("/api/reviews", reviewSubmissionLimiter, async (req, res) => {
+    try {
+      res.status(201).json(await createReview(req.body));
+    } catch (error) {
+      if (error instanceof ReviewValidationError) return res.status(400).json({ error: error.message });
+      console.error("Could not save customer review.", error);
+      res.status(500).json({ error: "Unable to submit your review right now" });
+    }
+  });
+  app.get("/api/reviews/:id/photo", async (req, res) => {
+    try {
+      const photo = await getReviewPhoto(req.params.id);
+      if (!photo) return res.status(404).end();
+      res.set({
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "Content-Type": photo.mimeType,
+        "X-Content-Type-Options": "nosniff",
+      });
+      res.send(photo.data);
+    } catch (error) {
+      console.error("Could not load customer review photo.", error);
+      res.status(500).json({ error: "Unable to load the review photo right now" });
+    }
   });
   app.get("/api/admin/videos", requireAdminPermission("products", "view"), async (_req, res) => {
     try { res.json(await listVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }

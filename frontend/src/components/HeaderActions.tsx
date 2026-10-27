@@ -112,6 +112,7 @@ export default function HeaderActions() {
   const [, setLocation] = useLocation();
   const [overlay, setOverlay] = useState<Overlay>(null);
   const overlayScrollYRef = useRef(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [query, setQuery] = useState("");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
@@ -352,7 +353,7 @@ export default function HeaderActions() {
   useLayoutEffect(() => {
     if (overlay === null) return;
     const body = document.body;
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const pageWidth = document.documentElement.clientWidth;
     const scrollY = overlay === "account" ? overlayScrollYRef.current : window.scrollY;
     const previousStyles = {
       position: body.style.position,
@@ -368,14 +369,20 @@ export default function HeaderActions() {
     body.style.top = `-${scrollY}px`;
     body.style.left = "0";
     body.style.right = "0";
-    body.style.width = "100%";
-    body.style.paddingRight = `${scrollbarWidth}px`;
+    body.style.width = `${pageWidth}px`;
+    body.style.paddingRight = "0";
     body.style.boxSizing = "border-box";
     return () => {
       body.classList.remove("header-overlay-open");
       Object.assign(body.style, previousStyles);
-      window.scrollTo(0, scrollY);
+      window.scrollTo({ left: 0, top: scrollY, behavior: "instant" });
     };
+  }, [overlay]);
+
+  useEffect(() => {
+    if (overlay === "search" && window.matchMedia("(min-width: 641px)").matches) {
+      searchInputRef.current?.focus({ preventScroll: true });
+    }
   }, [overlay]);
 
   useEffect(() => () => {
@@ -1192,7 +1199,7 @@ export default function HeaderActions() {
         <section className="header-panel header-side-panel header-search-panel" role="dialog" aria-modal="true" aria-labelledby="header-search-title">
           <div className="header-panel__heading"><h2 id="header-search-title">Search</h2><button type="button" aria-label="Close search" onClick={closeOverlay}><X size={20} /></button></div>
           <form className="header-search-form" onSubmit={(event) => { event.preventDefault(); submitSearch(); }}>
-            <label className="header-search-field"><Search size={18} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" aria-label="Search products or categories" /></label>
+            <label className="header-search-field"><Search size={18} /><input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search products or categories" aria-label="Search products or categories" /></label>
             <button className="header-search-submit" type="submit" aria-label="View search results"><ArrowRight size={19} /></button>
           </form>
           <div className="header-search-popular" aria-label="Popular searches">
@@ -1484,13 +1491,13 @@ export default function HeaderActions() {
                 {(loginStep === "signup" || loginStep === "google-profile" && googleProfileMissingFields.includes("name")) && <label>Name
                   <span className="header-login-input">
                     <User size={22} aria-hidden="true" />
-                    <input type="text" autoComplete="name" autoFocus value={signupName} onChange={(event) => { setSignupName(event.target.value); setLoginError(""); }} placeholder="Enter your name" required />
+                    <input type="text" autoComplete="name" value={signupName} onChange={(event) => { setSignupName(event.target.value); setLoginError(""); }} placeholder="Enter your name" required />
                   </span>
                 </label>}
                 {(loginStep === "login" || loginStep === "signup" || loginStep === "forgot") && <label>Email
                   <span className="header-login-input">
                     <Mail size={22} aria-hidden="true" />
-                    <input type="email" autoComplete="email" autoFocus={loginStep === "login" || loginStep === "forgot"} value={loginEmail} onChange={(event) => { setLoginEmail(event.target.value); setLoginError(""); }} placeholder="Enter your email address" required />
+                    <input type="email" autoComplete="email" value={loginEmail} onChange={(event) => { setLoginEmail(event.target.value); setLoginError(""); }} placeholder="Enter your email address" required />
                   </span>
                 </label>}
                 {loginStep === "google-profile" && <p className="google-profile-email"><Mail size={18} aria-hidden="true" />{loginEmail}</p>}

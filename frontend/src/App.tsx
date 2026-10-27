@@ -18,6 +18,8 @@ const AllProductsPage = lazy(() => import("./pages/AllProductsPage"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const CheckoutPage = lazy(() => import("./pages/CheckoutPage"));
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
+const ReviewPage = lazy(() => import("./pages/ReviewPage"));
+const ReviewQrPage = lazy(() => import("./pages/ReviewQrPage"));
 
 
 function Router() {
@@ -65,6 +67,9 @@ function Router() {
       <Route path={"/products"} component={AllProductsPage} />
       <Route path={"/search"} component={SearchResultsPage} />
       <Route path={"/checkout"} component={CheckoutPage} />
+      <Route path={"/review"} component={ReviewPage} />
+      <Route path={"/review-qr"} component={ReviewQrPage} />
+      <Route path={"/qr-code"} component={ReviewPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />
       <Route path={"/category/:slug"} component={CategoryPage} />
@@ -185,7 +190,7 @@ function App() {
             <Toaster />
             <Suspense fallback={null}>
               <Router />
-              {!location.startsWith("/admin26") && <SiteFooter />}
+              {!location.startsWith("/admin26") && location !== "/review" && location !== "/review-qr" && location !== "/qr-code" && <SiteFooter />}
             </Suspense>
           </TooltipProvider>
         </SiteLogoProvider>

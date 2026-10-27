@@ -76,6 +76,12 @@ const tShirtColors = [
   { name: "White", value: "#ffffff" },
 ] as const;
 
+function getDefaultProductColor(colors: string[] = []) {
+  const baseColor = colors[0]?.trim().toLowerCase();
+  const oppositeColor = baseColor === "white" ? "black" : baseColor === "black" ? "white" : "";
+  return colors.find((color) => color.trim().toLowerCase() === oppositeColor) || colors[0] || "";
+}
+
 export default function ProductDetailPage() {
   const logo = useSiteLogo();
   const { id } = useParams<{ id: string }>();
@@ -262,7 +268,7 @@ export default function ProductDetailPage() {
     : [];
   const hasProductColors = isTShirtColorVariant || Boolean(storedProduct?.colors?.length);
   const availableSizes = storedProduct?.sizes || [];
-  const initialColor = storedProduct?.colors?.[0] || "";
+  const initialColor = getDefaultProductColor(storedProduct?.colors);
   const activeColor = selectedColor ?? initialColor;
   const productImageViews = storedProduct?.image ? [storedProduct.image] : [];
 
@@ -277,10 +283,10 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor(storedProduct?.colors?.[0] || "");
+      setSelectedColor(getDefaultProductColor(storedProduct?.colors));
       setImageFailed(false);
     }
-  }, [product?.image]);
+  }, [product?.id, product?.image, storedProduct?.colors]);
 
   useEffect(() => {
     if (!product || !appliedCoupon) return;

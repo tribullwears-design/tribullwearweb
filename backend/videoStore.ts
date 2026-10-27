@@ -4,6 +4,8 @@ import { getDatabase } from "./database.js";
 
 export const MAX_VIDEO_UPLOAD_BYTES = 100 * 1024 * 1024;
 const supportedVideoTypes = new Set(["video/mp4", "video/webm", "video/ogg"]);
+type VideoFileMetadata = { length: number; mimeType: string };
+const videoFileMetadataCache = new Map<string, VideoFileMetadata>();
 export type VideoDocument = { id: string; title: string; url: string; storageId?: string; mimeType?: string; thumbnail?: string; category?: string; isActive: boolean; createdAt: string; updatedAt: string };
 export type UploadedVideoResult = { video: VideoDocument; replaced: boolean; cleanupWarning?: string };
 type VideoByteRange = { start: number; end: number } | { unsatisfiable: true } | null;
@@ -40,6 +42,14 @@ export function validateVideoUpload(file: { mimeType: unknown; size: unknown }) 
 }
 function fileObjectId(value: string) {
   return ObjectId.isValid(value) ? new ObjectId(value) : null;
+}
+function cacheVideoFileMetadata(storageId: string, metadata: VideoFileMetadata) {
+  videoFileMetadataCache.delete(storageId);
+  videoFileMetadataCache.set(storageId, metadata);
+  if (videoFileMetadataCache.size > 32) {
+    const oldestStorageId = videoFileMetadataCache.keys().next().value;
+    if (oldestStorageId) videoFileMetadataCache.delete(oldestStorageId);
+  }
 }
 async function getBucket() { return new GridFSBucket(await getDatabase(), { bucketName: "video-files" }); }
 function validate(value: unknown): Omit<VideoDocument, "id" | "createdAt" | "updatedAt"> {
@@ -89,7 +99,6 @@ export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeTyp
     }
     throw error;
   }
-
   try {
     if (current) {
       const update = await collection.updateOne({ id: current.id }, { $set: video });
@@ -98,6 +107,7 @@ export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeTyp
       await collection.insertOne(video);
     }
   } catch (error) {
+    videoFileMetadataCache.delete(fileId.toHexString());
     try {
       await bucket.delete(fileId);
     } catch (cleanupError) {
@@ -105,6 +115,7 @@ export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeTyp
     }
     throw error;
   }
+  cacheVideoFileMetadata(fileId.toHexString(), { length: bytes.length, mimeType: safeMimeType });
 
   let duplicateRecordsRemoved = true;
   if (current && existing.length > 1) {
@@ -125,6 +136,7 @@ export async function createUploadedVideo(title: unknown, bytes: Buffer, mimeTyp
     if (!oldVideo.storageId || oldVideo.storageId === video.storageId) continue;
     const oldFileId = fileObjectId(oldVideo.storageId);
     if (!oldFileId) continue;
+    videoFileMetadataCache.delete(oldVideo.storageId);
     try {
       await bucket.delete(oldFileId);
     } catch (error) {
@@ -157,6 +169,7 @@ export async function deleteVideo(id: string) {
   const video = await collection.findOne({ id });
   if (!video) return false;
   if (video.storageId) {
+    videoFileMetadataCache.delete(video.storageId);
     const objectId = fileObjectId(video.storageId);
     if (objectId) await (await getBucket()).delete(objectId).catch(() => undefined);
   }
@@ -167,30 +180,35 @@ export async function streamVideoFile(storageId: string, res: import("express").
   const objectId = fileObjectId(storageId);
   if (!objectId) return false;
   const bucket = await getBucket();
-  const files = await bucket.find({ _id: objectId }).toArray();
-  if (!files[0]) return false;
-  const metadata = files[0].metadata as { mimeType?: string } | undefined;
-  const file = files[0];
-  const range = parseVideoByteRange(rangeHeader, file.length);
-  res.setHeader("Content-Type", metadata?.mimeType || "application/octet-stream");
+  let fileMetadata = videoFileMetadataCache.get(storageId);
+  if (!fileMetadata) {
+    const files = await bucket.find({ _id: objectId }).toArray();
+    const file = files[0];
+    if (!file) return false;
+    const metadata = file.metadata as { mimeType?: string } | undefined;
+    fileMetadata = { length: file.length, mimeType: metadata?.mimeType || "application/octet-stream" };
+    cacheVideoFileMetadata(storageId, fileMetadata);
+  }
+  const range = parseVideoByteRange(rangeHeader, fileMetadata.length);
+  res.setHeader("Content-Type", fileMetadata.mimeType);
   res.setHeader("Accept-Ranges", "bytes");
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
 
   if (range && "unsatisfiable" in range) {
-    res.setHeader("Content-Range", `bytes */${file.length}`);
+    res.setHeader("Content-Range", `bytes */${fileMetadata.length}`);
     res.status(416).end();
     return true;
   }
 
   if (range) {
     res.status(206);
-    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${file.length}`);
+    res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${fileMetadata.length}`);
     res.setHeader("Content-Length", String(range.end - range.start + 1));
     bucket.openDownloadStream(objectId, { start: range.start, end: range.end + 1 }).pipe(res);
     return true;
   }
 
-  res.setHeader("Content-Length", String(file.length));
+  res.setHeader("Content-Length", String(fileMetadata.length));
   bucket.openDownloadStream(objectId).pipe(res);
   return true;
 }

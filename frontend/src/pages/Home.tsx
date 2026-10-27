@@ -13,6 +13,7 @@ import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from
 import type { StorefrontProduct } from "../lib/products";
 import { getCachedCategoryBanner, loadCategoryBanner } from "../lib/categoryBanners";
 import { featureImagesUpdatedEvent, getCachedFeatureImages, loadFeatureImages } from "../lib/featureImages";
+import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
 const brandAssets = {
@@ -98,6 +99,7 @@ export default function Home() {
   const [homeVideos, setHomeVideos] = useState<HomeVideo[]>(getCachedHomeVideos);
   const [videosLoading, setVideosLoading] = useState(() => !hasCachedHomeVideos());
   const [videosError, setVideosError] = useState("");
+  const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
   const [homeBanner, setHomeBanner] = useState(() => getCachedCategoryBanner("home"));
   const [featureImages, setFeatureImages] = useState(getCachedFeatureImages);
@@ -187,6 +189,16 @@ export default function Home() {
     }).catch((error: unknown) => {
       if (active) setVideosError(error instanceof Error ? error.message : "Videos could not be loaded.");
     }).finally(() => { if (active) setVideosLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void fetchPublicReviews().then((reviews) => {
+      if (active) setSubmittedReviews(reviews);
+    }).catch((error: unknown) => {
+      console.error("Could not load customer reviews for the storefront.", error);
+    });
     return () => { active = false; };
   }, []);
 
@@ -314,18 +326,24 @@ export default function Home() {
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));
-  const customerReviews = [
-      { customerName: "Arun Kumar", comment: "Good product!" },
-      { customerName: "Priya S", comment: "Nice product!" },
-      { customerName: "Karthik R", comment: "Love the fit!" },
-      { customerName: "Nisha M", comment: "Great quality!" },
-  ].map((review, index) => {
-    const product = eligibleProducts[index];
-    return {
+  const customerReviews = submittedReviews.length
+    ? submittedReviews.map((review, index) => {
+      const product = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
+      return {
+        ...review,
+        productImage: review.photoUrl || product?.image || getShowcaseProductImage(index),
+      };
+    })
+    : [
+      { id: "sample-arun", customerName: "Arun Kumar", productName: "TRIBULL apparel", rating: 5, comment: "Good product!" },
+      { id: "sample-priya", customerName: "Priya S", productName: "TRIBULL apparel", rating: 5, comment: "Nice product!" },
+      { id: "sample-karthik", customerName: "Karthik R", productName: "TRIBULL apparel", rating: 5, comment: "Love the fit!" },
+      { id: "sample-nisha", customerName: "Nisha M", productName: "TRIBULL apparel", rating: 5, comment: "Great quality!" },
+    ].map((review, index) => ({
       ...review,
-      productImage: product?.image || getShowcaseProductImage(index),
-    };
-  });
+      productImage: eligibleProducts[index]?.image || getShowcaseProductImage(index),
+    }));
+  const reviewPageCount = Math.ceil(customerReviews.length / 2);
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
@@ -427,7 +445,7 @@ export default function Home() {
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" decoding="async" />
+              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" loading="lazy" decoding="async" />
             </Reveal>
             <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
@@ -435,7 +453,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" decoding="async" />
+              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" loading="lazy" decoding="async" />
             </Reveal>
           </div>
         </div>
@@ -474,14 +492,15 @@ export default function Home() {
               {customerReviews.map((review, index) => (
                 <article
                   className={cls("customer-review-card", Math.floor(index / 2) !== customerReviewPage ? "customer-review-card--mobile-hidden" : null)}
-                  key={`${review.customerName}-${index}`}
+                  key={review.id}
                 >
-                  <img className="customer-review-card__image" src={review.productImage} alt="" loading="lazy" decoding="async" />
+                  <img className="customer-review-card__image" src={review.productImage} alt={`${review.productName} review`} loading="lazy" decoding="async" />
                   <div className="customer-review-card__content">
                     <h3>{review.customerName}</h3>
-                    <div className="customer-review-card__stars" aria-label="5 out of 5 stars">
-                      {Array.from({ length: 5 }, (_, index) => <Star key={index} size={16} fill="currentColor" aria-hidden="true" />)}
+                    <div className="customer-review-card__stars" aria-label={`${review.rating} out of 5 stars`}>
+                      {Array.from({ length: 5 }, (_, index) => <Star key={index} size={16} fill={index < review.rating ? "currentColor" : "none"} aria-hidden="true" />)}
                     </div>
+                    <p className="customer-review-card__product">{review.productName}</p>
                     <p className="customer-review-card__comment">“{review.comment}”</p>
                   </div>
                 </article>
@@ -501,8 +520,8 @@ export default function Home() {
                 className="customer-reviews__arrow"
                 type="button"
                 aria-label="Next customer reviews"
-                disabled={customerReviewPage >= Math.ceil(customerReviews.length / 2) - 1}
-                onClick={() => setCustomerReviewPage((page) => Math.min(Math.ceil(customerReviews.length / 2) - 1, page + 1))}
+                disabled={customerReviewPage >= reviewPageCount - 1}
+                onClick={() => setCustomerReviewPage((page) => Math.min(reviewPageCount - 1, page + 1))}
               >
                 <ArrowRight size={18} strokeWidth={1.5} />
               </button>
@@ -551,7 +570,7 @@ export default function Home() {
                       loop
                       muted
                       playsInline
-                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestylePreloadEnd ? "none" : "metadata"}
+                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestylePreloadEnd ? "none" : index === lifestyleIndex ? "auto" : "metadata"}
                       aria-label={`${video.title} lifestyle video`}
                     />
                   </div>

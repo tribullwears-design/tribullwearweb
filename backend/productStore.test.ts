@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { adjustProductInventory, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
+import { adjustProductInventory, createProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -157,6 +157,27 @@ describe("validateInventoryAdjustment", () => {
       expect(() => validateInventoryAdjustment(adjustment)).toThrow("Inventory adjustment must be a non-zero whole number");
     },
   );
+});
+
+describe("createProduct", () => {
+  const validProduct = {
+    name: "Test T-shirt",
+    description: "",
+    price: 1000,
+    compareAt: null,
+    image: "/test-shirt.jpg",
+    stock: 1,
+    sizes: ["M"],
+    colors: [],
+    status: "Active" as const,
+    mainCategoryId: "shirts",
+    subcategoryId: "classic",
+  };
+
+  it.each([{ sizes: [] }, { sizes: ["", "  "] }])("requires at least one non-empty size", async ({ sizes }) => {
+    await expect(createProduct({ ...validProduct, sizes })).rejects.toThrow("At least one product size is required");
+    expect(mocks.getDatabase).not.toHaveBeenCalled();
+  });
 });
 
 describe("adjustProductInventory", () => {

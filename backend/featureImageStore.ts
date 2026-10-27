@@ -10,6 +10,23 @@ const collections: Record<FeatureImageType, string> = {
   customize: "customize-image",
   corporate: "corporate-image",
 };
+const featureImageCache = new Map<FeatureImageType, { mimeType: string; data: Buffer }>();
+
+function cacheFeatureImage(type: FeatureImageType, value: string) {
+  if (typeof value !== "string") {
+    featureImageCache.delete(type);
+    return;
+  }
+  const match = value.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match?.[1] || !match[2]) {
+    featureImageCache.delete(type);
+    return;
+  }
+  featureImageCache.set(type, {
+    mimeType: `image/${match[1].toLowerCase()}`,
+    data: Buffer.from(match[2], "base64"),
+  });
+}
 
 export function isFeatureImageType(value: string): value is FeatureImageType {
   return featureImageTypes.some((type) => type === value);
@@ -42,6 +59,8 @@ export async function listFeatureImages(): Promise<FeatureImages> {
 }
 
 export async function getFeatureImage(type: FeatureImageType) {
+  const cached = featureImageCache.get(type);
+  if (cached) return cached;
   const db = await getDatabase();
   const document = await db.collection<{ _id: string; image: string }>(collections[type]).findOne(
     { _id: "current" },
@@ -49,9 +68,8 @@ export async function getFeatureImage(type: FeatureImageType) {
   );
   if (!document) return null;
 
-  const match = document.image.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
-  if (!match?.[1] || !match[2]) throw new Error(`Stored ${type} image is invalid`);
-  return { mimeType: `image/${match[1].toLowerCase()}`, data: Buffer.from(match[2], "base64") };
+  cacheFeatureImage(type, document.image);
+  return featureImageCache.get(type) || null;
 }
 
 export async function saveFeatureImage(type: FeatureImageType, value: unknown) {
@@ -63,5 +81,6 @@ export async function saveFeatureImage(type: FeatureImageType, value: unknown) {
     { $set: { image, updatedAt: now } },
     { upsert: true },
   );
+  cacheFeatureImage(type, image);
   return { type, image: `/api/storefront/feature-images/${type}?v=${encodeURIComponent(now)}` };
 }

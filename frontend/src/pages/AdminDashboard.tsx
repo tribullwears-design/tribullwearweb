@@ -22,6 +22,7 @@ import { filterOrders, getDashboardMetrics, paginate, type DashboardMetrics, typ
 import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCategory, deleteSubcategory as deleteSubcategoryApi, loadCategoryHierarchy, publishCategoryHierarchy, saveCategoryHierarchy, updateCategory, updateCategoryVisibility, updateSubcategory, updateSubcategoryVisibility, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
+import { optimizeImageForUpload } from "../lib/optimizeImage";
 import { defaultGeneralSettings, defaultSocialSettings, defaultMovingNavbarSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminMovingNavbarSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminMovingNavbarSettings, saveAdminSocialSettings, type GeneralSettings, type MovingNavbarSettings, type SocialSettings } from "../lib/storefrontSettings";
 import { saveSiteLogo } from "../lib/siteLogo";
 import { fetchProductTypeCategories, saveProductTypeCategories as persistProductTypeCategories } from "../lib/productTypeCategories";
@@ -546,8 +547,8 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Product type</span><select required value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
-    <label><span>Sizes</span><input value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
-    <label><span>Colors</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
+    <label><span>Sizes</span><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
+    <label><span>Colors (optional; first color should match the image)</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
     <label className="admin-toggle-label"><span>New Arrival</span><input type="checkbox" checked={productForm.newArrival} onChange={(event) => setProductForm((current) => ({ ...current, newArrival: event.target.checked }))} /><strong>{productForm.newArrival ? "Enabled" : "Disabled"}</strong></label>
     <label className="admin-toggle-label"><span>Best Selling</span><input type="checkbox" checked={productForm.bestSelling} onChange={(event) => setProductForm((current) => ({ ...current, bestSelling: event.target.checked }))} /><strong>{productForm.bestSelling ? "Enabled" : "Disabled"}</strong></label>
     <label><span>Main Category</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category (optional)</option>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
@@ -620,6 +621,7 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
   const [drafts, setDrafts] = useState<Record<FeatureImageType, string | null>>({ customize: null, corporate: null });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<FeatureImageType | null>(null);
+  const [optimizing, setOptimizing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -635,7 +637,7 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
     return () => { active = false; };
   }, []);
 
-  const selectImage = (type: FeatureImageType, event: React.ChangeEvent<HTMLInputElement>) => {
+  const selectImage = async (type: FeatureImageType, event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     setError("");
@@ -649,12 +651,15 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
       setError("Image must be smaller than 6 MB.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") setDrafts((current) => ({ ...current, [type]: reader.result as string }));
-    };
-    reader.onerror = () => setError("Could not read the selected image. Please try again.");
-    reader.readAsDataURL(file);
+    setOptimizing(true);
+    try {
+      const optimized = await optimizeImageForUpload(file);
+      setDrafts((current) => ({ ...current, [type]: optimized }));
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : "Unable to optimize the selected image.");
+    } finally {
+      setOptimizing(false);
+    }
   };
 
   const save = async () => {
@@ -677,13 +682,13 @@ function HomeFeatureImageManagement({ type, canEdit }: { type: FeatureImageType;
 
   const label = type === "customize" ? "Customize" : "Corporate";
   return <AdminPanel title={`${label} Image`}>
-    <p className="admin-feature-image-help">Upload the image shown in the {label} section on the homepage.</p>
+    <p className="admin-feature-image-help">Upload the image shown in the {label} section on the homepage. Images are resized and compressed for faster loading.</p>
     {loading ? <p>Loading homepage images...</p> : <div className="admin-feature-image-grid">
       <div className="admin-feature-image-card">
         <strong>{label} image</strong>
         {drafts[type] || images[type] ? <img src={drafts[type] || images[type] || ""} alt={`${label} homepage preview`} /> : <div className="admin-feature-image-empty">No image uploaded</div>}
-        <label className="admin-secondary-button">Choose File<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null} onChange={(event) => selectImage(type, event)} /></label>
-        <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null} onClick={() => void save()}>{saving === type ? "Uploading..." : "Upload Image"}</button>
+        <label className="admin-secondary-button">{optimizing ? "Optimizing..." : "Choose File"}<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={!canEdit || saving !== null || optimizing} onChange={(event) => selectImage(type, event)} /></label>
+        <button className="admin-primary-button" type="button" disabled={!canEdit || !drafts[type] || saving !== null || optimizing} onClick={() => void save()}>{saving === type ? "Uploading..." : "Upload Image"}</button>
       </div>
     </div>}
     {error && <p className="admin-image-error" role="alert">{error}</p>}
@@ -1151,7 +1156,7 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
     if (imageInputRef.current) imageInputRef.current.value = "";
   };
 
-  const changeImage = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const changeImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
@@ -1165,19 +1170,14 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
       return;
     }
     setReadingImage(true);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setImage(reader.result);
-        setError("");
-      }
+    try {
+      setImage(await optimizeImageForUpload(file));
+      setError("");
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : "Unable to optimize the selected banner image.");
+    } finally {
       setReadingImage(false);
-    };
-    reader.onerror = () => {
-      setReadingImage(false);
-      setError("Unable to read the selected banner image.");
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1237,9 +1237,9 @@ function BannerManagement({ categories, categoriesLoading }: { categories: Categ
       <label><span>Banner subtitle (optional)</span><input maxLength={240} value={subtitle} disabled={saving} onChange={(event) => setSubtitle(event.target.value)} /></label>
       <label><span>Banner link (optional)</span><input maxLength={500} placeholder="/products or https://..." value={link} disabled={saving} onChange={(event) => setLink(event.target.value)} /></label>
       <div className="admin-banner-image-control">
-        <span>Banner Image</span>
+        <span>Banner Image · resized and compressed for faster loading</span>
         <div className="admin-banner-image-preview">{image ? <img src={image} alt="Banner preview" /> : <span>No banner selected</span>}</div>
-        <label className="admin-primary-button">{readingImage ? "Reading Image..." : image ? "Change Image" : "Upload Image"}<input ref={imageInputRef} className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={saving || readingImage} onChange={changeImage} /></label>
+        <label className="admin-primary-button">{readingImage ? "Optimizing Image..." : image ? "Change Image" : "Upload Image"}<input ref={imageInputRef} className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={saving || readingImage} onChange={changeImage} /></label>
       </div>
       <div className="admin-banner-form-actions">
         <button className="admin-primary-button" type="submit" disabled={saving || readingImage || categoriesLoading || !categories.length}>{saving ? "Saving..." : "Save Banner"}</button>
@@ -1783,6 +1783,11 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const navigate = (nextScreen: string) => { setScreen(nextScreen); setProfileOpen(false); setLocation(adminRoutes[nextScreen] || "/admin26"); setMobileOpen(false); setSelectedProduct(null); setSelectedOrder(null); };
   const saveProduct = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const sizes = productForm.sizes.split(",").map((size) => size.trim()).filter(Boolean);
+    if (!sizes.length) {
+      setSavedNotice("At least one product size is required.");
+      return;
+    }
     const price = Number(productForm.price);
     if (!productForm.price.trim() || !Number.isFinite(price) || price < 0) {
       setSavedNotice("Price must be a valid number greater than or equal to 0.");
@@ -1803,7 +1808,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           image: productForm.image,
           productType: productForm.productType,
           stock: productForm.stock ? Number(productForm.stock) : 0,
-          sizes: productForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
+          sizes,
           colors: productForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
           status: productForm.status,
           newArrival: productForm.newArrival,
@@ -1976,6 +1981,11 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const saveEditedProduct = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingProduct || productUpdateInFlight.current) return;
+    const sizes = editingProductForm.sizes.split(",").map((size) => size.trim()).filter(Boolean);
+    if (!sizes.length) {
+      setEditProductError("At least one product size is required.");
+      return;
+    }
     const price = Number(editingProductForm.price);
     const stock = Number(editingProductForm.stock);
     const compareAt = editingProductForm.compareAt.trim() ? Number(editingProductForm.compareAt) : null;
@@ -2010,7 +2020,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           image: editingProductForm.image,
           productType: editingProductForm.productType,
           stock,
-          sizes: editingProductForm.sizes.split(",").map((size) => size.trim()).filter(Boolean),
+          sizes,
           colors: editingProductForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
           status: editingProductForm.status,
           newArrival: editingProductForm.newArrival,

@@ -116,6 +116,7 @@ function validateProduct(input: ProductInput, requireImage = true, allowUncatego
   if (!Array.isArray(input.sizes) || !input.sizes.every((size) => typeof size === "string") || !Array.isArray(input.colors) || !input.colors.every((color) => typeof color === "string")) {
     throw new Error("Product sizes and colors must be lists of text values");
   }
+  if (!input.sizes.length || input.sizes.some((size) => !size.trim())) throw new Error("At least one product size is required");
 }
 
 function isProductInput(value: unknown): value is Partial<ProductInput> {

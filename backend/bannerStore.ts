@@ -26,6 +26,42 @@ const existingHeroBanners: Record<string, string> = {
 
 let indexPromise: Promise<string> | undefined;
 let seedPromise: Promise<void> | undefined;
+const bannerImageCache = new Map<string, { mimeType: string; data: Buffer }>();
+const bannerDocumentCache = new Map<string, BannerDocument>();
+
+function cacheBannerDocument(banner: BannerDocument) {
+  bannerDocumentCache.delete(banner.categoryId);
+  bannerDocumentCache.set(banner.categoryId, banner);
+  if (bannerDocumentCache.size > 2) {
+    const oldestCategoryId = bannerDocumentCache.keys().next().value;
+    if (oldestCategoryId) {
+      bannerDocumentCache.delete(oldestCategoryId);
+      bannerImageCache.delete(oldestCategoryId);
+    }
+  }
+}
+
+function clearBannerCache(categoryId: string) {
+  bannerDocumentCache.delete(categoryId);
+  bannerImageCache.delete(categoryId);
+}
+
+function cacheBannerImage(categoryId: string, value: string) {
+  const match = value.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match?.[1] || !match[2]) {
+    bannerImageCache.delete(categoryId);
+    return;
+  }
+  bannerImageCache.delete(categoryId);
+  bannerImageCache.set(categoryId, {
+    mimeType: `image/${match[1].toLowerCase()}`,
+    data: Buffer.from(match[2], "base64"),
+  });
+  if (bannerImageCache.size > 4) {
+    const oldestCategoryId = bannerImageCache.keys().next().value;
+    if (oldestCategoryId) bannerImageCache.delete(oldestCategoryId);
+  }
+}
 
 async function getCollection(): Promise<Collection<StoredBanner>> {
   const db = await getDatabase();
@@ -109,14 +145,19 @@ export async function listBanners() {
 }
 
 export async function getBanner(categoryId: string) {
+  const cached = bannerDocumentCache.get(categoryId.trim().toLowerCase());
+  if (cached) return cached;
   const category = await resolveCategory(categoryId);
+  const cachedCategory = bannerDocumentCache.get(category.value);
+  if (cachedCategory) return { ...cachedCategory, categoryName: category.label };
   const collection = await getCollection();
   await seedExistingHeroBanners(collection);
   const document = await collection.findOne({ categoryId: category.value });
-  return document ? {
-    ...toBanner(document),
-    categoryName: category.label,
-  } : null;
+  if (!document) return null;
+  cacheBannerImage(category.value, document.image);
+  const banner = { ...toBanner(document), categoryName: category.label };
+  cacheBannerDocument(banner);
+  return banner;
 }
 
 export async function getStorefrontBanner(categoryId: string) {
@@ -127,15 +168,17 @@ export async function getStorefrontBanner(categoryId: string) {
 }
 
 export async function getBannerImage(categoryId: string) {
+  const cached = bannerImageCache.get(categoryId.trim().toLowerCase());
+  if (cached) return cached;
   const category = await resolveCategory(categoryId);
   const collection = await getCollection();
   await seedExistingHeroBanners(collection);
   const document = await collection.findOne({ categoryId: category.value });
   if (!document) return null;
 
-  const match = document.image.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
-  if (!match?.[1] || !match[2]) return null;
-  return { mimeType: `image/${match[1].toLowerCase()}`, data: Buffer.from(match[2], "base64") };
+  cacheBannerImage(category.value, document.image);
+  cacheBannerDocument({ ...toBanner(document), categoryName: category.label });
+  return bannerImageCache.get(category.value) || null;
 }
 
 function normalizeBannerFields(value: unknown) {
@@ -160,7 +203,11 @@ export async function saveBanner(categoryId: string, imageInput: unknown, fields
     { upsert: true, returnDocument: "after" },
   );
   if (!document) throw new Error("Banner could not be saved");
-  return toBanner(document);
+  clearBannerCache(category.value);
+  cacheBannerImage(category.value, image);
+  const banner = toBanner(document);
+  cacheBannerDocument(banner);
+  return banner;
 }
 
 export async function updateBanner(id: string, categoryId: string, imageInput: unknown, fields?: unknown) {
@@ -183,7 +230,12 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
       );
       await collection.deleteOne({ _id: bannerId });
       if (!updated) throw new Error("Banner could not be updated");
-      return toBanner(updated);
+      clearBannerCache(existing.categoryId);
+      clearBannerCache(category.value);
+      cacheBannerImage(category.value, image);
+      const banner = toBanner(updated);
+      cacheBannerDocument(banner);
+      return banner;
     }
   }
 
@@ -193,11 +245,20 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
     { returnDocument: "after" },
   );
   if (!updated) throw new Error("Banner not found");
-  return toBanner(updated);
+  if (existing.categoryId !== category.value) clearBannerCache(existing.categoryId);
+  clearBannerCache(category.value);
+  cacheBannerImage(category.value, image);
+  const banner = toBanner(updated);
+  cacheBannerDocument(banner);
+  return banner;
 }
 
 export async function deleteBanner(id: string) {
   if (!ObjectId.isValid(id)) throw new Error("Banner not found");
   const collection = await getCollection();
-  return (await collection.deleteOne({ _id: new ObjectId(id) })).deletedCount > 0;
+  const banner = await collection.findOne({ _id: new ObjectId(id) });
+  if (!banner) return false;
+  const deleted = (await collection.deleteOne({ _id: new ObjectId(id) })).deletedCount > 0;
+  if (deleted) clearBannerCache(banner.categoryId);
+  return deleted;
 }
