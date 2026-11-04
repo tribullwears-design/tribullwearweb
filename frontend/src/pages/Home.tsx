@@ -75,7 +75,6 @@ export default function Home() {
   const mainCategories = getStorefrontHomeCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
   const [homeVideos, setHomeVideos] = useState<HomeVideo[]>([]);
-  const [videosLoading, setVideosLoading] = useState(true);
   const [videosError, setVideosError] = useState("");
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
@@ -85,7 +84,6 @@ export default function Home() {
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
   const [featureImages, setFeatureImages] = useState<FeatureImages>({ customize: null, corporate: null });
-  const [featureImagesLoaded, setFeatureImagesLoaded] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleSectionRef = useRef<HTMLElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
@@ -110,11 +108,9 @@ export default function Home() {
         const images = await loadFeatureImages(refresh);
         if (active) {
           setFeatureImages(images);
-          setFeatureImagesLoaded(true);
         }
       } catch (error: unknown) {
         console.error("Could not load homepage feature images.", error);
-        if (active) setFeatureImagesLoaded(true);
       } finally {
         loadingImages = false;
       }
@@ -170,7 +166,7 @@ export default function Home() {
       if (active) setHomeVideos(savedVideos);
     }).catch((error: unknown) => {
       if (active) setVideosError(error instanceof Error ? error.message : "Videos could not be loaded.");
-    }).finally(() => { if (active) setVideosLoading(false); });
+    });
     return () => { active = false; };
   }, []);
 
@@ -347,7 +343,7 @@ export default function Home() {
         </div>
       </nav> : fetchedHierarchy.error
         ? <div className="category-nav__message" role="alert"><span>Categories could not be loaded.</span><button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
-        : <p className="category-nav__message" role="status">{hierarchy.loaded ? "No visible categories are available right now." : "Loading categories..."}</p>}
+          : hierarchy.loaded ? null : <p className="category-nav__message" role="status" />}
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
@@ -441,7 +437,7 @@ export default function Home() {
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" loading="lazy" decoding="async" style={{ visibility: featureImagesLoaded ? "visible" : "hidden" }} />
+              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" loading="lazy" decoding="async" />
             </Reveal>
             <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
@@ -449,7 +445,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" loading="lazy" decoding="async" style={{ visibility: featureImagesLoaded ? "visible" : "hidden" }} />
+              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" loading="lazy" decoding="async" />
             </Reveal>
           </div>
         </div>
@@ -470,7 +466,7 @@ export default function Home() {
                 <a key={item.label} href="#footer" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
                   <div className="essential-card__visual">
                     <div className="essential-card__backdrop" aria-hidden="true" />
-                    <img src={image} alt={item.alt} decoding="async" />
+                    <img src={image} alt={item.alt} loading="lazy" decoding="async" />
                   </div>
                   <span>{item.label}</span>
                 </a>
@@ -500,11 +496,11 @@ export default function Home() {
                     <p className="customer-review-card__comment">“{review.comment}”</p>
                   </div>
                 </article>
-              )) : (
+              )              ) : reviewsLoaded ? (
                 <p className="customer-reviews__status" role={reviewsError ? "alert" : "status"}>
-                  {reviewsLoaded ? reviewsError || "No customer reviews yet." : "Loading customer reviews..."}
+                  {reviewsError || "No customer reviews yet."}
                 </p>
-              )}
+              ) : null}
             </div>
             {reviewPageCount > 1 && <div className="customer-reviews__controls" aria-label="Customer review pages">
               <button
@@ -590,9 +586,8 @@ export default function Home() {
               <ArrowRight size={18} strokeWidth={1.5} />
             </button>
           </div>
-          {videosLoading && <p className="lifestyle-section__message" role="status">Loading videos...</p>}
-          {!videosLoading && videosError && <p className="lifestyle-section__message" role="alert">{videosError}</p>}
-          {!videosLoading && !videosError && lifestyleSlides.length === 0 && <p className="lifestyle-section__message" role="status">No active videos are available right now.</p>}
+          {videosError && <p className="lifestyle-section__message" role="alert">{videosError}</p>}
+          {!videosError && lifestyleSlides.length === 0 && <p className="lifestyle-section__message" role="status">No active videos are available right now.</p>}
         </section>
       </main>
 

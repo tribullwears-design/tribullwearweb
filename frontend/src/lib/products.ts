@@ -97,10 +97,51 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
   };
 }
 const PRODUCT_CACHE_TTL = 60_000;
+const PRODUCT_CACHE_MAX_AGE = 5 * 60_000;
+const PRODUCT_CACHE_STORAGE_KEY = "tribull-storefront-products";
 
 let cachedProducts: StorefrontProduct[] | undefined;
 let cachedProductsAt = 0;
 let productsRequest: Promise<StorefrontProduct[]> | undefined;
+
+function isStoredProduct(value: unknown): value is StorefrontProduct {
+  if (!value || typeof value !== "object") return false;
+  const product = value as Partial<StorefrontProduct>;
+  return typeof product.id === "string"
+    && typeof product.name === "string"
+    && typeof product.image === "string"
+    && typeof product.price === "number"
+    && typeof product.category === "string";
+}
+
+function readStoredProducts() {
+  try {
+    const stored = window.localStorage.getItem(PRODUCT_CACHE_STORAGE_KEY);
+    if (!stored) return;
+    const cache: unknown = JSON.parse(stored);
+    if (!cache || typeof cache !== "object") return;
+    const entry = cache as { updatedAt?: unknown; products?: unknown };
+    if (typeof entry.updatedAt !== "number"
+      || Date.now() - entry.updatedAt > PRODUCT_CACHE_MAX_AGE
+      || !Array.isArray(entry.products)
+      || !entry.products.every(isStoredProduct)) return;
+    cachedProducts = entry.products;
+    cachedProductsAt = entry.updatedAt;
+  } catch (error) {
+    console.error("Could not read the cached storefront products.", error);
+  }
+}
+
+function writeStoredProducts(products: StorefrontProduct[]) {
+  try {
+    window.localStorage.setItem(PRODUCT_CACHE_STORAGE_KEY, JSON.stringify({
+      updatedAt: cachedProductsAt,
+      products,
+    }));
+  } catch (error) {
+    console.error("Could not cache the storefront products.", error);
+  }
+}
 
 async function request<T>(path: string, method: "GET" | "POST" | "PATCH", body?: unknown): Promise<T> {
   const response = await apiFetch(path, {
@@ -123,6 +164,7 @@ function requestProducts() {
       .then((products) => {
         cachedProducts = products;
         cachedProductsAt = Date.now();
+        writeStoredProducts(products);
         return products;
       });
     const sharedRequest = requestPromise.finally(() => {
@@ -136,12 +178,22 @@ function requestProducts() {
 function invalidateProductCache() {
   cachedProducts = undefined;
   cachedProductsAt = 0;
+  try {
+    window.localStorage.removeItem(PRODUCT_CACHE_STORAGE_KEY);
+  } catch (error) {
+    console.error("Could not clear the cached storefront products.", error);
+  }
 }
 
 export function getCachedProducts() {
+  if (cachedProducts && Date.now() - cachedProductsAt > PRODUCT_CACHE_MAX_AGE) {
+    cachedProducts = undefined;
+    cachedProductsAt = 0;
+  }
+  if (typeof window !== "undefined" && !cachedProducts) readStoredProducts();
   return cachedProducts && Date.now() - cachedProductsAt <= PRODUCT_CACHE_TTL
     ? cachedProducts
-    : [];
+    : cachedProducts || [];
 }
 
 export async function fetchProducts(): Promise<StorefrontProduct[]> {

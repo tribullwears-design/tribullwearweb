@@ -1,7 +1,27 @@
-import { describe, expect, it } from "vitest";
-import { getProductIdentifier, mapApiProduct, productHref } from "./products";
+import { describe, expect, it, vi } from "vitest";
+import { getCachedProducts, getProductIdentifier, mapApiProduct, productHref } from "./products";
 
 describe("storefront product identifiers", () => {
+  it("uses the saved product cache for an immediate storefront render", () => {
+    const products = [{
+      id: "saved-product",
+      name: "Saved product",
+      image: "/product.png",
+      category: "products",
+      price: 599,
+      created: 0,
+      sold: 0,
+    }];
+    const getItem = vi.fn(() => JSON.stringify({ updatedAt: Date.now(), products }));
+    vi.stubGlobal("window", { localStorage: { getItem } });
+    try {
+      expect(getCachedProducts()).toEqual(products);
+      expect(getItem).toHaveBeenCalledWith("tribull-storefront-products");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("prefers the stable API id and supports legacy Mongo _id responses", () => {
     expect(getProductIdentifier({ id: "saved-product", _id: "legacy-id" })).toBe("saved-product");
     expect(getProductIdentifier({ _id: "legacy-id" })).toBe("legacy-id");
