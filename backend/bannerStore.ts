@@ -1,4 +1,5 @@
 import { ObjectId, type Collection } from "mongodb";
+import sharp from "sharp";
 import { listCategories } from "./categoryStore.js";
 import { getDatabase } from "./database.js";
 
@@ -16,6 +17,7 @@ export type BannerDocument = {
 };
 
 type StoredBanner = Omit<BannerDocument, "id">;
+type CachedBannerImage = { mimeType: string; data: Buffer };
 
 const existingHeroBanners: Record<string, string> = {
   cinema: "/products/hero.png",
@@ -26,7 +28,8 @@ const existingHeroBanners: Record<string, string> = {
 
 let indexPromise: Promise<string> | undefined;
 let seedPromise: Promise<void> | undefined;
-const bannerImageCache = new Map<string, { mimeType: string; data: Buffer }>();
+const bannerImageCache = new Map<string, CachedBannerImage>();
+const bannerImageOptimizationRequests = new Map<string, { source: CachedBannerImage; promise: Promise<CachedBannerImage> }>();
 const bannerDocumentCache = new Map<string, BannerDocument>();
 
 function cacheBannerDocument(banner: BannerDocument) {
@@ -44,9 +47,11 @@ function cacheBannerDocument(banner: BannerDocument) {
 function clearBannerCache(categoryId: string) {
   bannerDocumentCache.delete(categoryId);
   bannerImageCache.delete(categoryId);
+  bannerImageOptimizationRequests.delete(categoryId);
 }
 
 function cacheBannerImage(categoryId: string, value: string) {
+  bannerImageOptimizationRequests.delete(categoryId);
   const match = value.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
   if (!match?.[1] || !match[2]) {
     bannerImageCache.delete(categoryId);
@@ -59,8 +64,35 @@ function cacheBannerImage(categoryId: string, value: string) {
   });
   if (bannerImageCache.size > 4) {
     const oldestCategoryId = bannerImageCache.keys().next().value;
-    if (oldestCategoryId) bannerImageCache.delete(oldestCategoryId);
+    if (oldestCategoryId) {
+      bannerImageCache.delete(oldestCategoryId);
+      bannerImageOptimizationRequests.delete(oldestCategoryId);
+    }
   }
+}
+
+function optimizeBannerImage(categoryId: string, image: CachedBannerImage) {
+  if (image.mimeType === "image/webp") return Promise.resolve(image);
+  const pending = bannerImageOptimizationRequests.get(categoryId);
+  if (pending?.source === image) return pending.promise;
+
+  const promise = sharp(image.data, { limitInputPixels: 40_000_000 })
+    .rotate()
+    .resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82, effort: 3 })
+    .toBuffer()
+    .then((data) => {
+      const optimized = { mimeType: "image/webp", data };
+      if (bannerImageCache.get(categoryId) === image) bannerImageCache.set(categoryId, optimized);
+      return optimized;
+    })
+    .finally(() => {
+      if (bannerImageOptimizationRequests.get(categoryId)?.promise === promise) {
+        bannerImageOptimizationRequests.delete(categoryId);
+      }
+    });
+  bannerImageOptimizationRequests.set(categoryId, { source: image, promise });
+  return promise;
 }
 
 async function getCollection(): Promise<Collection<StoredBanner>> {
@@ -163,13 +195,14 @@ export async function getBanner(categoryId: string) {
 export async function getStorefrontBanner(categoryId: string) {
   const banner = await getBanner(categoryId);
   if (!banner || !banner.image.startsWith("data:image/")) return banner;
-  const imageUrl = `/api/banners/${encodeURIComponent(banner.categoryId)}/image?v=${encodeURIComponent(banner.updatedAt)}`;
+  const imageUrl = `/api/banners/${encodeURIComponent(banner.categoryId)}/image?v=${encodeURIComponent(banner.updatedAt)}&format=webp`;
   return { ...banner, image: imageUrl, imageUrl };
 }
 
 export async function getBannerImage(categoryId: string) {
-  const cached = bannerImageCache.get(categoryId.trim().toLowerCase());
-  if (cached) return cached;
+  const normalizedCategoryId = categoryId.trim().toLowerCase();
+  const cached = bannerImageCache.get(normalizedCategoryId);
+  if (cached) return optimizeBannerImage(normalizedCategoryId, cached);
   const category = await resolveCategory(categoryId);
   const collection = await getCollection();
   await seedExistingHeroBanners(collection);
@@ -178,7 +211,8 @@ export async function getBannerImage(categoryId: string) {
 
   cacheBannerImage(category.value, document.image);
   cacheBannerDocument({ ...toBanner(document), categoryName: category.label });
-  return bannerImageCache.get(category.value) || null;
+  const image = bannerImageCache.get(category.value);
+  return image ? optimizeBannerImage(category.value, image) : null;
 }
 
 function normalizeBannerFields(value: unknown) {

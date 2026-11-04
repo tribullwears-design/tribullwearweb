@@ -11,7 +11,7 @@ import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
-import { getCachedCategoryBanner, loadCategoryBanner } from "../lib/categoryBanners";
+import { loadCategoryBanner } from "../lib/categoryBanners";
 import { featureImagesUpdatedEvent, getCachedFeatureImages, loadFeatureImages } from "../lib/featureImages";
 import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
@@ -101,7 +101,10 @@ export default function Home() {
   const [videosError, setVideosError] = useState("");
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
-  const [homeBanner, setHomeBanner] = useState(() => getCachedCategoryBanner("home"));
+  const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
+  const [homeBannerReady, setHomeBannerReady] = useState(false);
+  const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
+  const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
   const [featureImages, setFeatureImages] = useState(getCachedFeatureImages);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleSectionRef = useRef<HTMLElement>(null);
@@ -249,9 +252,16 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     void loadCategoryBanner("home").then((banner) => {
-      if (active) setHomeBanner(banner);
+      if (active) {
+        setHomeBanner(banner);
+        setHomeBannerImageFailed(false);
+        setHomeBannerReady(true);
+      }
     }).catch((error: unknown) => {
       console.error("Homepage banner request failed.", error);
+      if (active) {
+        setHomeBannerReady(true);
+      }
     });
     return () => { active = false; };
   }, []);
@@ -370,9 +380,23 @@ export default function Home() {
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
-          <div className="hero__images">
+          <div className={`hero__images${homeBannerImageLoaded ? "" : " hero__images--loading"}`}>
             <div className="hero__image">
-              <img key={homeBanner?.image || brandAssets.hero} src={homeBanner?.image || brandAssets.hero} alt={homeBanner?.title || "Tribull collection"} fetchPriority="high" decoding="async" />
+              {homeBannerReady && <picture>
+                <source
+                  media="(max-width: 640px)"
+                  srcSet={homeBannerImageFailed ? brandAssets.hero : "/products/mobile-banner.webp"}
+                />
+                <img
+                  src={brandAssets.hero}
+                  alt={homeBanner?.title || "Tribull collection"}
+                  loading="eager"
+                  fetchPriority="high"
+                  decoding="async"
+                  onLoad={() => setHomeBannerImageLoaded(true)}
+                  onError={() => setHomeBannerImageFailed(true)}
+                />
+              </picture>}
             </div>
           </div>
           <div className="hero__wash" />
