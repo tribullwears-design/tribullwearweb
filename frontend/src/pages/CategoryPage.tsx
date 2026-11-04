@@ -11,6 +11,7 @@ import HeaderActions from "../components/HeaderActions";
 import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
+import { useRouteLoading } from "../contexts/RouteLoadingContext";
 import { useProductTypeCategories } from "../lib/productTypeCategories";
 
 export type CategoryProduct = {
@@ -236,11 +237,12 @@ function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string;
 }
 
 function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: string; entrySlug: string }) {
+  const setRouteLoading = useRouteLoading();
   const catalogTabs = useProductTypeCategories().filter((category) => category.isVisible);
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("oversized");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, [entrySlug]));
-  const [productsLoading, setProductsLoading] = useState(() => getCachedProducts().length === 0);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -257,18 +259,22 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 
   useEffect(() => {
     let active = true;
-    setStoredCatalog(getCachedCategoryProducts(categorySlug, [entrySlug]));
-    setProductsLoading(getCachedProducts().length === 0);
+    setStoredCatalog([]);
+    setProductsLoading(true);
     const loadProducts = () => fetchProducts()
       .then((products) => {
         if (active) {
           setStoredCatalog(getCachedCategoryProducts(categorySlug, [entrySlug]));
           setProductsLoading(false);
+          setRouteLoading(false);
         }
       })
       .catch((error: unknown) => {
         console.error("Category product request failed.", error);
-        if (active) setProductsLoading(false);
+        if (active) {
+          setProductsLoading(false);
+          setRouteLoading(false);
+        }
       });
     void loadProducts();
     window.addEventListener("tribull-products-updated", loadProducts);
@@ -278,7 +284,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
       window.removeEventListener("tribull-products-updated", loadProducts);
       window.removeEventListener("tribull-products-cache-updated", loadProducts);
     };
-  }, [categorySlug, entrySlug]);
+  }, [categorySlug, entrySlug, setRouteLoading]);
 
   useEffect(() => {
     const syncWishlist = () => {
@@ -360,7 +366,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
         </div>
       </div>
       <div className="category-page__grid category-page__grid--products">
-        {productsLoading ? <p className="header-empty-state">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item) => {
+        {productsLoading ? <p className="category-products-loading" role="status" aria-live="polite">Loading products...</p> : visibleCatalog.length === 0 ? <p className="header-empty-state">No products found</p> : visibleCatalog.map((item) => {
           const key = productKey(item);
           return <ProductCard key={item.id} item={item} isWishlisted={wishlist.includes(key)} onWishlist={(source) => { const adding = !wishlist.includes(key); if (adding) animateAddToWishlist(source); void toggleWishlistItem(key, adding).catch(() => undefined); }} onAddToCart={() => addToCart(item)} isAdded={addedProduct === key} />;
         })}
@@ -370,18 +376,20 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 }
 
 function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string; entrySlugs: string[] }) {
+  const setRouteLoading = useRouteLoading();
   const [products, setProducts] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, entrySlugs));
-  const [loading, setLoading] = useState(() => entrySlugs.length > 0 && getCachedProducts().length === 0);
+  const [loading, setLoading] = useState(entrySlugs.length > 0);
   const entrySlugsKey = entrySlugs.join("\u0000");
 
   useEffect(() => {
     const requestedSubcategories = entrySlugsKey ? entrySlugsKey.split("\u0000") : [];
     let active = true;
-    setProducts(getCachedCategoryProducts(categorySlug, requestedSubcategories));
-    setLoading(requestedSubcategories.length > 0 && getCachedProducts().length === 0);
+    setProducts([]);
+    setLoading(requestedSubcategories.length > 0);
     if (requestedSubcategories.length === 0) {
       setProducts([]);
       setLoading(false);
+      setRouteLoading(false);
       return () => { active = false; };
     }
 
@@ -391,11 +399,15 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
           if (active) {
             setProducts(getCachedCategoryProducts(categorySlug, requestedSubcategories));
             setLoading(false);
+            setRouteLoading(false);
           }
         })
         .catch((error: unknown) => {
           console.error("Category product request failed.", error);
-          if (active) setLoading(false);
+          if (active) {
+            setLoading(false);
+            setRouteLoading(false);
+          }
         });
     };
     loadProducts();
@@ -406,9 +418,9 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
       window.removeEventListener("tribull-products-updated", loadProducts);
       window.removeEventListener("tribull-products-cache-updated", loadProducts);
     };
-  }, [categorySlug, entrySlugsKey]);
+  }, [categorySlug, entrySlugsKey, setRouteLoading]);
 
-  if (loading) return <p className="header-empty-state">Loading products...</p>;
+  if (loading) return <p className="category-products-loading" role="status" aria-live="polite">Loading products...</p>;
   if (products.length === 0) return <p className="header-empty-state">No products found</p>;
 
   return (
@@ -423,6 +435,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
 }
 
 export default function CategoryPage() {
+  const setRouteLoading = useRouteLoading();
   const { slug = "cinema", lang } = useParams<{ slug?: string; lang?: string }>();
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
@@ -431,6 +444,11 @@ export default function CategoryPage() {
     normalizeCategorySlug(category.value) === routeSlug || normalizeCategorySlug(category.label) === routeSlug,
   )?.value || routeSlug);
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [normalizeCategorySlug(value), liveCategoryDefinition(normalizeCategorySlug(value), hierarchy)])) as Record<string, CategoryDefinition | undefined>;
+  const activeDefinition = activeDefinitions[categorySlug];
+  const selectedEntrySlug = normalizeCategorySlug(String(lang || ""));
+  const hasSelectedEntry = !lang || Boolean(activeDefinition?.subcategories.some((entry) =>
+    entry.slug === selectedEntrySlug || normalizeCategorySlug(entry.label) === selectedEntrySlug,
+  ));
   const categoryImage = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === categorySlug)?.image || "";
   const heroFallback = existingHeroBanners[categorySlug] || categoryImage;
   const [heroBanner, setHeroBanner] = useState<{ categorySlug: string; image: string } | null>(null);
@@ -447,10 +465,15 @@ export default function CategoryPage() {
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
 
+  useEffect(() => {
+    if (fetchedHierarchy.loaded && (!activeDefinition || !hasSelectedEntry)) setRouteLoading(false);
+    if (fetchedHierarchy.error) setRouteLoading(false);
+  }, [activeDefinition, fetchedHierarchy.error, fetchedHierarchy.loaded, hasSelectedEntry, setRouteLoading]);
+
   if (!hierarchy.loaded) {
     return fetchedHierarchy.error
-      ? <div className="p-8" role="alert">Categories could not be loaded. <button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
-      : <div className="p-8" role="status">Loading category...</div>;
+      ? <div className="category-route-loading" role="alert">Categories could not be loaded. <button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
+      : <div className="category-route-loading" role="status" aria-live="polite">Loading category...</div>;
   }
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 

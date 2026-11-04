@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SiteFooter from "./components/SiteFooter";
 import { SiteLogoProvider, useSiteLogo } from "./contexts/SiteLogoContext";
+import { RouteLoadingProvider } from "./contexts/RouteLoadingContext";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import { apiFetch } from "./lib/api";
@@ -148,6 +149,7 @@ function LegacyCategoryRedirect() {
 
 function App() {
   const [location] = useLocation();
+  const [routeLoading, setRouteLoading] = useState(() => location.startsWith("/category/") || location.startsWith("/product/"));
 
   useEffect(() => {
     void Promise.all([
@@ -181,6 +183,10 @@ function App() {
     root.style.scrollBehavior = previousScrollBehavior;
   }, [location]);
 
+  useLayoutEffect(() => {
+    setRouteLoading(location.startsWith("/category/") || location.startsWith("/product/"));
+  }, [location]);
+
   return (
     <ErrorBoundary>
       <ThemeProvider
@@ -190,10 +196,12 @@ function App() {
         <SiteLogoProvider>
           <TooltipProvider>
             <Toaster />
-            <Suspense fallback={null}>
-              <Router />
-              {!location.startsWith("/admin26") && location !== "/review" && location !== "/review-qr" && location !== "/qr-code" && <SiteFooter />}
-            </Suspense>
+            <RouteLoadingProvider value={setRouteLoading}>
+              <Suspense fallback={null}>
+                <Router />
+                {!routeLoading && !location.startsWith("/admin26") && location !== "/review" && location !== "/review-qr" && location !== "/qr-code" && <SiteFooter />}
+              </Suspense>
+            </RouteLoadingProvider>
           </TooltipProvider>
         </SiteLogoProvider>
       </ThemeProvider>

@@ -11,6 +11,7 @@ import { fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
+import { useRouteLoading } from "../contexts/RouteLoadingContext";
 import "./ProductDetailPage.css";
 
 interface ProductData extends OriginalPriceFields {
@@ -52,6 +53,7 @@ function getDefaultProductColor(colors: string[] = []) {
 
 export default function ProductDetailPage() {
   const logo = useSiteLogo();
+  const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
@@ -119,11 +121,13 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
+      setRouteLoading(true);
       setStoredProduct(null);
       setIsProductLoading(true);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setIsProductLoading(false);
+        setRouteLoading(false);
         return;
       }
       void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
@@ -170,6 +174,7 @@ export default function ProductDetailPage() {
           if (!active) return;
           if (!product) {
             setIsProductLoading(false);
+            setRouteLoading(false);
             return;
           }
           const nextProduct = {
@@ -187,12 +192,14 @@ export default function ProductDetailPage() {
           };
           setStoredProduct(nextProduct);
           setIsProductLoading(false);
+          setRouteLoading(false);
         })
         .catch((error: unknown) => {
           console.error("Product detail request failed.", error);
           if (active) {
             setProductLoadError(true);
             setIsProductLoading(false);
+            setRouteLoading(false);
           }
         });
     };
@@ -202,7 +209,7 @@ export default function ProductDetailPage() {
       active = false;
       window.removeEventListener("tribull-products-updated", loadStoredProduct);
     };
-  }, [id, productRetry]);
+  }, [id, productRetry, setRouteLoading]);
 
   useEffect(() => {
     let active = true;
