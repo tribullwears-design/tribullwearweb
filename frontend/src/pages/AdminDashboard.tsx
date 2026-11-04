@@ -23,6 +23,7 @@ import { createCategory, createSubcategory, defaultCategoryHierarchy, deleteCate
 import { deleteBanner, loadBanners, saveBanner, updateBanner, type CategoryBanner } from "../lib/categoryBanners";
 import { loadFeatureImages, saveFeatureImage, type FeatureImageType } from "../lib/featureImages";
 import { optimizeImageForUpload } from "../lib/optimizeImage";
+import { deleteProductSideImage, fetchAdminProductSideImages, MAX_PRODUCT_SIDE_IMAGES, saveProductSideImage } from "../lib/productSideImages";
 import { defaultGeneralSettings, defaultSocialSettings, defaultMovingNavbarSettings, fetchAdminFeaturedProductIds, fetchAdminGeneralSettings, fetchAdminMovingNavbarSettings, fetchAdminSocialSettings, saveAdminFeaturedProductIds, saveAdminGeneralSettings, saveAdminMovingNavbarSettings, saveAdminSocialSettings, type GeneralSettings, type MovingNavbarSettings, type SocialSettings } from "../lib/storefrontSettings";
 import { saveSiteLogo } from "../lib/siteLogo";
 import { fetchProductTypeCategories, saveProductTypeCategories as persistProductTypeCategories } from "../lib/productTypeCategories";
@@ -529,13 +530,104 @@ function MovingNavbarManagement({ canEdit }: { canEdit: boolean }) {
 }
 
 type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean; discountOfferId: string };
+function ProductSideImagesField({ productId, pendingImages, onPendingImagesChange, disabled }: {
+  productId?: string;
+  pendingImages: Array<string | null>;
+  onPendingImagesChange: React.Dispatch<React.SetStateAction<Array<string | null>>>;
+  disabled: boolean;
+}) {
+  const [savedImages, setSavedImages] = useState<Array<string | null>>(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
+  const [loading, setLoading] = useState(Boolean(productId));
+  const [savingIndex, setSavingIndex] = useState<number | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!productId) {
+      setSavedImages(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setError("");
+    void fetchAdminProductSideImages(productId)
+      .then((images) => { if (active) setSavedImages(images); })
+      .catch((loadError: unknown) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : "Product side images could not be loaded.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [productId]);
+
+  const uploadImage = async (event: React.ChangeEvent<HTMLInputElement>, index: number) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    setError("");
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Choose a JPG, PNG, or WEBP side image.");
+      return;
+    }
+    setSavingIndex(index);
+    try {
+      const image = await optimizeImageForUpload(file);
+      if (productId) {
+        const imageUrl = await saveProductSideImage(productId, index, image);
+        setSavedImages((current) => current.map((item, itemIndex) => itemIndex === index ? imageUrl : item));
+      } else {
+        onPendingImagesChange((current) => current.map((item, itemIndex) => itemIndex === index ? image : item));
+      }
+    } catch (uploadError) {
+      const message = uploadError instanceof Error ? uploadError.message : "Product side image could not be saved.";
+      setError(message);
+      toast.error("Product side image was not saved.", { description: message });
+    } finally {
+      setSavingIndex(null);
+    }
+  };
+
+  const removeImage = async (index: number) => {
+    setError("");
+    setSavingIndex(index);
+    try {
+      if (productId) {
+        await deleteProductSideImage(productId, index);
+        setSavedImages((current) => current.map((item, itemIndex) => itemIndex === index ? null : item));
+      } else {
+        onPendingImagesChange((current) => current.map((item, itemIndex) => itemIndex === index ? null : item));
+      }
+    } catch (removeError) {
+      const message = removeError instanceof Error ? removeError.message : "Product side image could not be deleted.";
+      setError(message);
+      toast.error("Product side image was not deleted.", { description: message });
+    } finally {
+      setSavingIndex(null);
+    }
+  };
+
+  const images = productId ? savedImages : pendingImages;
+  return <section className="admin-product-side-images" aria-label="Product side images">
+    <div><strong>Side images</strong><small>Upload up to 6 additional images. Select an empty slot to add an image.</small></div>
+    {loading ? <p>Loading saved side images...</p> : <div className="admin-product-side-images__grid">{Array.from({ length: MAX_PRODUCT_SIDE_IMAGES }, (_, index) => {
+      const image = images[index] || null;
+      return <div className="admin-product-side-images__slot" key={index}>
+        {image ? <img src={image} alt={`Product side view ${index + 1}`} /> : <span>Image {index + 1}</span>}
+        <label className="admin-secondary-button">{savingIndex === index ? "Saving..." : image ? "Change" : "Upload"}
+          <input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" disabled={disabled || savingIndex !== null} onChange={(event) => void uploadImage(event, index)} />
+        </label>
+        {image && <button className="admin-text-button" type="button" disabled={disabled || savingIndex !== null} onClick={() => void removeImage(index)}>Remove</button>}
+      </div>;
+    })}</div>}
+    {error && <small className="admin-image-error" role="alert">{error}</small>}
+  </section>;
+}
 const productTypeOptions = [
   { value: "round-neck", label: "Round Neck" },
   { value: "oversized", label: "Oversized" },
   { value: "acid-oversized", label: "Acid Oversized" },
   { value: "hoodie", label: "Hoodie" },
 ];
-function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, discountOffers = latestDiscountOffers, submitLabel = "Save Product" }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; discountOffers?: AdminOffer[]; submitLabel?: string }) {
+function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, discountOffers = latestDiscountOffers, submitLabel = "Save Product", productId, pendingSideImages, onPendingSideImagesChange }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; discountOffers?: AdminOffer[]; submitLabel?: string; productId?: string; pendingSideImages: Array<string | null>; onPendingSideImagesChange: React.Dispatch<React.SetStateAction<Array<string | null>>> }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
   return <form className="admin-form" onSubmit={onSave}>
@@ -546,6 +638,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.isActive).map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.discountType === "percentage" ? `${offer.value}% off` : `₹${offer.value.toLocaleString("en-IN")} off`}</option>)}</select></label>
     <label><span>Product type</span><select required value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
+    <ProductSideImagesField productId={productId} pendingImages={pendingSideImages} onPendingImagesChange={onPendingSideImagesChange} disabled={productSaving} />
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors (optional; first color should match the image)</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
@@ -1378,6 +1471,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [generalSettingsNotice, setGeneralSettingsNotice] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" });
+  const [pendingProductSideImages, setPendingProductSideImages] = useState<Array<string | null>>(() => Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
   const [discountOffers, setDiscountOffers] = useState<AdminOffer[]>([]);
   const [editProductLoading, setEditProductLoading] = useState(initialScreen === "edit-product");
   const [editProductError, setEditProductError] = useState("");
@@ -1829,10 +1923,25 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           : [...current, savedProduct]);
         navigate("products");
       } else {
+        let failedSideImageCount = 0;
+        for (let index = 0; index < pendingProductSideImages.length; index += 1) {
+          const image = pendingProductSideImages[index];
+          if (!image) continue;
+          try {
+            await saveProductSideImage(savedProduct.id, index, image);
+          } catch (sideImageError) {
+            failedSideImageCount += 1;
+            console.error("Product side image upload failed after product creation.", sideImageError);
+          }
+        }
         await refreshProducts();
-        setSavedNotice("Product saved successfully.");
+        setSavedNotice(failedSideImageCount
+          ? `Product saved, but ${failedSideImageCount} side image${failedSideImageCount === 1 ? "" : "s"} could not be uploaded. Edit the product to retry.`
+          : "Product saved successfully.");
+        setPendingProductSideImages(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
         setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" }));
-        toast.success("Product added successfully!");
+        if (failedSideImageCount) toast.error("Some product side images could not be uploaded. Edit the product to retry.");
+        else toast.success("Product added successfully!");
         window.setTimeout(() => setSavedNotice(""), 2500);
       }
       setImageError("");
@@ -2081,7 +2190,22 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setProductUpdateError(error instanceof Error ? error.message : "Unable to update product category. Please try again.");
     }
   };
-  const handleProductImageChange = (event: React.ChangeEvent<HTMLInputElement>, updateForm: React.Dispatch<React.SetStateAction<ProductFormState>> = setProductForm) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { setImageError("Please choose a JPG, PNG, or WEBP image."); event.target.value = ""; return; } const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === "string") { updateForm((current) => ({ ...current, image: reader.result as string })); setImageError(""); } }; reader.readAsDataURL(file); event.target.value = ""; };
+  const handleProductImageChange = async (event: React.ChangeEvent<HTMLInputElement>, updateForm: React.Dispatch<React.SetStateAction<ProductFormState>> = setProductForm) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setImageError("Please choose a JPG, PNG, or WEBP image.");
+      return;
+    }
+    try {
+      const image = await optimizeImageForUpload(file);
+      updateForm((current) => ({ ...current, image }));
+      setImageError("");
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "The selected image could not be optimized.");
+    }
+  };
   const persistProductTypeCategoryList = async (nextCategories: ProductTypeCategory[]) => {
     if (productTypeCategoriesSaving) throw new Error("Product type categories are already being saved.");
     setProductTypeCategoriesSaving(true);
@@ -2432,10 +2556,10 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
     if (screen === "logo-update") return <SiteLogoManagement canEdit={canEdit("products")} />;
-    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} /></AdminPanel>;
+    if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => { setPendingProductSideImages(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null)); navigate("products"); }} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} pendingSideImages={pendingProductSideImages} onPendingSideImagesChange={setPendingProductSideImages} /></AdminPanel>;
     if (screen === "customize-image") return <HomeFeatureImageManagement type="customize" canEdit={canEdit("products")} />;
     if (screen === "corporate-image") return <HomeFeatureImageManagement type="corporate" canEdit={canEdit("products")} />;
-    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" />}</AdminPanel>;
+    if (screen === "edit-product") return <AdminPanel title="Edit Product">{editProductLoading ? <p>Loading product...</p> : editProductError ? <><p className="admin-image-error" role="alert">{editProductError}</p><button className="admin-secondary-button" type="button" onClick={() => navigate("products")}>Back to Products</button></> : <AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => navigate("products")} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} submitLabel="Save Changes" productId={productId} pendingSideImages={pendingProductSideImages} onPendingSideImagesChange={setPendingProductSideImages} />}</AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><CategoryManagement productCategories={categories} onSaveProductCategories={persistProductTypeCategoryList} productCategoriesLoading={productTypeCategoriesLoading} productCategoriesError={productTypeCategoriesLoadError} productCategoriesActionError={productTypeCategoriesActionError} onRetryProductCategories={() => setProductTypeCategoriesLoadVersion((version) => version + 1)} productCategoriesSaving={productTypeCategoriesSaving} hierarchy={categoryHierarchy} setHierarchy={setCategoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} newCategory={newCategory} setNewCategory={setNewCategory} addCategory={addCategory} /></AdminPanel>;
     if (screen === "categories") return <AdminPanel title="Categories"><div className="admin-inline-form"><input value={newCategory} placeholder="New category name" onChange={(event) => setNewCategory(event.target.value)} /><button className="admin-primary-button" type="button" onClick={() => addCategory()}><Plus size={15} />Add category</button></div><div className="admin-chip-list">{categories.map((category) => <div className="admin-management-row" key={category.label}><strong>{category.label}</strong><button type="button" className="admin-small-button" onClick={() => setCategories((current) => current.filter((item) => item.label !== category.label))}>Delete</button></div>)}</div></AdminPanel>;
     if (screen === "inventory") return <AdminPanel title="Inventory">
@@ -2592,7 +2716,51 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     {mobileOpen && <button className="admin-drawer-overlay" type="button" aria-label="Close menu" onClick={() => setMobileOpen(false)} />}
     <div className="admin-main-wrap">
       <header className="admin-topbar"><button className="admin-icon-button admin-mobile-menu" type="button" aria-label="Open menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button><div className="admin-topbar-context"><span>{currentAdmin.role}</span><ChevronRight size={14} /><strong>{activeNav?.label || "Dashboard"}</strong></div><label className="admin-search"><Search size={17} /><input aria-label="Search dashboard" placeholder="Search orders and products..." value={adminSearch} onChange={(event) => { setAdminSearch(event.target.value); setProductPage(1); setOrderPage(1); }} /><kbd>⌘ K</kbd></label><div className="admin-topbar-actions"><button className="admin-icon-button admin-notification-button" type="button" aria-label="Notifications"><Bell size={19} /><i /></button><div className="admin-profile-wrap"><button className="admin-profile-button" type="button" onClick={() => setProfileOpen(!profileOpen)}><span className="admin-avatar">{currentAdminName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</span><span className="admin-profile-name">{currentAdminName}</span><ChevronDown size={15} /></button>{profileOpen && <div className="admin-profile-menu"><strong>{currentAdminName}</strong><span>{currentAdminEmail}</span><span>{currentAdmin.role}</span><button type="button" onClick={() => navigate("account-settings")}><UserRound size={15} /> Account settings</button><button type="button" onClick={() => navigate("help-center")}><LifeBuoy size={15} /> Help center</button><button type="button" disabled={signOutLoading} onClick={() => void signOut()}>{signOutLoading ? "Signing out..." : "Sign out"}</button></div>}</div></div></header>
-      <main className="admin-content"><div className="admin-page-intro"><div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>{screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}</div>{renderScreen()}{screen === "products" && isProductEditorOpen && <div className="admin-modal-backdrop admin-product-edit-backdrop" onClick={closeProductEditor}><section className="admin-modal admin-product-edit-modal" role="dialog" aria-modal="true" aria-labelledby="admin-product-edit-title" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" aria-label="Close editor" onClick={closeProductEditor}><X size={17} /></button><h2 id="admin-product-edit-title">Edit Product</h2>{editProductLoading ? <p>Loading product...</p> : editProductError && !editingProduct ? <><p className="admin-image-error" role="alert">Unable to load product details. Please try again.</p><div className="admin-form-actions">{editingProductTarget && <button className="admin-primary-button" type="button" onClick={() => void editProduct(editingProductTarget)}>Retry</button>}<button className="admin-secondary-button" type="button" onClick={closeProductEditor}>Close</button></div></> : editingProduct && <AddProductForm productForm={editingProductForm} setProductForm={setEditingProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveEditedProduct} onCancel={closeProductEditor} imageError={imageError} onImageChange={(event) => handleProductImageChange(event, setEditingProductForm)} savedNotice={editProductError} productSaving={productSaving} submitLabel="Save Changes" />}</section></div>}{selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}><div className="admin-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button><img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2><p>{selectedProduct.mainCategory && selectedProduct.subcategory ? `${selectedProduct.mainCategory} · ${selectedProduct.subcategory}` : selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p><StatusPill status={selectedProduct.stock < 10 ? "Low stock" : selectedProduct.status} />{selectedProduct.mainCategoryId && <div className="admin-form"><label><span>Main Category</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductCategory} onChange={(event) => { const value = event.target.value; setEditingProductCategory(value); setEditingProductSubcategory(categoryHierarchy.subcategories[value]?.[0]?.value || ""); }}>{categoryHierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label><label><span>Subcategory / Industry</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductSubcategory} onChange={(event) => setEditingProductSubcategory(event.target.value)}>{(categoryHierarchy.subcategories[editingProductCategory] || []).map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>{(productUpdateError || categoryHierarchyError) && <p className="admin-image-error" role="alert">{productUpdateError || categoryHierarchyError}</p>}<div className="admin-form-actions"><button type="button" className="admin-primary-button" disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} onClick={() => void saveProductCategory()}>Save Category</button></div></div>}</div></div>}{selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}><div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}><button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button><h2>{selectedOrder.id}</h2><p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p><p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p><div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div><p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p>      <p>Payment: {getCheckoutPaymentLabel(selectedOrder.payment.method)} ({selectedOrder.payment.status})</p><label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label><StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p></div></div>}<footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer></main>
+      <main className="admin-content">
+        <div className="admin-page-intro">
+          <div><p className="admin-eyebrow">Tribull Store Admin</p><h1>{activeNav?.label || "Dashboard"}</h1><p>Manage your store, catalog, orders, and customers.</p></div>
+          {screen === "dashboard" && <div className="admin-range-control"><SlidersHorizontal size={16} /><select value={range} onChange={(event) => setRange(event.target.value)} aria-label="Dashboard date range"><option>Today</option><option>Yesterday</option><option>Last 7 days</option><option>Last 30 days</option></select><ChevronDown size={15} /></div>}
+        </div>
+        {renderScreen()}
+        {screen === "products" && isProductEditorOpen && <div className="admin-modal-backdrop admin-product-edit-backdrop" onClick={closeProductEditor}>
+          <section className="admin-modal admin-product-edit-modal" role="dialog" aria-modal="true" aria-labelledby="admin-product-edit-title" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="admin-modal-close" aria-label="Close editor" onClick={closeProductEditor}><X size={17} /></button>
+            <h2 id="admin-product-edit-title">Edit Product</h2>
+            {editProductLoading ? <p>Loading product...</p> : editProductError && !editingProduct ? <>
+              <p className="admin-image-error" role="alert">Unable to load product details. Please try again.</p>
+              <div className="admin-form-actions">{editingProductTarget && <button className="admin-primary-button" type="button" onClick={() => void editProduct(editingProductTarget)}>Retry</button>}<button className="admin-secondary-button" type="button" onClick={closeProductEditor}>Close</button></div>
+            </> : editingProduct && <AddProductForm productForm={editingProductForm} setProductForm={setEditingProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onSave={saveEditedProduct} onCancel={closeProductEditor} imageError={imageError} onImageChange={(event) => handleProductImageChange(event, setEditingProductForm)} savedNotice={editProductError} productSaving={productSaving} submitLabel="Save Changes" productId={editingProduct.id} pendingSideImages={pendingProductSideImages} onPendingSideImagesChange={setPendingProductSideImages} />}
+          </section>
+        </div>}
+        {selectedProduct && <div className="admin-modal-backdrop" onClick={() => setSelectedProduct(null)}>
+          <div className="admin-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="admin-modal-close" onClick={() => setSelectedProduct(null)}><X size={17} /></button>
+            <img src={selectedProduct.image} alt={selectedProduct.name} /><h2>{selectedProduct.name}</h2>
+            <p>{selectedProduct.mainCategory && selectedProduct.subcategory ? `${selectedProduct.mainCategory} · ${selectedProduct.subcategory}` : selectedProduct.category} · ₹{selectedProduct.price.toLocaleString("en-IN")}</p>
+            <StatusPill status={selectedProduct.stock < 10 ? "Low stock" : selectedProduct.status} />
+            {selectedProduct.mainCategoryId && <div className="admin-form">
+              <label><span>Main Category</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductCategory} onChange={(event) => { const value = event.target.value; setEditingProductCategory(value); setEditingProductSubcategory(categoryHierarchy.subcategories[value]?.[0]?.value || ""); }}>{categoryHierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
+              <label><span>Subcategory / Industry</span><select disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} value={editingProductSubcategory} onChange={(event) => setEditingProductSubcategory(event.target.value)}>{(categoryHierarchy.subcategories[editingProductCategory] || []).map((subcategory) => <option key={subcategory.value} value={subcategory.value}>{subcategory.label}</option>)}</select></label>
+              {(productUpdateError || categoryHierarchyError) && <p className="admin-image-error" role="alert">{productUpdateError || categoryHierarchyError}</p>}
+              <div className="admin-form-actions"><button type="button" className="admin-primary-button" disabled={categoryHierarchyLoading || Boolean(categoryHierarchyError)} onClick={() => void saveProductCategory()}>Save Category</button></div>
+            </div>}
+          </div>
+        </div>}
+        {selectedOrder && <div className="admin-modal-backdrop" onClick={() => setSelectedOrder(null)}>
+          <div className="admin-modal admin-order-detail-modal" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="admin-modal-close" onClick={() => setSelectedOrder(null)}><X size={17} /></button>
+            <h2>{selectedOrder.id}</h2>
+            <p><strong>{selectedOrder.customer.name}</strong><br />{selectedOrder.customer.email} · {selectedOrder.customer.phone}</p>
+            <p>{selectedOrder.shippingAddress.address}, {selectedOrder.shippingAddress.apartment}, {selectedOrder.shippingAddress.city}, {selectedOrder.shippingAddress.state} {selectedOrder.shippingAddress.pinCode}, {selectedOrder.shippingAddress.country}</p>
+            <div className="admin-order-detail-items">{selectedOrder.items.map((item) => <div key={item.id} className="admin-order-detail-item"><img src={item.image} alt={item.name} /><span><strong>{item.name}</strong><small>{item.variant || "Standard"} · {item.quantity} × ₹{item.price.toLocaleString("en-IN")}</small></span><strong>₹{item.lineTotal.toLocaleString("en-IN")}</strong></div>)}</div>
+            <p>Subtotal: ₹{selectedOrder.subtotal.toLocaleString("en-IN")}<br />Shipping: ₹{selectedOrder.shipping.toLocaleString("en-IN")}<br />Discount: ₹{selectedOrder.discount.toLocaleString("en-IN")}<br /><strong>Total: ₹{selectedOrder.total.toLocaleString("en-IN")}</strong></p>
+            <p>Payment: {getCheckoutPaymentLabel(selectedOrder.payment.method)} ({selectedOrder.payment.status})</p>
+            <label>Order status<select value={selectedOrder.status} onChange={(event) => void updateOrder(selectedOrder.id, event.target.value as OrderStatus)}><option>Pending</option><option>Processing</option><option>Shipped</option><option>Delivered</option><option>Cancelled</option></select></label>
+            <StatusPill status={selectedOrder.status} /><p>{new Date(selectedOrder.createdAt).toLocaleString("en-IN")}</p>
+          </div>
+        </div>}
+        <footer className="admin-footer"><span><strong>TRIBULL</strong> <em>© 2026 Tribull Store</em></span><div><a href="#admin-help">Help</a><a href="#admin-privacy">Privacy</a><span>Admin Dashboard · v1.0.0</span></div></footer>
+      </main>
     </div>
   </div>;
 }

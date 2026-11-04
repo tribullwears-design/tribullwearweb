@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({
   findOne: vi.fn(),
   getDatabase: vi.fn(),
   insertOne: vi.fn(),
-  limit: vi.fn(),
   sort: vi.fn(),
   reviews: [] as Array<Record<string, unknown>>,
 }));
@@ -23,8 +22,7 @@ describe("customer reviews", () => {
     mocks.createIndex.mockResolvedValue(undefined);
     mocks.insertOne.mockResolvedValue(undefined);
     mocks.find.mockImplementation(() => ({ sort: mocks.sort }));
-    mocks.sort.mockImplementation(() => ({ limit: mocks.limit }));
-    mocks.limit.mockImplementation(() => ({ toArray: async () => mocks.reviews }));
+    mocks.sort.mockImplementation(() => ({ toArray: async () => mocks.reviews }));
     mocks.findOne.mockImplementation(async ({ id }: { id: string }) =>
       mocks.reviews.find((review) => review.id === id) || null);
     mocks.collection.mockReturnValue({
@@ -53,6 +51,19 @@ describe("customer reviews", () => {
     expect(result.id).toMatch(/^[0-9a-f-]{36}$/i);
     expect(result).not.toHaveProperty("photo");
     expect(mocks.insertOne).toHaveBeenCalledWith(expect.objectContaining({ id: result.id, createdAt: expect.any(String) }));
+  });
+
+  it("returns every public review rather than limiting the list", async () => {
+    mocks.reviews = Array.from({ length: 25 }, (_, index) => ({
+      id: `review-${index}`,
+      customerName: `Customer ${index}`,
+      productName: "Everyday Tee",
+      rating: 5,
+      comment: "The fit is great!",
+      createdAt: new Date(index).toISOString(),
+    }));
+
+    await expect(listPublicReviews()).resolves.toHaveLength(25);
   });
 
   it("saves validated customer photo data without exposing it in review lists", async () => {

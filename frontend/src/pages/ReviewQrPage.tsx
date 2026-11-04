@@ -24,8 +24,11 @@ export default function ReviewQrPage() {
           <a className="review-primary-button" href="/tribull-review-our-product.png" download>
             <Download size={18} /> Download print-ready PNG
           </a>
+          <a className="review-primary-button" href="/tribull-review-qr-code.svg" download>
+            <Download size={18} /> Download QR code SVG
+          </a>
           <a className="review-qr-card__vector-link" href="/tribull-review-our-product.svg" download>
-            Download vector SVG
+            Download full review card SVG
           </a>
         </div>
       </section>

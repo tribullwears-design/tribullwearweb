@@ -7,6 +7,7 @@ import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPr
 import { fetchProducts, getCachedProducts } from "../lib/products";
 import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
+import { fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
 import { useEffect, useState } from "react";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
@@ -92,7 +93,9 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [sideImages, setSideImages] = useState<string[]>([]);
   const [imageFailed, setImageFailed] = useState(false);
+  const [failedThumbnailIndexes, setFailedThumbnailIndexes] = useState<number[]>([]);
   const [isProductLoading, setIsProductLoading] = useState(() => !readCachedProduct(id) && !readCachedCatalogProduct(id));
   const [productLoadError, setProductLoadError] = useState(false);
   const [productRetry, setProductRetry] = useState(0);
@@ -258,6 +261,19 @@ export default function ProductDetailPage() {
       window.removeEventListener("tribull-products-cache-updated", loadRecommendations);
     };
   }, [id]);
+  useEffect(() => {
+    let active = true;
+    setSideImages([]);
+    if (!id) return () => { active = false; };
+    void fetchProductSideImages(id)
+      .then((images) => {
+        if (active) setSideImages(images.filter((image): image is string => Boolean(image)));
+      })
+      .catch((error: unknown) => {
+        if (active) console.error("Product side images request failed.", error);
+      });
+    return () => { active = false; };
+  }, [id]);
   const product = storedProduct;
   const isTShirtColorVariant = Boolean(storedProduct?.colors?.length);
   const productColorOptions = storedProduct?.colors?.length
@@ -270,7 +286,8 @@ export default function ProductDetailPage() {
   const availableSizes = storedProduct?.sizes || [];
   const initialColor = getDefaultProductColor(storedProduct?.colors);
   const activeColor = selectedColor ?? initialColor;
-  const productImageViews = storedProduct?.image ? [storedProduct.image] : [];
+  const productImageViews = storedProduct?.image ? [storedProduct.image, ...sideImages] : [];
+  const selectedProductImage = productImageViews[selectedImageIndex] || storedProduct?.image || "";
 
   const navigateGallery = (direction: "next" | "prev") => {
     if (productImageViews.length < 2) return;
@@ -278,6 +295,7 @@ export default function ProductDetailPage() {
       ? (selectedImageIndex + 1) % productImageViews.length
       : (selectedImageIndex - 1 + productImageViews.length) % productImageViews.length;
     setSelectedImageIndex(nextIndex);
+    setImageFailed(false);
   };
 
   useEffect(() => {
@@ -285,6 +303,7 @@ export default function ProductDetailPage() {
       setSelectedImageIndex(0);
       setSelectedColor(getDefaultProductColor(storedProduct?.colors));
       setImageFailed(false);
+      setFailedThumbnailIndexes([]);
     }
   }, [product?.id, product?.image, storedProduct?.colors]);
 
@@ -460,14 +479,14 @@ export default function ProductDetailPage() {
               <div className="product-detail-gallery__thumbs" aria-label="Product image views">
                 {productImageViews.map((image, viewIndex) => (
                 <button
-                  key={image}
+                  key={`${image}-${viewIndex}`}
                   type="button"
                   className={selectedImageIndex === viewIndex ? "is-active" : ""}
-                  onClick={() => setSelectedImageIndex(viewIndex)}
+                  onClick={() => { setSelectedImageIndex(viewIndex); setImageFailed(false); }}
                   aria-label={`View product image ${viewIndex + 1}`}
                   aria-pressed={selectedImageIndex === viewIndex}
                 >
-                  {imageFailed ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setImageFailed(true)} />}
+                  {failedThumbnailIndexes.includes(viewIndex) ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setFailedThumbnailIndexes((current) => current.includes(viewIndex) ? current : [...current, viewIndex])} />}
                 </button>
               ))}
               </div>
@@ -476,7 +495,7 @@ export default function ProductDetailPage() {
                 <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
                   {imageFailed
                     ? <span className="product-detail-gallery__fallback">Image unavailable</span>
-                    : <img src={product.image} alt={product.name} onError={() => setImageFailed(true)} />}
+                    : <img src={selectedProductImage} alt={product.name} onError={() => setImageFailed(true)} />}
                 </div>
                 <div className="product-detail-gallery__nav">
                   <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view" disabled={productImageViews.length < 2}>

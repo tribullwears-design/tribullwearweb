@@ -5,13 +5,14 @@ const mocks = vi.hoisted(() => ({
   find: vi.fn(),
   findOneAndUpdate: vi.fn(),
   findOne: vi.fn(),
+  updateOne: vi.fn(),
   getDatabase: vi.fn(),
   collection: vi.fn(),
 }));
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { adjustProductInventory, createProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
+import { adjustProductInventory, cacheProductStorefrontImage, createProduct, getCachedProductStorefrontImage, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -21,6 +22,7 @@ beforeEach(() => {
       find: mocks.find,
       findOneAndUpdate: mocks.findOneAndUpdate,
       findOne: mocks.findOne,
+      updateOne: mocks.updateOne,
     })),
   });
 });
@@ -141,6 +143,36 @@ describe("public product reads", () => {
     expect(mocks.findOne).toHaveBeenLastCalledWith(
       { id: "product-1", status: "Active" },
       { projection: { _id: 0, image: 1, images: 1, updatedAt: 1 } },
+    );
+  });
+
+  it("loads a persisted WebP only for the matching product image version", async () => {
+    const storedImage = "data:image/webp;base64,AA==";
+    mocks.findOne.mockResolvedValue({ storefrontImages: { "640": storedImage } });
+
+    await expect(getCachedProductStorefrontImage("product-1", "2026-01-02T00:00:00.000Z", 640)).resolves.toBe(storedImage);
+    expect(mocks.findOne).toHaveBeenLastCalledWith(
+      {
+        id: "product-1",
+        status: "Active",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        storefrontImageUpdatedAt: "2026-01-02T00:00:00.000Z",
+      },
+      { projection: { _id: 0, "storefrontImages.640": 1 } },
+    );
+  });
+
+  it("persists WebP derivatives without changing the product version", async () => {
+    await cacheProductStorefrontImage("product-1", "2026-01-02T00:00:00.000Z", 960, "data:image/webp;base64,AA==");
+
+    expect(mocks.updateOne).toHaveBeenCalledWith(
+      { id: "product-1", status: "Active", updatedAt: "2026-01-02T00:00:00.000Z" },
+      {
+        $set: {
+          "storefrontImages.960": "data:image/webp;base64,AA==",
+          storefrontImageUpdatedAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
     );
   });
 });

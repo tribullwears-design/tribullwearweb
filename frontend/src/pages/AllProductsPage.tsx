@@ -96,7 +96,6 @@ export default function AllProductsPage() {
         image: product.image,
       }));
   }, [catalogProducts, hierarchy, productTypes, selectedType]);
-
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
     const syncCart = () => setCart(readStorage("tribull-cart", {}));
@@ -199,6 +198,8 @@ export default function AllProductsPage() {
                       src={product.image}
                       alt={product.name}
                       className="product-image-primary"
+                      loading="lazy"
+                      fetchPriority="low"
                       decoding="async"
                     />
                   </Link>

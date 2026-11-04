@@ -73,7 +73,7 @@ function Reveal({ children, className = "", id }: {
   return <div id={id} className={className}>{children}</div>;
 }
 
-function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }: { item: string[]; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string }) {
+function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage, loading = "lazy" }: { item: string[]; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string; loading?: "eager" | "lazy" }) {
   const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
 
   return (
@@ -82,8 +82,8 @@ function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage }:
         className={cls("product-card", "parallax-tilt", hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
         <div className="product-card__image">
-          <img src={item[0]} alt={item[1]} className="product-image-primary" loading="eager" decoding="async" />
-          {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" />
+          {hoverImage && <img src={hoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" fetchPriority="low" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -432,6 +432,7 @@ export default function Home() {
                   href={href}
                   originalPrice={originalPrice}
                   hoverImage={hoverImage}
+                  loading={idx < 2 ? "eager" : "lazy"}
                 />
               ))}
             </div>
@@ -550,6 +551,9 @@ export default function Home() {
                 <ArrowRight size={18} strokeWidth={1.5} />
               </button>
             </div>
+          </div>
+          <div className="customer-reviews__view-all">
+            <Link className="review-primary-button" href="/reviews">View all reviews</Link>
           </div>
         </section>
 

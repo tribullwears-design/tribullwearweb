@@ -3,7 +3,6 @@ import type { Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 
 const MAX_REVIEW_PHOTO_BYTES = 5 * 1024 * 1024;
-const MAX_PUBLIC_REVIEWS = 20;
 
 export type ReviewDocument = {
   id: string;
@@ -101,7 +100,6 @@ export async function listPublicReviews() {
   const reviews = await (await getCollection())
     .find({}, { projection: { _id: 0, "photo.data": 0 } })
     .sort({ createdAt: -1 })
-    .limit(MAX_PUBLIC_REVIEWS)
     .toArray();
   return reviews.map(({ id, photo, ...review }) => ({
     id,

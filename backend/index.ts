@@ -8,7 +8,12 @@ import { deleteBanner, getBannerImage, getStorefrontBanner, listBanners, saveBan
 import { FeatureImageValidationError, getFeatureImage, isFeatureImageType, listFeatureImages, saveFeatureImage } from "./featureImageStore.js";
 import { getSiteLogoImage, getSiteLogoUrl, saveSiteLogo, SiteLogoValidationError } from "./siteLogoStore.js";
 import { createOrder, findOrderByIdempotencyKey } from "./orderStore.js";
-import { adjustProductInventory, createProduct, deleteProduct, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
+import { adjustProductInventory, cacheProductStorefrontImage, createProduct, deleteProduct, getCachedProductStorefrontImage, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct } from "./productStore.js";
+import {
+  getCachedStorefrontProductImage,
+  getCachedStorefrontProductImageByKey,
+} from "./productImageOptimizer.js";
+import { deleteProductSideImage, deleteProductSideImages, getProductSideImage, listProductSideImages, MAX_PRODUCT_SIDE_IMAGES, ProductSideImageValidationError, saveProductSideImage } from "./productSideImageStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getMovingNavbarSettings, getProductTypeCategories, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveMovingNavbarSettings, saveProductTypeCategories, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
@@ -495,9 +500,20 @@ async function startServer() {
   });
   app.get("/api/banners/:categoryId/image", async (req, res) => {
     try {
+      const banner = await getStorefrontBanner(req.params.categoryId);
+      if (!banner) return res.status(404).end();
+      if (!banner.image.startsWith("/api/banners/")) {
+        res.set("Cache-Control", "no-cache, must-revalidate");
+        return res.redirect(302, banner.image);
+      }
       const image = await getBannerImage(req.params.categoryId);
       if (!image) return res.status(404).end();
-      res.set({ "Cache-Control": "public, max-age=31536000, immutable", "Content-Type": image.mimeType, "X-Content-Type-Options": "nosniff" });
+      const isVersioned = req.query.v === banner.updatedAt;
+      res.set({
+        "Cache-Control": isVersioned ? "public, max-age=31536000, immutable" : "no-cache, must-revalidate",
+        "Content-Type": image.mimeType,
+        "X-Content-Type-Options": "nosniff",
+      });
       res.send(image.data);
     } catch (error) { sendBannerError(res, error); }
   });
@@ -673,9 +689,11 @@ async function startServer() {
       res.json({ deleted: true });
     } catch (error) { sendOfferError(res, error); }
   });
-  const storefrontProductImageUrl = (id: string, updatedAt?: string, field: "image" | "images" = "image", index?: number) => {
+  const storefrontProductImageUrl = (id: string, updatedAt?: string, field: "image" | "images" = "image", index?: number, width = 640) => {
     const params = new URLSearchParams();
     if (updatedAt) params.set("v", updatedAt);
+    params.set("format", "webp");
+    params.set("width", String(width));
     if (field === "images") {
       params.set("field", field);
       params.set("index", String(index));
@@ -686,25 +704,161 @@ async function startServer() {
 
   app.get("/api/products/:id/image", async (req, res) => {
     try {
-      const productImages = await getProductImage(req.params.id);
       const field = req.query.field === "images" ? "images" : "image";
       const imageIndex = field === "images" && typeof req.query.index === "string" ? Number(req.query.index) : -1;
+      const imageVersion = typeof req.query.v === "string" ? req.query.v : "";
+      const width = typeof req.query.width === "string" ? Number(req.query.width) : 640;
+      if (req.query.format === "webp" && ![480, 640, 960].includes(width)) {
+        return res.status(400).json({ error: "Product image width is invalid" });
+      }
+      const imageKey = `${req.params.id}:${field}:${imageIndex}:${imageVersion}`;
+      const imageCacheKey = `${imageKey}:${width}`;
+      if (req.query.format === "webp") {
+        const cached = getCachedStorefrontProductImageByKey(imageCacheKey);
+        if (cached) {
+          res.set("Cache-Control", cached.immutable ? "public, max-age=31536000, immutable" : "public, max-age=60");
+          return res.type("image/webp").send(cached.image);
+        }
+        if (field === "image" && imageVersion && (width === 640 || width === 960)) {
+          const persistedImage = await getCachedProductStorefrontImage(req.params.id, imageVersion, width);
+          if (persistedImage) {
+            const match = persistedImage.match(/^data:image\/webp;base64,([\s\S]+)$/i);
+            if (!match) return res.status(415).json({ error: "Cached product image format is not supported" });
+            res.set("Cache-Control", "public, max-age=31536000, immutable");
+            return res.type("image/webp").send(Buffer.from(match[1], "base64"));
+          }
+        }
+      }
+      const productImages = await getProductImage(req.params.id);
       const image = field === "images"
         ? Number.isInteger(imageIndex) && imageIndex >= 0 ? productImages?.images?.[imageIndex] : undefined
         : productImages?.image;
       if (!image || typeof image !== "string") {
         return res.status(404).json({ error: "Product image not found" });
       }
-      const imageVersion = typeof req.query.v === "string" ? req.query.v : "";
       const isVersioned = Boolean(productImages?.updatedAt && imageVersion === productImages.updatedAt);
       res.set("Cache-Control", isVersioned ? "public, max-age=31536000, immutable" : "public, max-age=60");
       if (!/^data:/i.test(image)) return res.redirect(302, image);
+      if (req.query.format === "webp") {
+        const optimized = await getCachedStorefrontProductImage(imageCacheKey, image, width, isVersioned);
+        res.set("Cache-Control", optimized.immutable ? "public, max-age=31536000, immutable" : "public, max-age=60");
+        if (field === "image" && isVersioned && (width === 640 || width === 960)) {
+          const storedImage = `data:image/webp;base64,${optimized.image.toString("base64")}`;
+          cacheProductStorefrontImage(req.params.id, imageVersion, width, storedImage).catch((error: unknown) => {
+            console.error("Could not persist the optimized storefront product image.", error);
+          });
+        }
+        return res.type("image/webp").send(optimized.image);
+      }
       const match = image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
       if (!match) return res.status(415).json({ error: "Product image format is not supported" });
       return res.type(match[1]).send(Buffer.from(match[2], "base64"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product image request failed";
       return res.status(message.includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  const productSideImageUrl = (productId: string, index: number, version: string, admin = false) => {
+    const prefix = admin ? "/api/admin/products" : "/api/products";
+    return `${prefix}/${encodeURIComponent(productId)}/side-images/${index}/image?v=${encodeURIComponent(version)}`;
+  };
+
+  app.get("/api/products/:id/side-images", async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const images = await listProductSideImages(product.id);
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        images: images.map((image, index) => image ? productSideImageUrl(product.id, index, image.version) : null),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product side images request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/admin/products/:id/side-images", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const images = await listProductSideImages(product.id);
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        images: images.map((image, index) => image ? productSideImageUrl(product.id, index, image.version, true) : null),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product side images request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/products/:id/side-images/:index/image", async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const index = Number(req.params.index);
+      if (!Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_SIDE_IMAGES) {
+        return res.status(400).json({ error: "Product side image index is invalid" });
+      }
+      const image = await getProductSideImage(product.id, index);
+      if (!image) return res.status(404).json({ error: "Product side image not found" });
+      const isVersioned = req.query.v === image.version;
+      res.set("Cache-Control", isVersioned ? "public, max-age=31536000, immutable" : "public, max-age=60");
+      const match = image.image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+      if (!match) return res.status(415).json({ error: "Product side image format is not supported" });
+      return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product side image request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/admin/products/:id/side-images/:index/image", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const index = Number(req.params.index);
+      if (!Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_SIDE_IMAGES) {
+        return res.status(400).json({ error: "Product side image index is invalid" });
+      }
+      const image = await getProductSideImage(product.id, index);
+      if (!image) return res.status(404).json({ error: "Product side image not found" });
+      res.set("Cache-Control", "no-store");
+      const match = image.image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+      if (!match) return res.status(415).json({ error: "Product side image format is not supported" });
+      return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product side image request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.put("/api/admin/products/:id/side-images/:index", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const image = await saveProductSideImage(product.id, Number(req.params.index), req.body?.image);
+      return res.json({ imageUrl: productSideImageUrl(product.id, image.index, image.version, true) });
+    } catch (error) {
+      if (error instanceof ProductSideImageValidationError) return res.status(400).json({ error: error.message });
+      const message = error instanceof Error ? error.message : "Product side image could not be saved";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.delete("/api/admin/products/:id/side-images/:index", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const deleted = await deleteProductSideImage(product.id, Number(req.params.index));
+      if (!deleted) return res.status(404).json({ error: "Product side image not found" });
+      return res.json({ deleted: true });
+    } catch (error) {
+      if (error instanceof ProductSideImageValidationError) return res.status(400).json({ error: error.message });
+      const message = error instanceof Error ? error.message : "Product side image could not be deleted";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
     }
   });
 
@@ -733,8 +887,8 @@ async function startServer() {
       res.set("Cache-Control", publicCatalogCache);
       res.json({
         ...product,
-        image: storefrontProductImageUrl(product.id, product.updatedAt),
-        ...(product.images ? { images: product.images.map((_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index)) } : {}),
+        image: storefrontProductImageUrl(product.id, product.updatedAt, "image", undefined, 960),
+        ...(product.images ? { images: product.images.map((_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index, 960)) } : {}),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
@@ -845,6 +999,7 @@ async function startServer() {
   app.delete("/api/products/:id", requireAdminPermission("products", "edit"), async (req, res) => {
     try {
       if (!await deleteProduct(req.params.id)) return res.status(404).json({ error: "Product not found" });
+      await deleteProductSideImages(req.params.id);
       return res.json({ deleted: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product could not be deleted";

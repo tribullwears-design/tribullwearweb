@@ -11,6 +11,8 @@ export type ProductDocument = {
   compareAt: number | null;
   image: string;
   images?: string[];
+  storefrontImages?: Partial<Record<"640" | "960", string>>;
+  storefrontImageUpdatedAt?: string;
   productType?: string;
   stock: number;
   sizes: string[];
@@ -29,7 +31,7 @@ export type ProductDocument = {
   updatedAt: string;
 };
 
-type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice"> & { discountOfferId?: string | null };
+type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice" | "storefrontImages" | "storefrontImageUpdatedAt"> & { discountOfferId?: string | null };
 
 const productTypes = ["round-neck", "oversized", "acid-oversized", "hoodie"] as const;
 let indexesPromise: Promise<void> | undefined;
@@ -83,6 +85,8 @@ export class InsufficientInventoryError extends Error {
 
 async function normalizeProduct(product: WithId<ProductDocument>, applyDiscount = false, discounts?: Map<string, Awaited<ReturnType<typeof findActiveDiscount>>>): Promise<ProductDocument> {
   const { _id, ...fields } = product;
+  delete fields.storefrontImages;
+  delete fields.storefrontImageUpdatedAt;
   const id = fields.id || _id.toString();
   const discount = applyDiscount && fields.discountOfferId
     ? discounts?.has(fields.discountOfferId)
@@ -200,6 +204,25 @@ export async function getProductImage(id: string) {
   return (await getCollection()).findOne(
     { ...productFilter(id), status: "Active" },
     { projection: { _id: 0, image: 1, images: 1, updatedAt: 1 } },
+  );
+}
+
+export async function getCachedProductStorefrontImage(id: string, updatedAt: string, width: 640 | 960) {
+  validateProductId(id);
+  const field = `storefrontImages.${width}` as const;
+  const product = await (await getCollection()).findOne(
+    { ...productFilter(id), status: "Active", updatedAt, storefrontImageUpdatedAt: updatedAt },
+    { projection: { _id: 0, [field]: 1 } },
+  );
+  return product?.storefrontImages?.[String(width) as "640" | "960"];
+}
+
+export async function cacheProductStorefrontImage(id: string, updatedAt: string, width: 640 | 960, image: string) {
+  validateProductId(id);
+  const field = `storefrontImages.${width}`;
+  await (await getCollection()).updateOne(
+    { ...productFilter(id), status: "Active", updatedAt },
+    { $set: { [field]: image, storefrontImageUpdatedAt: updatedAt } },
   );
 }
 

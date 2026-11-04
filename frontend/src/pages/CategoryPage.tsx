@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
-import { getCachedCategoryBanner, loadCategoryBanner } from "../lib/categoryBanners";
+import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
 import MovingNavbar from "../components/MovingNavbar";
@@ -85,13 +85,18 @@ interface CategoryHeroProps {
   title: string;
   subtitle: string;
   description?: string;
+  categorySlug: string;
   image: string;
 }
 
-function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps) {
+function CategoryHero({ title, subtitle, description, categorySlug, image }: CategoryHeroProps) {
   const heroImgRef = useRef<HTMLImageElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const heroStampRef = useRef<HTMLDivElement>(null);
+  const [directImageFailed, setDirectImageFailed] = useState(false);
+  const [directImageRequestKey] = useState(() => Date.now());
+
+  useEffect(() => setDirectImageFailed(false), [categorySlug]);
 
   useEffect(() => {
     let raf = 0;
@@ -118,7 +123,17 @@ function CategoryHero({ title, subtitle, description, image }: CategoryHeroProps
     <section className="hero category-hero-section" aria-label={`${title} collection`}>
       <div className="hero__images">
         <div className="hero__image">
-          {image && <img key={image} ref={heroImgRef} src={image} alt={`${title} collection hero`} fetchPriority="high" decoding="async" />}
+          <img
+            ref={heroImgRef}
+            src={directImageFailed && image
+              ? image
+              : `/api/banners/${encodeURIComponent(categorySlug)}/image?v=${directImageRequestKey}`}
+            alt={`${title} collection hero`}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            onError={() => setDirectImageFailed(true)}
+          />
         </div>
       </div>
       <div className="hero__wash" />
@@ -152,7 +167,7 @@ function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: {
         className="category-page__card category-cinema-product cursor-pointer hover:shadow-lg transition-shadow"
       >
         <div className="category-catalog-card__image-wrap">
-          <img src={item.image} alt={item.name} className="category-page__image" decoding="async" />
+          <img src={item.image} alt={item.name} className="category-page__image" loading="lazy" fetchPriority="low" decoding="async" />
           <button
             type="button"
             className={`category-catalog-card__wishlist ${isWishlisted ? "is-active" : ""}`}
@@ -400,7 +415,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
     <div className="category-best-selling-grid">
       {products.map((item) => (
         <Link key={item.id} href={`/product/${encodeURIComponent(item.id)}`} className="product-card">
-          <div className="product-card__image"><img src={item.image} alt={item.name} decoding="async" /></div>
+          <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" fetchPriority="low" decoding="async" /></div>
         </Link>
       ))}
     </div>
@@ -418,11 +433,8 @@ export default function CategoryPage() {
   const activeDefinitions = Object.fromEntries(hierarchy.main.map(({ value }) => [normalizeCategorySlug(value), liveCategoryDefinition(normalizeCategorySlug(value), hierarchy)])) as Record<string, CategoryDefinition | undefined>;
   const categoryImage = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === categorySlug)?.image || "";
   const heroFallback = existingHeroBanners[categorySlug] || categoryImage;
-  const [heroBanner, setHeroBanner] = useState(() => {
-    const banner = getCachedCategoryBanner(categorySlug);
-    return banner ? { categorySlug, image: banner.image } : null;
-  });
-  const currentHeroBanner = heroBanner?.categorySlug === categorySlug ? heroBanner.image : heroFallback;
+  const [heroBanner, setHeroBanner] = useState<{ categorySlug: string; image: string } | null>(null);
+  const currentHeroBanner = heroBanner?.categorySlug === categorySlug ? heroBanner.image : "";
   useEffect(() => {
     let active = true;
     void loadCategoryBanner(categorySlug)
@@ -431,7 +443,6 @@ export default function CategoryPage() {
       })
       .catch((error: unknown) => {
         console.error("Category banner request failed.", error);
-        if (active) setHeroBanner({ categorySlug, image: heroFallback });
       });
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
@@ -452,6 +463,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
+          categorySlug={categorySlug}
           image={currentHeroBanner}
         />
 
@@ -479,6 +491,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
+          categorySlug={categorySlug}
           image={currentHeroBanner}
         />
 
@@ -506,6 +519,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
+          categorySlug={categorySlug}
           image={currentHeroBanner}
         />
 
@@ -533,6 +547,7 @@ export default function CategoryPage() {
         <CategoryHero
           title={definition.title}
           subtitle={definition.subtitle}
+          categorySlug={categorySlug}
           image={currentHeroBanner}
         />
 
@@ -586,6 +601,7 @@ export default function CategoryPage() {
       <CategoryHero
         title={fallback.title}
         subtitle={fallback.subtitle}
+        categorySlug={categorySlug}
         image={currentHeroBanner}
       />
 

@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import { stopTribullBackend } from "./tribull-port.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-await stopTribullBackend();
+const backendPort = Number(process.env.PORT || 5000);
+if (!Number.isInteger(backendPort) || backendPort < 1 || backendPort > 65535) {
+  throw new Error("PORT must be a valid TCP port between 1 and 65535.");
+}
+await stopTribullBackend(backendPort);
+console.log(`Starting Tribull backend on port ${backendPort}...`);
 
 const backend = spawn(
   process.execPath,
