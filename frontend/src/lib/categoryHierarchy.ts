@@ -174,14 +174,6 @@ function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
   }
 }
 
-function hasCachedHierarchy() {
-  try {
-    return Boolean(window.localStorage.getItem(CATEGORY_HIERARCHY_KEY));
-  } catch {
-    return false;
-  }
-}
-
 export async function saveCategoryHierarchy(hierarchy: CategoryHierarchy) {
   invalidatePendingCategoryRequest();
   const response = await requestCategory<ApiCategoryResponse>("/api/categories", "PUT", toApiDocuments(hierarchy));
@@ -209,7 +201,7 @@ async function requestCategoryHierarchy() {
   const url = "/api/categories";
   let response: Response;
   try {
-    response = await apiFetch(url);
+    response = await apiFetch(url, { cache: "no-store" });
   } catch (error) {
     console.error("CATEGORY API ERROR", {
       status: "unavailable",
@@ -282,8 +274,8 @@ export function deleteSubcategory(parent: string, value: string) {
 }
 
 export function useCategoryHierarchy(fallback: CategoryHierarchy) {
-  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => readCachedHierarchy(fallback));
-  const [loaded, setLoaded] = useState(hasCachedHierarchy);
+  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(fallback);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
   const [requestVersion, setRequestVersion] = useState(0);
 

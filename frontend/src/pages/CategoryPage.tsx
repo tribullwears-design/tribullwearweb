@@ -447,7 +447,11 @@ export default function CategoryPage() {
     return () => { active = false; };
   }, [categorySlug, categoryImage, heroFallback]);
 
-  if (!hierarchy.loaded && !activeDefinitions[categorySlug]) return <div className="p-8">Loading category...</div>;
+  if (!hierarchy.loaded) {
+    return fetchedHierarchy.error
+      ? <div className="p-8" role="alert">Categories could not be loaded. <button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
+      : <div className="p-8" role="status">Loading category...</div>;
+  }
   if (!activeDefinitions[categorySlug]) return <div className="p-8">Category not found.</div>;
 
   if (categorySlug === "cinema" && !lang) {

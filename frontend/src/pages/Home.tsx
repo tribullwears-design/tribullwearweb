@@ -12,7 +12,7 @@ import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refres
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
-import { featureImagesUpdatedEvent, getCachedFeatureImages, loadFeatureImages } from "../lib/featureImages";
+import { featureImagesUpdatedEvent, loadFeatureImages, type FeatureImages } from "../lib/featureImages";
 import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 
@@ -29,28 +29,6 @@ const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${enco
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 type HomeVideo = { id: string; title: string; url: string; thumbnail?: string; category?: string };
-const HOME_VIDEOS_CACHE_KEY = "tribull-home-videos";
-
-function getCachedHomeVideos(): HomeVideo[] {
-  try {
-    const cached = window.sessionStorage.getItem(HOME_VIDEOS_CACHE_KEY);
-    if (!cached) return [];
-    const videos: unknown = JSON.parse(cached);
-    if (!Array.isArray(videos)) return [];
-    return videos.filter((video): video is HomeVideo =>
-      Boolean(video && typeof video === "object"
-        && typeof video.id === "string"
-        && typeof video.title === "string"
-        && typeof video.url === "string"),
-    );
-  } catch {
-    return [];
-  }
-}
-
-function hasCachedHomeVideos() {
-  return getCachedHomeVideos().length > 0;
-}
 
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -96,16 +74,18 @@ export default function Home() {
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
-  const [homeVideos, setHomeVideos] = useState<HomeVideo[]>(getCachedHomeVideos);
-  const [videosLoading, setVideosLoading] = useState(() => !hasCachedHomeVideos());
+  const [homeVideos, setHomeVideos] = useState<HomeVideo[]>([]);
+  const [videosLoading, setVideosLoading] = useState(true);
   const [videosError, setVideosError] = useState("");
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
+  const [reviewsLoaded, setReviewsLoaded] = useState(false);
+  const [reviewsError, setReviewsError] = useState("");
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
   const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
-  const [homeBannerReady, setHomeBannerReady] = useState(false);
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
-  const [featureImages, setFeatureImages] = useState(getCachedFeatureImages);
+  const [featureImages, setFeatureImages] = useState<FeatureImages>({ customize: null, corporate: null });
+  const [featureImagesLoaded, setFeatureImagesLoaded] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
   const lifestyleSectionRef = useRef<HTMLElement>(null);
   const lifestyleTrackRef = useRef<HTMLDivElement>(null);
@@ -128,9 +108,13 @@ export default function Home() {
       loadingImages = true;
       try {
         const images = await loadFeatureImages(refresh);
-        if (active) setFeatureImages(images);
+        if (active) {
+          setFeatureImages(images);
+          setFeatureImagesLoaded(true);
+        }
       } catch (error: unknown) {
         console.error("Could not load homepage feature images.", error);
+        if (active) setFeatureImagesLoaded(true);
       } finally {
         loadingImages = false;
       }
@@ -180,14 +164,9 @@ export default function Home() {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/videos").then(async (response) => {
+    void fetch("/api/videos", { cache: "no-store" }).then(async (response) => {
       if (!response.ok) throw new Error("Videos could not be loaded.");
       const savedVideos = await response.json() as HomeVideo[];
-      try {
-        window.sessionStorage.setItem(HOME_VIDEOS_CACHE_KEY, JSON.stringify(savedVideos));
-      } catch {
-        // Keep the fetched videos available even when browser storage is unavailable.
-      }
       if (active) setHomeVideos(savedVideos);
     }).catch((error: unknown) => {
       if (active) setVideosError(error instanceof Error ? error.message : "Videos could not be loaded.");
@@ -198,9 +177,15 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     void fetchPublicReviews().then((reviews) => {
-      if (active) setSubmittedReviews(reviews);
+      if (active) {
+        setSubmittedReviews(reviews);
+        setCustomerReviewPage(0);
+      }
     }).catch((error: unknown) => {
       console.error("Could not load customer reviews for the storefront.", error);
+      if (active) setReviewsError("Customer reviews could not be loaded.");
+    }).finally(() => {
+      if (active) setReviewsLoaded(true);
     });
     return () => { active = false; };
   }, []);
@@ -255,13 +240,9 @@ export default function Home() {
       if (active) {
         setHomeBanner(banner);
         setHomeBannerImageFailed(false);
-        setHomeBannerReady(true);
       }
     }).catch((error: unknown) => {
       console.error("Homepage banner request failed.", error);
-      if (active) {
-        setHomeBannerReady(true);
-      }
     });
     return () => { active = false; };
   }, []);
@@ -322,7 +303,7 @@ export default function Home() {
     else scrollLifestyle("left");
   };
 
-  const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;
+  const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : [];
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
@@ -336,23 +317,13 @@ export default function Home() {
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));
-  const customerReviews = submittedReviews.length
-    ? submittedReviews.map((review, index) => {
-      const product = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
-      return {
-        ...review,
-        productImage: review.photoUrl || product?.image || getShowcaseProductImage(index),
-      };
-    })
-    : [
-      { id: "sample-arun", customerName: "Arun Kumar", productName: "TRIBULL apparel", rating: 5, comment: "Good product!" },
-      { id: "sample-priya", customerName: "Priya S", productName: "TRIBULL apparel", rating: 5, comment: "Nice product!" },
-      { id: "sample-karthik", customerName: "Karthik R", productName: "TRIBULL apparel", rating: 5, comment: "Love the fit!" },
-      { id: "sample-nisha", customerName: "Nisha M", productName: "TRIBULL apparel", rating: 5, comment: "Great quality!" },
-    ].map((review, index) => ({
+  const customerReviews = submittedReviews.map((review, index) => {
+    const product = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
+    return {
       ...review,
-      productImage: eligibleProducts[index]?.image || getShowcaseProductImage(index),
-    }));
+      productImage: review.photoUrl || product?.image || getShowcaseProductImage(index),
+    };
+  });
   const reviewPageCount = Math.ceil(customerReviews.length / 2);
 
   return (
@@ -365,7 +336,7 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      {mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
+      {hierarchy.loaded && mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
         <div className="category-nav__track">
           {mainCategories.map(({ value, label, image, href }) => (
             <Link className="category-nav__item" href={href} key={value} aria-label={`Shop ${label}`}>
@@ -376,13 +347,13 @@ export default function Home() {
         </div>
       </nav> : fetchedHierarchy.error
         ? <div className="category-nav__message" role="alert"><span>Categories could not be loaded.</span><button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
-        : <p className="category-nav__message" role="status">No visible categories are available right now.</p>}
+        : <p className="category-nav__message" role="status">{hierarchy.loaded ? "No visible categories are available right now." : "Loading categories..."}</p>}
 
       <main>
         <section className="hero" aria-label="Tribull new collection">
           <div className={`hero__images${homeBannerImageLoaded ? "" : " hero__images--loading"}`}>
             <div className="hero__image">
-              {homeBannerReady && <picture>
+              <picture>
                 <source
                   media="(max-width: 640px)"
                   srcSet={homeBannerImageFailed ? brandAssets.hero : "/products/mobile-banner.webp"}
@@ -396,7 +367,7 @@ export default function Home() {
                   onLoad={() => setHomeBannerImageLoaded(true)}
                   onError={() => setHomeBannerImageFailed(true)}
                 />
-              </picture>}
+              </picture>
             </div>
           </div>
           <div className="hero__wash" />
@@ -470,7 +441,7 @@ export default function Home() {
                 <p>Anything &amp; Anything for<br />your Teams / Office</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to shop for my team.")} target="_blank" rel="noreferrer">+ Shop for your Team</a>
               </div>
-              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" loading="lazy" decoding="async" />
+              <img key={featureImages.corporate || "/products/hoodieicon.png"} src={featureImages.corporate || "/products/hoodieicon.png"} alt="Corporate team apparel" loading="lazy" decoding="async" style={{ visibility: featureImagesLoaded ? "visible" : "hidden" }} />
             </Reveal>
             <Reveal className="cooperate-option cooperate-option--custom" id="customize">
               <div className="cooperate-option__copy">
@@ -478,7 +449,7 @@ export default function Home() {
                 <p>Design your own t-shirts<br />hoodies &amp; more.</p>
                 <a className="button cooperate-option__button" href={whatsappUrl("Hi Tribull, I would like to customize T-shirts and hoodies.")} target="_blank" rel="noreferrer">+ Customize Now</a>
               </div>
-              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" loading="lazy" decoding="async" />
+              <img key={featureImages.customize || getShowcaseProductImage(1)} src={featureImages.customize || getShowcaseProductImage(1)} alt="Custom apparel design" loading="lazy" decoding="async" style={{ visibility: featureImagesLoaded ? "visible" : "hidden" }} />
             </Reveal>
           </div>
         </div>
@@ -514,7 +485,7 @@ export default function Home() {
           </div>
           <div className="customer-reviews__carousel">
             <div className="customer-reviews__grid">
-              {customerReviews.map((review, index) => (
+              {customerReviews.length ? customerReviews.map((review, index) => (
                 <article
                   className={cls("customer-review-card", Math.floor(index / 2) !== customerReviewPage ? "customer-review-card--mobile-hidden" : null)}
                   key={review.id}
@@ -529,9 +500,13 @@ export default function Home() {
                     <p className="customer-review-card__comment">“{review.comment}”</p>
                   </div>
                 </article>
-              ))}
+              )) : (
+                <p className="customer-reviews__status" role={reviewsError ? "alert" : "status"}>
+                  {reviewsLoaded ? reviewsError || "No customer reviews yet." : "Loading customer reviews..."}
+                </p>
+              )}
             </div>
-            <div className="customer-reviews__controls" aria-label="Customer review pages">
+            {reviewPageCount > 1 && <div className="customer-reviews__controls" aria-label="Customer review pages">
               <button
                 className="customer-reviews__arrow"
                 type="button"
@@ -550,7 +525,7 @@ export default function Home() {
               >
                 <ArrowRight size={18} strokeWidth={1.5} />
               </button>
-            </div>
+            </div>}
           </div>
           <div className="customer-reviews__view-all">
             <Link className="review-primary-button" href="/reviews">View all reviews</Link>

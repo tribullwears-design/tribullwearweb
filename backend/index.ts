@@ -82,7 +82,7 @@ async function startServer() {
   validateCustomerAuthConfiguration();
 
   const app = express();
-  const publicCatalogCache = "public, max-age=60, stale-while-revalidate=300";
+  const publicCatalogCache = "no-store";
   configureProxyTrust(app);
   const server = createServer(app);
   app.use(express.json({

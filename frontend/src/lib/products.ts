@@ -96,49 +96,15 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
     ...(originalPrice === undefined ? (typeof product.basePrice === "number" && product.basePrice > price ? { originalPrice: product.basePrice } : {}) : { originalPrice }),
   };
 }
-const PRODUCT_CACHE_KEY = "tribull-storefront-products";
 const PRODUCT_CACHE_TTL = 60_000;
 
-function isStorefrontProductCache(value: unknown): value is StorefrontProduct[] {
-  return Array.isArray(value) && value.every((product: unknown) => {
-    if (!product || typeof product !== "object") return false;
-    return "id" in product && typeof product.id === "string"
-      && "name" in product && typeof product.name === "string"
-      && "price" in product && typeof product.price === "number"
-      && "image" in product && typeof product.image === "string"
-      && "category" in product && typeof product.category === "string";
-  });
-}
-
-function readProductCache() {
-  if (typeof window === "undefined") return undefined;
-  try {
-    const saved = window.sessionStorage.getItem(PRODUCT_CACHE_KEY);
-    if (!saved) return undefined;
-    const cache = JSON.parse(saved) as { savedAt?: unknown; products?: unknown };
-    if (typeof cache.savedAt !== "number" || !isStorefrontProductCache(cache.products)) return undefined;
-    return { products: cache.products, savedAt: cache.savedAt };
-  } catch {
-    return undefined;
-  }
-}
-
-function saveProductCache(products: StorefrontProduct[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(PRODUCT_CACHE_KEY, JSON.stringify({ savedAt: Date.now(), products }));
-  } catch {
-    // Keep the in-memory catalog available when browser storage is unavailable.
-  }
-}
-
-const initialProductCache = readProductCache();
-let cachedProducts: StorefrontProduct[] | undefined = initialProductCache?.products;
-let cachedProductsAt = initialProductCache?.savedAt || 0;
+let cachedProducts: StorefrontProduct[] | undefined;
+let cachedProductsAt = 0;
 let productsRequest: Promise<StorefrontProduct[]> | undefined;
 
 async function request<T>(path: string, method: "GET" | "POST" | "PATCH", body?: unknown): Promise<T> {
   const response = await apiFetch(path, {
+    cache: "no-store",
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
@@ -157,7 +123,6 @@ function requestProducts() {
       .then((products) => {
         cachedProducts = products;
         cachedProductsAt = Date.now();
-        saveProductCache(products);
         return products;
       });
     const sharedRequest = requestPromise.finally(() => {
@@ -171,35 +136,19 @@ function requestProducts() {
 function invalidateProductCache() {
   cachedProducts = undefined;
   cachedProductsAt = 0;
-  if (typeof window !== "undefined") {
-    try {
-      window.sessionStorage.removeItem(PRODUCT_CACHE_KEY);
-    } catch {
-      // Keep invalidation in memory if browser storage is unavailable.
-    }
-  }
 }
 
 export function getCachedProducts() {
-  return cachedProducts || [];
+  return cachedProducts && Date.now() - cachedProductsAt <= PRODUCT_CACHE_TTL
+    ? cachedProducts
+    : [];
 }
 
 export async function fetchProducts(): Promise<StorefrontProduct[]> {
-  if (cachedProducts) {
-    if (Date.now() - cachedProductsAt > PRODUCT_CACHE_TTL && !productsRequest) {
-      void requestProducts()
-        .then(() => {
-          if (typeof window !== "undefined") window.dispatchEvent(new Event("tribull-products-cache-updated"));
-        })
-        .catch((error: unknown) => console.error("Could not refresh the cached storefront products.", error));
-    }
+  if (cachedProducts && Date.now() - cachedProductsAt <= PRODUCT_CACHE_TTL) {
     return cachedProducts;
   }
-  try {
-    return await requestProducts();
-  } finally {
-    productsRequest = undefined;
-  }
+  return requestProducts();
 }
 
 export async function createProduct(input: ProductWrite): Promise<Product> {

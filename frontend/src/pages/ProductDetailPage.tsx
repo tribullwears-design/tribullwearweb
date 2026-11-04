@@ -39,39 +39,6 @@ function getRecommendationProducts(products: ReturnType<typeof getCachedProducts
     }));
 }
 
-function readCachedProduct(id?: string): ProductData | null {
-  if (!id) return null;
-  try {
-    const cached = window.sessionStorage.getItem(`tribull-product-detail:${id}`);
-    if (!cached) return null;
-    const product = JSON.parse(cached) as ProductData;
-    return typeof product.name === "string"
-      && typeof product.price === "string"
-      && typeof product.image === "string"
-      && typeof product.category === "string"
-      ? product
-      : null;
-  } catch {
-    return null;
-  }
-}
-
-function readCachedCatalogProduct(id?: string): ProductData | null {
-  if (!id) return null;
-  const product = getCachedProducts().find((cachedProduct) => cachedProduct.id === id);
-  if (!product) return null;
-  return {
-    id: product.id,
-    name: product.name,
-    price: `₹${product.price.toLocaleString("en-IN")}`,
-    originalPrice: product.originalPrice,
-    image: product.image,
-    category: product.category,
-    stock: product.stock,
-    basePrice: product.basePrice,
-  };
-}
-
 const tShirtColors = [
   { name: "Black", value: "#171717" },
   { name: "White", value: "#ffffff" },
@@ -87,7 +54,7 @@ export default function ProductDetailPage() {
   const logo = useSiteLogo();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => readCachedProduct(id) || readCachedCatalogProduct(id));
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getRecommendationProducts(getCachedProducts(), id));
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
@@ -96,7 +63,7 @@ export default function ProductDetailPage() {
   const [sideImages, setSideImages] = useState<string[]>([]);
   const [imageFailed, setImageFailed] = useState(false);
   const [failedThumbnailIndexes, setFailedThumbnailIndexes] = useState<number[]>([]);
-  const [isProductLoading, setIsProductLoading] = useState(() => !readCachedProduct(id) && !readCachedCatalogProduct(id));
+  const [isProductLoading, setIsProductLoading] = useState(true);
   const [productLoadError, setProductLoadError] = useState(false);
   const [productRetry, setProductRetry] = useState(0);
   const [activeInfoTab, setActiveInfoTab] = useState<"details" | "fit" | "shipping">("details");
@@ -152,15 +119,14 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      const cachedProduct = readCachedProduct(id) || readCachedCatalogProduct(id);
-      setStoredProduct((current) => current?.id === id ? current : cachedProduct);
-      setIsProductLoading(!cachedProduct);
+      setStoredProduct(null);
+      setIsProductLoading(true);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setIsProductLoading(false);
         return;
       }
-      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { signal: AbortSignal.timeout(15000) })
+      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
         .then(async (response) => {
           if (!response.ok) {
             if (response.status === 404) return null;
@@ -220,11 +186,6 @@ export default function ProductDetailPage() {
             basePrice: product.basePrice,
           };
           setStoredProduct(nextProduct);
-          try {
-            window.sessionStorage.setItem(`tribull-product-detail:${product.id}`, JSON.stringify(nextProduct));
-          } catch {
-            // Keep the product available in memory when browser storage is unavailable.
-          }
           setIsProductLoading(false);
         })
         .catch((error: unknown) => {
@@ -274,7 +235,8 @@ export default function ProductDetailPage() {
       });
     return () => { active = false; };
   }, [id]);
-  const product = storedProduct;
+  const product = storedProduct?.id === id ? storedProduct : null;
+  const isShowingDifferentProduct = Boolean(storedProduct && storedProduct.id !== id);
   const isTShirtColorVariant = Boolean(storedProduct?.colors?.length);
   const productColorOptions = storedProduct?.colors?.length
     ? storedProduct.colors.map((name) => ({
@@ -320,7 +282,7 @@ export default function ProductDetailPage() {
     return (
       <div className="product-detail-page">
         <main className="product-detail-page__state" role="status">
-          {isProductLoading ? "Loading product…" : productLoadError ? (
+          {isProductLoading || isShowingDifferentProduct ? "Loading product…" : productLoadError ? (
             <><p>We could not load this product. Please check your connection and try again.</p><button type="button" onClick={() => setProductRetry((retry) => retry + 1)}>Retry</button></>
           ) : (
             <><p>Product Not Found</p><Link href="/products">Back to shopping</Link></>

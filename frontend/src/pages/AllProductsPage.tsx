@@ -81,9 +81,8 @@ export default function AllProductsPage() {
   }, []);
 
   const displayProducts = useMemo<AllProduct[]>(() => {
-    const eligibleProducts = hierarchy.loaded
-      ? getEligibleStorefrontProducts(catalogProducts, hierarchy)
-      : catalogProducts;
+    if (!hierarchy.loaded) return [];
+    const eligibleProducts = getEligibleStorefrontProducts(catalogProducts, hierarchy);
     return eligibleProducts
       .filter(product => productTypes.some((category) => category.id === selectedType) && product.category === selectedType)
       .map(product => ({
@@ -182,6 +181,16 @@ export default function AllProductsPage() {
           ))}
         </div>
         {productTypes.length === 0 && <p role="status">No product types are currently visible.</p>}
+        {!hierarchy.loaded && (
+          <p role={fetchedHierarchy.error ? "alert" : "status"}>
+            {fetchedHierarchy.error
+              ? "Categories could not be loaded."
+              : "Loading product categories..."}
+            {fetchedHierarchy.error && (
+              <button type="button" onClick={fetchedHierarchy.retry}> Retry</button>
+            )}
+          </p>
+        )}
 
         <section className="all-products-grid" aria-label="All products grid">
           {displayProducts.map(product => {
