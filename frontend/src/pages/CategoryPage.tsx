@@ -379,17 +379,15 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 
 function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string; entrySlugs: string[] }) {
   const setRouteLoading = useRouteLoading();
-  const [products, setProducts] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, entrySlugs));
-  const [loading, setLoading] = useState(() => entrySlugs.length > 0 && getCachedCategoryProducts(categorySlug, entrySlugs).length === 0);
+  const [products, setProducts] = useState<CategoryProduct[]>([]);
+  const [loading, setLoading] = useState(entrySlugs.length > 0);
   const entrySlugsKey = entrySlugs.join("\u0000");
 
   useEffect(() => {
     const requestedSubcategories = entrySlugsKey ? entrySlugsKey.split("\u0000") : [];
     let active = true;
-    const cachedProducts = getCachedCategoryProducts(categorySlug, requestedSubcategories);
-    setProducts(cachedProducts);
-    setLoading(requestedSubcategories.length > 0 && cachedProducts.length === 0);
-    if (cachedProducts.length > 0) setRouteLoading(false);
+    setProducts([]);
+    setLoading(requestedSubcategories.length > 0);
     if (requestedSubcategories.length === 0) {
       setProducts([]);
       setLoading(false);

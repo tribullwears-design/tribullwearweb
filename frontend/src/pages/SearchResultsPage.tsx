@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
@@ -37,7 +37,7 @@ function SearchResultCard({ product }: { product: Product }) {
 
 export default function SearchResultsPage() {
   const query = new URLSearchParams(window.location.search).get("q")?.trim() || "";
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [sortOrder, setSortOrder] = useState<SortOrder>("relevance");
 
   useEffect(() => {

@@ -97,51 +97,12 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
   };
 }
 const PRODUCT_CACHE_TTL = 60_000;
-const PRODUCT_CACHE_MAX_AGE = 5 * 60_000;
 const PRODUCT_CACHE_STORAGE_KEY = "tribull-storefront-products";
 
 let cachedProducts: StorefrontProduct[] | undefined;
 let cachedProductsAt = 0;
 let productsRequest: Promise<StorefrontProduct[]> | undefined;
-
-function isStoredProduct(value: unknown): value is StorefrontProduct {
-  if (!value || typeof value !== "object") return false;
-  const product = value as Partial<StorefrontProduct>;
-  return typeof product.id === "string"
-    && typeof product.name === "string"
-    && typeof product.image === "string"
-    && typeof product.price === "number"
-    && typeof product.category === "string";
-}
-
-function readStoredProducts() {
-  try {
-    const stored = window.localStorage.getItem(PRODUCT_CACHE_STORAGE_KEY);
-    if (!stored) return;
-    const cache: unknown = JSON.parse(stored);
-    if (!cache || typeof cache !== "object") return;
-    const entry = cache as { updatedAt?: unknown; products?: unknown };
-    if (typeof entry.updatedAt !== "number"
-      || Date.now() - entry.updatedAt > PRODUCT_CACHE_MAX_AGE
-      || !Array.isArray(entry.products)
-      || !entry.products.every(isStoredProduct)) return;
-    cachedProducts = entry.products;
-    cachedProductsAt = entry.updatedAt;
-  } catch (error) {
-    console.error("Could not read the cached storefront products.", error);
-  }
-}
-
-function writeStoredProducts(products: StorefrontProduct[]) {
-  try {
-    window.localStorage.setItem(PRODUCT_CACHE_STORAGE_KEY, JSON.stringify({
-      updatedAt: cachedProductsAt,
-      products,
-    }));
-  } catch (error) {
-    console.error("Could not cache the storefront products.", error);
-  }
-}
+let productRequestGeneration = 0;
 
 async function request<T>(path: string, method: "GET" | "POST" | "PATCH", body?: unknown): Promise<T> {
   const response = await apiFetch(path, {
@@ -157,17 +118,19 @@ async function request<T>(path: string, method: "GET" | "POST" | "PATCH", body?:
   return response.json() as Promise<T>;
 }
 
-function requestProducts() {
+function requestProducts(): Promise<StorefrontProduct[]> {
   if (!productsRequest) {
-    const requestPromise = request<ApiProduct[]>("/api/products", "GET")
+    const requestGeneration = productRequestGeneration;
+    const requestPromise: Promise<StorefrontProduct[]> = request<ApiProduct[]>("/api/products", "GET")
       .then((products) => products.filter((product) => product.status !== "Draft").map(mapApiProduct))
       .then((products) => {
+        if (productRequestGeneration !== requestGeneration) return requestProducts();
         cachedProducts = products;
         cachedProductsAt = Date.now();
-        writeStoredProducts(products);
         return products;
       });
-    const sharedRequest = requestPromise.finally(() => {
+    let sharedRequest: Promise<StorefrontProduct[]>;
+    sharedRequest = requestPromise.finally(() => {
       if (productsRequest === sharedRequest) productsRequest = undefined;
     });
     productsRequest = sharedRequest;
@@ -178,6 +141,8 @@ function requestProducts() {
 function invalidateProductCache() {
   cachedProducts = undefined;
   cachedProductsAt = 0;
+  productRequestGeneration += 1;
+  productsRequest = undefined;
   try {
     window.localStorage.removeItem(PRODUCT_CACHE_STORAGE_KEY);
   } catch (error) {
@@ -186,20 +151,14 @@ function invalidateProductCache() {
 }
 
 export function getCachedProducts() {
-  if (cachedProducts && Date.now() - cachedProductsAt > PRODUCT_CACHE_MAX_AGE) {
+  if (cachedProducts && Date.now() - cachedProductsAt > PRODUCT_CACHE_TTL) {
     cachedProducts = undefined;
     cachedProductsAt = 0;
   }
-  if (typeof window !== "undefined" && !cachedProducts) readStoredProducts();
-  return cachedProducts && Date.now() - cachedProductsAt <= PRODUCT_CACHE_TTL
-    ? cachedProducts
-    : cachedProducts || [];
+  return cachedProducts || [];
 }
 
 export async function fetchProducts(): Promise<StorefrontProduct[]> {
-  if (cachedProducts && Date.now() - cachedProductsAt <= PRODUCT_CACHE_TTL) {
-    return cachedProducts;
-  }
   return requestProducts();
 }
 

@@ -1,6 +1,6 @@
 import { getDiscountPercentage, parsePrice, formatProductPrice } from "../lib/productPrice";
 import { useEffect, useState } from "react";
-import { fetchProducts, getCachedProducts } from "../lib/products";
+import { fetchProducts } from "../lib/products";
 import type { Product } from "../../../shared/products";
 
 type ProductPriceProps = {
@@ -11,8 +11,7 @@ type ProductPriceProps = {
 };
 
 export default function ProductPrice({ sellingPrice, originalPrice, productName, className = "" }: ProductPriceProps) {
-  const [catalogProduct, setCatalogProduct] = useState<Product | undefined>(() => getCachedProducts()
-    .find((product) => product.name.trim().toLowerCase() === productName?.trim().toLowerCase()));
+  const [catalogProduct, setCatalogProduct] = useState<Product | undefined>();
   useEffect(() => {
     if (!productName) return;
     let active = true;

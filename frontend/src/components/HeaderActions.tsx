@@ -14,7 +14,7 @@ import { fetchCustomerProfile, readProfilePhotoFile, saveCustomerProfile } from 
 import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, toggleWishlistItem } from "../lib/wishlist";
 import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianState } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, refreshProducts } from "../lib/products";
 import { matchesProductSearch } from "../lib/productSearch";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
@@ -117,7 +117,7 @@ export default function HeaderActions() {
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));
   const [cart, setCart] = useState<Cart>(() => readStorage("tribull-cart", {}));
   const [cartItems, setCartItems] = useState<CartItems>(() => readStorage("tribull-cart-items", {}));
-  const [products, setProducts] = useState<Product[]>(getCachedProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [authUser, setAuthUser] = useState<AuthUser>(() => ({
     ...readStorage<AuthUser>("tribull-user", { username: "", isAuthenticated: false }),
     isAuthenticated: false,

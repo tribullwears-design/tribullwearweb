@@ -17,7 +17,7 @@ export type BannerDocument = {
 };
 
 type StoredBanner = Omit<BannerDocument, "id">;
-type CachedBannerImage = { mimeType: string; data: Buffer };
+type CachedBannerImage = { mimeType: string; data: Buffer; updatedAt: string };
 
 const existingHeroBanners: Record<string, string> = {
   cinema: "/products/hero.png",
@@ -30,27 +30,13 @@ let indexPromise: Promise<string> | undefined;
 let seedPromise: Promise<void> | undefined;
 const bannerImageCache = new Map<string, CachedBannerImage>();
 const bannerImageOptimizationRequests = new Map<string, { source: CachedBannerImage; promise: Promise<CachedBannerImage> }>();
-const bannerDocumentCache = new Map<string, BannerDocument>();
-
-function cacheBannerDocument(banner: BannerDocument) {
-  bannerDocumentCache.delete(banner.categoryId);
-  bannerDocumentCache.set(banner.categoryId, banner);
-  if (bannerDocumentCache.size > 2) {
-    const oldestCategoryId = bannerDocumentCache.keys().next().value;
-    if (oldestCategoryId) {
-      bannerDocumentCache.delete(oldestCategoryId);
-      bannerImageCache.delete(oldestCategoryId);
-    }
-  }
-}
 
 function clearBannerCache(categoryId: string) {
-  bannerDocumentCache.delete(categoryId);
   bannerImageCache.delete(categoryId);
   bannerImageOptimizationRequests.delete(categoryId);
 }
 
-function cacheBannerImage(categoryId: string, value: string) {
+function cacheBannerImage(categoryId: string, value: string, updatedAt: string) {
   bannerImageOptimizationRequests.delete(categoryId);
   const match = value.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
   if (!match?.[1] || !match[2]) {
@@ -61,6 +47,7 @@ function cacheBannerImage(categoryId: string, value: string) {
   bannerImageCache.set(categoryId, {
     mimeType: `image/${match[1].toLowerCase()}`,
     data: Buffer.from(match[2], "base64"),
+    updatedAt,
   });
   if (bannerImageCache.size > 4) {
     const oldestCategoryId = bannerImageCache.keys().next().value;
@@ -82,7 +69,7 @@ function optimizeBannerImage(categoryId: string, image: CachedBannerImage) {
     .webp({ quality: 82, effort: 3 })
     .toBuffer()
     .then((data) => {
-      const optimized = { mimeType: "image/webp", data };
+      const optimized = { mimeType: "image/webp", data, updatedAt: image.updatedAt };
       if (bannerImageCache.get(categoryId) === image) bannerImageCache.set(categoryId, optimized);
       return optimized;
     })
@@ -177,19 +164,12 @@ export async function listBanners() {
 }
 
 export async function getBanner(categoryId: string) {
-  const cached = bannerDocumentCache.get(categoryId.trim().toLowerCase());
-  if (cached) return cached;
   const category = await resolveCategory(categoryId);
-  const cachedCategory = bannerDocumentCache.get(category.value);
-  if (cachedCategory) return { ...cachedCategory, categoryName: category.label };
   const collection = await getCollection();
   await seedExistingHeroBanners(collection);
   const document = await collection.findOne({ categoryId: category.value });
   if (!document) return null;
-  cacheBannerImage(category.value, document.image);
-  const banner = { ...toBanner(document), categoryName: category.label };
-  cacheBannerDocument(banner);
-  return banner;
+  return { ...toBanner(document), categoryName: category.label };
 }
 
 export async function getStorefrontBanner(categoryId: string) {
@@ -200,18 +180,17 @@ export async function getStorefrontBanner(categoryId: string) {
 }
 
 export async function getBannerImage(categoryId: string) {
-  const normalizedCategoryId = categoryId.trim().toLowerCase();
-  const cached = bannerImageCache.get(normalizedCategoryId);
-  if (cached) return optimizeBannerImage(normalizedCategoryId, cached);
   const category = await resolveCategory(categoryId);
   const collection = await getCollection();
   await seedExistingHeroBanners(collection);
   const document = await collection.findOne({ categoryId: category.value });
   if (!document) return null;
 
-  cacheBannerImage(category.value, document.image);
-  cacheBannerDocument({ ...toBanner(document), categoryName: category.label });
-  const image = bannerImageCache.get(category.value);
+  let image = bannerImageCache.get(category.value);
+  if (image?.updatedAt !== document.updatedAt) {
+    cacheBannerImage(category.value, document.image, document.updatedAt);
+    image = bannerImageCache.get(category.value);
+  }
   return image ? optimizeBannerImage(category.value, image) : null;
 }
 
@@ -238,10 +217,8 @@ export async function saveBanner(categoryId: string, imageInput: unknown, fields
   );
   if (!document) throw new Error("Banner could not be saved");
   clearBannerCache(category.value);
-  cacheBannerImage(category.value, image);
-  const banner = toBanner(document);
-  cacheBannerDocument(banner);
-  return banner;
+  cacheBannerImage(category.value, image, document.updatedAt);
+  return toBanner(document);
 }
 
 export async function updateBanner(id: string, categoryId: string, imageInput: unknown, fields?: unknown) {
@@ -266,10 +243,8 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
       if (!updated) throw new Error("Banner could not be updated");
       clearBannerCache(existing.categoryId);
       clearBannerCache(category.value);
-      cacheBannerImage(category.value, image);
-      const banner = toBanner(updated);
-      cacheBannerDocument(banner);
-      return banner;
+      cacheBannerImage(category.value, image, updated.updatedAt);
+      return toBanner(updated);
     }
   }
 
@@ -281,10 +256,8 @@ export async function updateBanner(id: string, categoryId: string, imageInput: u
   if (!updated) throw new Error("Banner not found");
   if (existing.categoryId !== category.value) clearBannerCache(existing.categoryId);
   clearBannerCache(category.value);
-  cacheBannerImage(category.value, image);
-  const banner = toBanner(updated);
-  cacheBannerDocument(banner);
-  return banner;
+  cacheBannerImage(category.value, image, updated.updatedAt);
+  return toBanner(updated);
 }
 
 export async function deleteBanner(id: string) {

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
-import { fetchProducts, getCachedProducts, type StorefrontProduct } from "../lib/products";
+import { fetchProducts, type StorefrontProduct } from "../lib/products";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import "./AllReviewsPage.css";
 
@@ -16,7 +16,7 @@ function formatReviewDate(value: string) {
 
 export default function AllReviewsPage() {
   const [reviews, setReviews] = useState<PublicReview[]>([]);
-  const [products, setProducts] = useState<StorefrontProduct[]>(getCachedProducts);
+  const [products, setProducts] = useState<StorefrontProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);

@@ -9,7 +9,6 @@ import type { AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import {
   fetchProducts,
-  getCachedProducts,
   refreshProducts,
 } from "../lib/products";
 import { getEligibleStorefrontProducts } from "../lib/products";
@@ -41,7 +40,7 @@ export default function AllProductsPage() {
   const [selectedType, setSelectedType] = useState("oversized");
   const productTypes = useProductTypeCategories().filter((category) => category.isVisible);
   const [catalogProducts, setCatalogProducts] =
-    useState<StorefrontProduct[]>(getCachedProducts);
+    useState<StorefrontProduct[]>([]);
   const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
 

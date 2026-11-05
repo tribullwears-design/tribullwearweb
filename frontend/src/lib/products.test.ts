@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { getCachedProducts, getProductIdentifier, mapApiProduct, productHref } from "./products";
+
+const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
+vi.mock("./api", () => ({ apiFetch: mocks.apiFetch }));
+
+import { fetchProducts, getCachedProducts, getProductIdentifier, mapApiProduct, productHref } from "./products";
 
 describe("storefront product identifiers", () => {
-  it("uses the saved product cache for an immediate storefront render", () => {
+  it("does not render a persisted product cache before the API refreshes it", () => {
     const products = [{
       id: "saved-product",
       name: "Saved product",
@@ -15,11 +19,36 @@ describe("storefront product identifiers", () => {
     const getItem = vi.fn(() => JSON.stringify({ updatedAt: Date.now(), products }));
     vi.stubGlobal("window", { localStorage: { getItem } });
     try {
-      expect(getCachedProducts()).toEqual(products);
-      expect(getItem).toHaveBeenCalledWith("tribull-storefront-products");
+      expect(getCachedProducts()).toEqual([]);
+      expect(getItem).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  it("requests the latest product catalog instead of reusing an in-memory result", async () => {
+    const response = () => new Response(JSON.stringify([{
+      id: "saved-product",
+      name: "Saved product",
+      category: "products",
+      price: 599,
+      image: "/latest-product.png",
+      status: "Active",
+    }]), { status: 200, headers: { "content-type": "application/json" } });
+    mocks.apiFetch.mockResolvedValueOnce(response()).mockResolvedValueOnce(response());
+
+    const first = await fetchProducts();
+    const second = await fetchProducts();
+
+    expect(first[0]?.image).toBe("/latest-product.png");
+    expect(second[0]?.image).toBe("/latest-product.png");
+    expect(mocks.apiFetch).toHaveBeenCalledTimes(2);
+    expect(mocks.apiFetch).toHaveBeenLastCalledWith("/api/products", {
+      cache: "no-store",
+      method: "GET",
+      headers: undefined,
+      body: undefined,
+    });
   });
 
   it("prefers the stable API id and supports legacy Mongo _id responses", () => {

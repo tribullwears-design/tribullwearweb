@@ -11,7 +11,7 @@ import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
-import { fetchProducts, getCachedProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, refreshProducts } from "../lib/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import { useProductTypeCategories } from "../lib/productTypeCategories";
 
@@ -35,7 +35,7 @@ export default function ProductsPage() {
   const logo = useSiteLogo();
   const [, setLocation] = useLocation();
   const categories = useProductTypeCategories().filter((category) => category.isVisible);
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>(getCachedProducts);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>("round-neck");
   const [sort, setSort] = useState<SortOption>("featured");
   const [wishlist, setWishlist] = useState<string[]>(() => readStorage("tribull-wishlist", []));

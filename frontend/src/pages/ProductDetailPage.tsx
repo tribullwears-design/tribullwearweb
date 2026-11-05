@@ -28,23 +28,6 @@ interface ProductData extends OriginalPriceFields {
   detailsLoaded?: boolean;
 }
 
-function getCachedProductData(id: string | undefined): ProductData | null {
-  if (!id) return null;
-  const cachedProduct = getCachedProducts().find((product) => product.id === id);
-  if (!cachedProduct) return null;
-  return {
-    id: cachedProduct.id,
-    name: cachedProduct.name,
-    price: `₹${cachedProduct.price.toLocaleString("en-IN")}`,
-    originalPrice: cachedProduct.originalPrice,
-    image: cachedProduct.image,
-    category: cachedProduct.category,
-    stock: cachedProduct.stock,
-    basePrice: cachedProduct.basePrice,
-    detailsLoaded: false,
-  };
-}
-
 function getRecommendationProducts(products: ReturnType<typeof getCachedProducts>, productId: string): ProductData[] {
   return getFrequentlyBoughtTogether(products, productId)
     .map((product) => ({
@@ -74,8 +57,8 @@ export default function ProductDetailPage() {
   const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProductData(id));
-  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getRecommendationProducts(getCachedProducts(), id));
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
+  const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
@@ -139,10 +122,9 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      const cachedProduct = getCachedProductData(id);
-      setStoredProduct(cachedProduct);
-      setIsProductLoading(!cachedProduct);
-      setRouteLoading(!cachedProduct);
+      setStoredProduct(null);
+      setIsProductLoading(true);
+      setRouteLoading(true);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setStoredProduct(null);
@@ -204,7 +186,7 @@ export default function ProductDetailPage() {
             description: product.description,
             price: `₹${product.price.toLocaleString("en-IN")}`,
             originalPrice: product.compareAt ?? undefined,
-            image: cachedProduct?.image || product.image,
+            image: product.image,
             category: product.mainCategory,
             sizes: product.sizes,
             colors: product.colors,

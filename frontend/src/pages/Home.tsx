@@ -8,7 +8,7 @@ import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -73,7 +73,7 @@ export default function Home() {
   const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
   const [homeVideos, setHomeVideos] = useState<HomeVideo[]>([]);
   const [videosError, setVideosError] = useState("");
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
@@ -236,6 +236,7 @@ export default function Home() {
     void loadCategoryBanner("home").then((banner) => {
       if (active) {
         setHomeBanner(banner);
+        setHomeBannerImageLoaded(false);
         setHomeBannerImageFailed(false);
         setHomeBannerResolved(true);
       }
@@ -358,23 +359,26 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className={`hero__images${homeBannerImageLoaded ? "" : " hero__images--loading"}`}>
             <div className="hero__image">
-              <picture>
-                <source
-                  media="(max-width: 640px)"
-                  srcSet={homeBannerImageFailed
-                    ? brandAssets.hero
-                    : homeBanner?.image || "/products/mobile-banner.webp"}
-                />
-                <img
-                  src={homeBannerImageFailed ? brandAssets.hero : homeBanner?.image || brandAssets.hero}
-                  alt={homeBanner?.title || "Tribull collection"}
-                  loading="eager"
-                  fetchPriority="high"
-                  decoding="async"
-                  onLoad={() => setHomeBannerImageLoaded(true)}
-                  onError={() => setHomeBannerImageFailed(true)}
-                />
-              </picture>
+              {homeBannerResolved && !homeBannerImageFailed && (
+                <picture>
+                  <source
+                    media="(max-width: 640px)"
+                    srcSet={homeBanner?.image || "/products/mobile-banner.webp"}
+                  />
+                  <img
+                    src={homeBanner?.image || brandAssets.hero}
+                    alt={homeBanner?.title || "Tribull collection"}
+                    loading="eager"
+                    fetchPriority="high"
+                    decoding="async"
+                    onLoad={() => setHomeBannerImageLoaded(true)}
+                    onError={() => {
+                      console.error("Homepage banner image failed to load.");
+                      setHomeBannerImageFailed(true);
+                    }}
+                  />
+                </picture>
+              )}
             </div>
           </div>
           <div className="hero__wash" />
