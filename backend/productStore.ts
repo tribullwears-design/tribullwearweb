@@ -11,6 +11,7 @@ export type ProductDocument = {
   compareAt: number | null;
   image: string;
   images?: string[];
+  imageCount?: number;
   storefrontImages?: Partial<Record<"640" | "960", string>>;
   storefrontImageUpdatedAt?: string;
   productType?: string;
@@ -31,7 +32,7 @@ export type ProductDocument = {
   updatedAt: string;
 };
 
-type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice" | "storefrontImages" | "storefrontImageUpdatedAt"> & { discountOfferId?: string | null };
+type ProductInput = Omit<ProductDocument, "id" | "mainCategory" | "subcategory" | "createdAt" | "updatedAt" | "discountedPrice" | "basePrice" | "imageCount" | "storefrontImages" | "storefrontImageUpdatedAt"> & { discountOfferId?: string | null };
 
 const productTypes = ["round-neck", "oversized", "acid-oversized", "hoodie"] as const;
 let indexesPromise: Promise<void> | undefined;
@@ -184,7 +185,7 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
     createdAt: 1,
     updatedAt: 1,
     sold: 1,
-    images: 1,
+    imageCount: { $size: { $ifNull: ["$images", []] } },
   } as const;
   const cursor = includeDrafts
     ? collection.find(filter)

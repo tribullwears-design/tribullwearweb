@@ -81,6 +81,7 @@ export default function Home() {
   const [reviewsError, setReviewsError] = useState("");
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
   const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
+  const [homeBannerResolved, setHomeBannerResolved] = useState(false);
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
   const [featureImages, setFeatureImages] = useState<FeatureImages>({ customize: null, corporate: null });
@@ -236,9 +237,11 @@ export default function Home() {
       if (active) {
         setHomeBanner(banner);
         setHomeBannerImageFailed(false);
+        setHomeBannerResolved(true);
       }
     }).catch((error: unknown) => {
       console.error("Homepage banner request failed.", error);
+      if (active) setHomeBannerResolved(true);
     });
     return () => { active = false; };
   }, []);
@@ -324,6 +327,12 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
+      {homeBannerResolved && homeBanner?.image
+        ? <link rel="preload" as="image" href={homeBanner.image} fetchPriority="high" />
+        : homeBannerResolved && <>
+          <link rel="preload" as="image" href="/products/mobile-banner.webp" media="(max-width: 640px)" fetchPriority="high" />
+          <link rel="preload" as="image" href={brandAssets.hero} media="(min-width: 641px)" fetchPriority="high" />
+        </>}
       <MovingNavbar />
 
       <header className="site-header">
@@ -352,10 +361,12 @@ export default function Home() {
               <picture>
                 <source
                   media="(max-width: 640px)"
-                  srcSet={homeBannerImageFailed ? brandAssets.hero : "/products/mobile-banner.webp"}
+                  srcSet={homeBannerImageFailed
+                    ? brandAssets.hero
+                    : homeBanner?.image || "/products/mobile-banner.webp"}
                 />
                 <img
-                  src={brandAssets.hero}
+                  src={homeBannerImageFailed ? brandAssets.hero : homeBanner?.image || brandAssets.hero}
                   alt={homeBanner?.title || "Tribull collection"}
                   loading="eager"
                   fetchPriority="high"

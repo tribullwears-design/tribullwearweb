@@ -869,11 +869,16 @@ async function startServer() {
       const productType = typeof req.query.productType === "string" ? req.query.productType : undefined;
       const products = await listProducts(mainCategory, subcategory, productType);
       res.set("Cache-Control", publicCatalogCache);
-      res.json(products.map((product) => ({
-        ...product,
-        image: storefrontProductImageUrl(product.id, product.updatedAt),
-        ...(product.images ? { images: product.images.map((_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index)) } : {}),
-      })));
+      res.json(products.map((product) => {
+        const { imageCount = 0, ...storefrontProduct } = product;
+        return {
+          ...storefrontProduct,
+          image: storefrontProductImageUrl(product.id, product.updatedAt),
+          ...(imageCount > 0
+            ? { images: Array.from({ length: imageCount }, (_image, index) => storefrontProductImageUrl(product.id, product.updatedAt, "images", index)) }
+            : {}),
+        };
+      }));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product request failed";
       const status = message.includes("not found") ? 404 : message.includes("required") || message.includes("Invalid") ? 400 : 500;

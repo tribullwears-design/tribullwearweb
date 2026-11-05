@@ -25,6 +25,24 @@ interface ProductData extends OriginalPriceFields {
   colors?: string[];
   stock?: number;
   basePrice?: number;
+  detailsLoaded?: boolean;
+}
+
+function getCachedProductData(id: string | undefined): ProductData | null {
+  if (!id) return null;
+  const cachedProduct = getCachedProducts().find((product) => product.id === id);
+  if (!cachedProduct) return null;
+  return {
+    id: cachedProduct.id,
+    name: cachedProduct.name,
+    price: `₹${cachedProduct.price.toLocaleString("en-IN")}`,
+    originalPrice: cachedProduct.originalPrice,
+    image: cachedProduct.image,
+    category: cachedProduct.category,
+    stock: cachedProduct.stock,
+    basePrice: cachedProduct.basePrice,
+    detailsLoaded: false,
+  };
 }
 
 function getRecommendationProducts(products: ReturnType<typeof getCachedProducts>, productId: string): ProductData[] {
@@ -56,7 +74,7 @@ export default function ProductDetailPage() {
   const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProductData(id));
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>(() => getRecommendationProducts(getCachedProducts(), id));
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
@@ -121,11 +139,13 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      setRouteLoading(true);
-      setStoredProduct(null);
-      setIsProductLoading(true);
+      const cachedProduct = getCachedProductData(id);
+      setStoredProduct(cachedProduct);
+      setIsProductLoading(!cachedProduct);
+      setRouteLoading(!cachedProduct);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+        setStoredProduct(null);
         setIsProductLoading(false);
         setRouteLoading(false);
         return;
@@ -173,6 +193,7 @@ export default function ProductDetailPage() {
         .then((product) => {
           if (!active) return;
           if (!product) {
+            setStoredProduct(null);
             setIsProductLoading(false);
             setRouteLoading(false);
             return;
@@ -183,12 +204,13 @@ export default function ProductDetailPage() {
             description: product.description,
             price: `₹${product.price.toLocaleString("en-IN")}`,
             originalPrice: product.compareAt ?? undefined,
-            image: product.image,
+            image: cachedProduct?.image || product.image,
             category: product.mainCategory,
             sizes: product.sizes,
             colors: product.colors,
             stock: product.stock,
             basePrice: product.basePrice,
+            detailsLoaded: true,
           };
           setStoredProduct(nextProduct);
           setIsProductLoading(false);
@@ -352,7 +374,7 @@ export default function ProductDetailPage() {
   } as const;
 
   const checkoutCurrentProduct = () => {
-    if (isOutOfStock) return;
+    if (isOutOfStock || !product.detailsLoaded) return;
     if (availableSizes.length > 0 && !selectedSize) {
       setSizeError("Please select a size before checking out.");
       return;
@@ -571,7 +593,7 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-cta-row">
-              <button type="button" className="product-detail-add-to-cart" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
+              <button type="button" className="product-detail-add-to-cart" onClick={checkoutCurrentProduct} disabled={isOutOfStock || !product.detailsLoaded}>
                 {isOutOfStock ? null : <ShoppingBag size={18} />}
                 {isOutOfStock ? "Out of stock" : "Buy now"}
                 {!isOutOfStock && <ArrowRight size={18} />}
@@ -711,7 +733,7 @@ export default function ProductDetailPage() {
             className="product-price--sticky"
           />
         </div>
-        <button type="button" onClick={checkoutCurrentProduct} disabled={isOutOfStock}>
+        <button type="button" onClick={checkoutCurrentProduct} disabled={isOutOfStock || !product.detailsLoaded}>
           {isOutOfStock ? "Out of stock" : "Buy now"}
         </button>
       </div>

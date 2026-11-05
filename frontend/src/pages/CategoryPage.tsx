@@ -242,7 +242,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
   const [selectedTab, setSelectedTab] = useState<CatalogTab>("oversized");
   const [sort, setSort] = useState<CatalogSort>("featured");
   const [storedCatalog, setStoredCatalog] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, [entrySlug]));
-  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(() => getCachedCategoryProducts(categorySlug, [entrySlug]).length === 0);
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try { return JSON.parse(window.localStorage.getItem("tribull-wishlist") || "[]") as string[]; } catch { return []; }
   });
@@ -259,8 +259,10 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 
   useEffect(() => {
     let active = true;
-    setStoredCatalog([]);
-    setProductsLoading(true);
+    const cachedProducts = getCachedCategoryProducts(categorySlug, [entrySlug]);
+    setStoredCatalog(cachedProducts);
+    setProductsLoading(cachedProducts.length === 0);
+    if (cachedProducts.length > 0) setRouteLoading(false);
     const loadProducts = () => fetchProducts()
       .then((products) => {
         if (active) {
@@ -378,14 +380,16 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string; entrySlugs: string[] }) {
   const setRouteLoading = useRouteLoading();
   const [products, setProducts] = useState<CategoryProduct[]>(() => getCachedCategoryProducts(categorySlug, entrySlugs));
-  const [loading, setLoading] = useState(entrySlugs.length > 0);
+  const [loading, setLoading] = useState(() => entrySlugs.length > 0 && getCachedCategoryProducts(categorySlug, entrySlugs).length === 0);
   const entrySlugsKey = entrySlugs.join("\u0000");
 
   useEffect(() => {
     const requestedSubcategories = entrySlugsKey ? entrySlugsKey.split("\u0000") : [];
     let active = true;
-    setProducts([]);
-    setLoading(requestedSubcategories.length > 0);
+    const cachedProducts = getCachedCategoryProducts(categorySlug, requestedSubcategories);
+    setProducts(cachedProducts);
+    setLoading(requestedSubcategories.length > 0 && cachedProducts.length === 0);
+    if (cachedProducts.length > 0) setRouteLoading(false);
     if (requestedSubcategories.length === 0) {
       setProducts([]);
       setLoading(false);

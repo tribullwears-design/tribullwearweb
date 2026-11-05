@@ -82,10 +82,17 @@ describe("public product reads", () => {
     mocks.find.mockReturnValue({ sort });
 
     await listProducts();
-    expect(mocks.find).toHaveBeenLastCalledWith(
-      { status: "Active" },
-      { projection: expect.objectContaining({ id: 1, name: 1, price: 1, stock: 1, updatedAt: 1 }) },
-    );
+    const [filter, options] = mocks.find.mock.lastCall || [];
+    expect(filter).toEqual({ status: "Active" });
+    expect(options.projection).toEqual(expect.objectContaining({
+      id: 1,
+      name: 1,
+      price: 1,
+      stock: 1,
+      updatedAt: 1,
+      imageCount: { $size: { $ifNull: ["$images", []] } },
+    }));
+    expect(options.projection).not.toHaveProperty("images");
 
     await listProducts(undefined, undefined, undefined, true);
     expect(mocks.find).toHaveBeenLastCalledWith({});
