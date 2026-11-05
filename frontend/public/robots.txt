@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin26
+Disallow: /checkout
+Disallow: /search
+
+Sitemap: https://tribull.in/sitemap.xml
