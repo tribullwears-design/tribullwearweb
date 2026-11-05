@@ -293,8 +293,10 @@ export function deleteSubcategory(parent: string, value: string) {
   return requestCategory(`/api/categories/${encodeURIComponent(parent)}/subcategories/${encodeURIComponent(value)}`, "DELETE");
 }
 
-export function useCategoryHierarchy(fallback: CategoryHierarchy) {
-  const [initialCache] = useState(() => readCachedHierarchy(fallback));
+export function useCategoryHierarchy(fallback: CategoryHierarchy, useCache = true) {
+  const [initialCache] = useState(() => useCache
+    ? readCachedHierarchy(fallback)
+    : { hierarchy: fallback, loaded: false });
   const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(initialCache.hierarchy);
   const [loaded, setLoaded] = useState(initialCache.loaded);
   const [error, setError] = useState("");

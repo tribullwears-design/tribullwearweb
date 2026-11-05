@@ -503,7 +503,7 @@ export default function ProductDetailPage() {
           </section>
 
           <section className="product-detail-panel" aria-label="Product information">
-            <div className="product-detail-panel__eyebrow">{product.category} <span>·</span> SKU: {product.id}</div>
+            <div className="product-detail-panel__eyebrow">{product.category}</div>
             <h1 className="product-detail-panel__heading">{product.name}</h1>
 
             <ProductPrice

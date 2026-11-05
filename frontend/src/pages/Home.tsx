@@ -8,7 +8,7 @@ import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getCachedProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -29,38 +29,6 @@ const whatsappUrl = (message: string) => `https://wa.me/916385400605?text=${enco
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 type HomeVideo = { id: string; title: string; url: string; thumbnail?: string; category?: string };
-const HOME_VIDEOS_CACHE_KEY = "tribull-home-videos";
-const HOME_BANNER_CACHE_KEY = "tribull-home-banner";
-
-function readCachedHomeVideos(): HomeVideo[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const cached = window.localStorage.getItem(HOME_VIDEOS_CACHE_KEY);
-    if (!cached) return [];
-    const videos = JSON.parse(cached) as unknown;
-    return Array.isArray(videos) && videos.every((video) =>
-      video && typeof video.id === "string" && typeof video.title === "string" && typeof video.url === "string")
-      ? videos as HomeVideo[]
-      : [];
-  } catch (error) {
-    console.error("Could not read the cached homepage videos.", error);
-    return [];
-  }
-}
-
-function readCachedHomeBanner() {
-  if (typeof window === "undefined") return null;
-  try {
-    const cached = window.localStorage.getItem(HOME_BANNER_CACHE_KEY);
-    if (!cached) return null;
-    const banner = JSON.parse(cached) as Awaited<ReturnType<typeof loadCategoryBanner>>;
-    return banner && typeof banner.image === "string" && typeof banner.updatedAt === "string" ? banner : null;
-  } catch (error) {
-    console.error("Could not read the cached homepage banner.", error);
-    return null;
-  }
-}
-
 function cls(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
 }
@@ -101,17 +69,18 @@ function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage, l
 }
 
 export default function Home() {
-  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback, false);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
-  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(getCachedProducts);
-  const [homeVideos, setHomeVideos] = useState<HomeVideo[]>(readCachedHomeVideos);
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
+  const [homeVideos, setHomeVideos] = useState<HomeVideo[]>([]);
   const [videosError, setVideosError] = useState("");
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [reviewsError, setReviewsError] = useState("");
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
-  const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(readCachedHomeBanner);
+  const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
+  const [homeBannerResolved, setHomeBannerResolved] = useState(false);
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
   const [featureImages, setFeatureImages] = useState<FeatureImages>({ customize: null, corporate: null });
@@ -196,11 +165,6 @@ export default function Home() {
       const savedVideos = await response.json() as HomeVideo[];
       if (active) {
         setHomeVideos(savedVideos);
-        try {
-          window.localStorage.setItem(HOME_VIDEOS_CACHE_KEY, JSON.stringify(savedVideos));
-        } catch (error) {
-          console.error("Could not save the cached homepage videos.", error);
-        }
       }
     }).catch((error: unknown) => {
       if (active) {
@@ -278,15 +242,11 @@ export default function Home() {
         setHomeBanner(banner);
         if (homeBanner?.image !== banner?.image) setHomeBannerImageLoaded(false);
         setHomeBannerImageFailed(false);
-        try {
-          if (banner) window.localStorage.setItem(HOME_BANNER_CACHE_KEY, JSON.stringify(banner));
-          else window.localStorage.removeItem(HOME_BANNER_CACHE_KEY);
-        } catch (error) {
-          console.error("Could not save the cached homepage banner.", error);
-        }
       }
     }).catch((error: unknown) => {
       console.error("Homepage banner request failed.", error);
+    }).finally(() => {
+      if (active) setHomeBannerResolved(true);
     });
     return () => { active = false; };
   }, []);
@@ -372,12 +332,7 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      {homeBanner?.image
-        ? <link rel="preload" as="image" href={homeBanner.image} fetchPriority="high" />
-        : <>
-          <link rel="preload" as="image" href="/products/mobile-banner.webp" media="(max-width: 640px)" fetchPriority="high" />
-          <link rel="preload" as="image" href={brandAssets.hero} media="(min-width: 641px)" fetchPriority="high" />
-        </>}
+      {homeBanner?.image && <link rel="preload" as="image" href={homeBanner.image} fetchPriority="high" />}
       <MovingNavbar />
 
       <header className="site-header">
@@ -386,7 +341,7 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      {mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
+      {fetchedHierarchy.loaded && mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
         <div className="category-nav__track">
           {mainCategories.map(({ value, label, image, href }) => (
             <Link className="category-nav__item" href={href} key={value} aria-label={`Shop ${label}`}>
@@ -403,7 +358,7 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className={`hero__images${homeBannerImageLoaded ? "" : " hero__images--loading"}`}>
             <div className="hero__image">
-              {!homeBannerImageFailed && (
+              {!homeBannerImageFailed && (homeBanner?.image || homeBannerResolved) && (
                 <picture>
                   <source
                     media="(max-width: 640px)"
@@ -421,11 +376,6 @@ export default function Home() {
                       if (homeBanner?.image) {
                         setHomeBanner(null);
                         setHomeBannerImageLoaded(false);
-                        try {
-                          window.localStorage.removeItem(HOME_BANNER_CACHE_KEY);
-                        } catch (error) {
-                          console.error("Could not remove the invalid homepage banner cache.", error);
-                        }
                       } else {
                         setHomeBannerImageFailed(true);
                       }
