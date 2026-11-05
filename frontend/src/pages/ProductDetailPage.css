@@ -949,7 +949,7 @@
     height: 68px;
   }
 
-  .product-detail-gallery__viewport {
+  .product-detail-page .product-detail-gallery__viewport {
     max-height: 72vh;
   }
 

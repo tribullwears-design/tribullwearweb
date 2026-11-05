@@ -41,6 +41,26 @@ function getRecommendationProducts(products: ReturnType<typeof getCachedProducts
     }));
 }
 
+function getCachedProduct(productId: string | undefined): ProductData | null {
+  if (!productId) return null;
+  const cached = getCachedProducts().find((product) => product.id === productId);
+  if (!cached) return null;
+  return {
+    id: cached.id,
+    name: cached.name,
+    description: cached.description,
+    price: `₹${cached.price.toLocaleString("en-IN")}`,
+    originalPrice: resolveOriginalPrice(cached),
+    image: cached.image,
+    category: cached.category,
+    sizes: cached.sizes || [],
+    colors: cached.colors || [],
+    stock: cached.stock,
+    basePrice: cached.basePrice,
+    detailsLoaded: false,
+  };
+}
+
 const tShirtColors = [
   { name: "Black", value: "#171717" },
   { name: "White", value: "#ffffff" },
@@ -57,7 +77,7 @@ export default function ProductDetailPage() {
   const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(null);
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProduct(id));
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
@@ -122,9 +142,10 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      setStoredProduct(null);
-      setIsProductLoading(true);
-      setRouteLoading(true);
+      const cachedProduct = getCachedProduct(id);
+      if (cachedProduct) setStoredProduct(cachedProduct);
+      setIsProductLoading(!cachedProduct);
+      setRouteLoading(!cachedProduct);
       setProductLoadError(false);
       if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
         setStoredProduct(null);
@@ -201,7 +222,7 @@ export default function ProductDetailPage() {
         .catch((error: unknown) => {
           console.error("Product detail request failed.", error);
           if (active) {
-            setProductLoadError(true);
+            if (!cachedProduct) setProductLoadError(true);
             setIsProductLoading(false);
             setRouteLoading(false);
           }
@@ -248,19 +269,19 @@ export default function ProductDetailPage() {
   }, [id]);
   const product = storedProduct?.id === id ? storedProduct : null;
   const isShowingDifferentProduct = Boolean(storedProduct && storedProduct.id !== id);
-  const isTShirtColorVariant = Boolean(storedProduct?.colors?.length);
-  const productColorOptions = storedProduct?.colors?.length
-    ? storedProduct.colors.map((name) => ({
+  const isTShirtColorVariant = Boolean(product?.colors?.length);
+  const productColorOptions = product?.colors?.length
+    ? product.colors.map((name) => ({
       name,
       value: tShirtColors.find((color) => color.name.toLowerCase() === name.toLowerCase())?.value || name.toLowerCase(),
     }))
     : [];
-  const hasProductColors = isTShirtColorVariant || Boolean(storedProduct?.colors?.length);
-  const availableSizes = storedProduct?.sizes || [];
-  const initialColor = getDefaultProductColor(storedProduct?.colors);
+  const hasProductColors = isTShirtColorVariant || Boolean(product?.colors?.length);
+  const availableSizes = product?.sizes || [];
+  const initialColor = getDefaultProductColor(product?.colors);
   const activeColor = selectedColor ?? initialColor;
-  const productImageViews = storedProduct?.image ? [storedProduct.image, ...sideImages] : [];
-  const selectedProductImage = productImageViews[selectedImageIndex] || storedProduct?.image || "";
+  const productImageViews = product?.image ? [product.image, ...sideImages] : [];
+  const selectedProductImage = productImageViews[selectedImageIndex] || product?.image || "";
 
   const navigateGallery = (direction: "next" | "prev") => {
     if (productImageViews.length < 2) return;
@@ -274,11 +295,11 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor(getDefaultProductColor(storedProduct?.colors));
+      setSelectedColor(getDefaultProductColor(product?.colors));
       setImageFailed(false);
       setFailedThumbnailIndexes([]);
     }
-  }, [product?.id, product?.image, storedProduct?.colors]);
+  }, [product?.id, product?.image, product?.colors]);
 
   useEffect(() => {
     if (!product || !appliedCoupon) return;
@@ -451,19 +472,18 @@ export default function ProductDetailPage() {
             <div className="product-detail-gallery__body">
               <div className="product-detail-gallery__thumbs" aria-label="Product image views">
                 {productImageViews.map((image, viewIndex) => (
-                <button
-                  key={`${image}-${viewIndex}`}
-                  type="button"
-                  className={selectedImageIndex === viewIndex ? "is-active" : ""}
-                  onClick={() => { setSelectedImageIndex(viewIndex); setImageFailed(false); }}
-                  aria-label={`View product image ${viewIndex + 1}`}
-                  aria-pressed={selectedImageIndex === viewIndex}
-                >
-                  {failedThumbnailIndexes.includes(viewIndex) ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setFailedThumbnailIndexes((current) => current.includes(viewIndex) ? current : [...current, viewIndex])} />}
-                </button>
-              ))}
+                  <button
+                    key={`${image}-${viewIndex}`}
+                    type="button"
+                    className={selectedImageIndex === viewIndex ? "is-active" : ""}
+                    onClick={() => { setSelectedImageIndex(viewIndex); setImageFailed(false); }}
+                    aria-label={`View product image ${viewIndex + 1}`}
+                    aria-pressed={selectedImageIndex === viewIndex}
+                  >
+                    {failedThumbnailIndexes.includes(viewIndex) ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setFailedThumbnailIndexes((current) => current.includes(viewIndex) ? current : [...current, viewIndex])} />}
+                  </button>
+                ))}
               </div>
-
               <div className="product-detail-gallery__media">
                 <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
                   {imageFailed

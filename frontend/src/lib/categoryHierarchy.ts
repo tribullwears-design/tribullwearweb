@@ -165,12 +165,32 @@ export function readCategoryHierarchy(fallback: CategoryHierarchy): CategoryHier
   return fallback;
 }
 
-function readCachedHierarchy(fallback: CategoryHierarchy): CategoryHierarchy {
+function readCachedHierarchy(fallback: CategoryHierarchy) {
   try {
+    if (typeof window === "undefined") return { hierarchy: fallback, loaded: false };
     const saved = window.localStorage.getItem(CATEGORY_HIERARCHY_KEY);
-    return saved ? JSON.parse(saved) as CategoryHierarchy : fallback;
+    if (!saved) return { hierarchy: fallback, loaded: false };
+
+    const cached = JSON.parse(saved) as Partial<CategoryHierarchy>;
+    if (
+      !Array.isArray(cached.main)
+      || !cached.main.every((category) => category && typeof category.value === "string" && typeof category.label === "string")
+      || !cached.subcategories
+      || typeof cached.subcategories !== "object"
+      || Array.isArray(cached.subcategories)
+      || !Object.values(cached.subcategories).every((subcategories) =>
+        Array.isArray(subcategories)
+        && subcategories.every((subcategory) => subcategory && typeof subcategory.value === "string" && typeof subcategory.label === "string"))
+    ) {
+      return { hierarchy: fallback, loaded: false };
+    }
+
+    return {
+      hierarchy: { main: cached.main, subcategories: cached.subcategories } as CategoryHierarchy,
+      loaded: true,
+    };
   } catch {
-    return fallback;
+    return { hierarchy: fallback, loaded: false };
   }
 }
 
@@ -274,8 +294,9 @@ export function deleteSubcategory(parent: string, value: string) {
 }
 
 export function useCategoryHierarchy(fallback: CategoryHierarchy) {
-  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(() => fallback);
-  const [loaded, setLoaded] = useState(false);
+  const [initialCache] = useState(() => readCachedHierarchy(fallback));
+  const [hierarchy, setHierarchy] = useState<CategoryHierarchy>(initialCache.hierarchy);
+  const [loaded, setLoaded] = useState(initialCache.loaded);
   const [error, setError] = useState("");
   const [requestVersion, setRequestVersion] = useState(0);
 
@@ -283,8 +304,9 @@ export function useCategoryHierarchy(fallback: CategoryHierarchy) {
     let active = true;
     setError("");
     const syncHierarchy = () => {
-      setHierarchy(readCachedHierarchy(fallback));
-      setLoaded(true);
+      const cached = readCachedHierarchy(fallback);
+      setHierarchy(cached.hierarchy);
+      setLoaded(cached.loaded);
       setError("");
     };
     const syncStoredHierarchy = (event: StorageEvent) => {

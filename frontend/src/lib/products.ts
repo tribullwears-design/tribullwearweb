@@ -4,8 +4,11 @@ import { parsePrice, resolveOriginalPrice } from "./productPrice";
 import { apiFetch } from "./api";
 
 export type StorefrontProduct = Product & {
+  description?: string;
   images?: string[];
   stock?: number;
+  sizes?: string[];
+  colors?: string[];
   mainCategoryId?: string;
   subcategoryId?: string;
   newArrival?: boolean;
@@ -76,6 +79,7 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
   return {
     id,
     name: product.name,
+    ...(typeof product.description === "string" ? { description: product.description } : {}),
     category: product.productType || product.category || ("subcategoryId" in product && typeof product.subcategoryId === "string"
       ? product.subcategoryId
       : "mainCategoryId" in product && typeof product.mainCategoryId === "string"
@@ -83,6 +87,8 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
         : "products"),
     image: product.image,
     ...(Array.isArray(product.images) ? { images: product.images.filter((image): image is string => typeof image === "string" && Boolean(image.trim())) } : {}),
+    ...(Array.isArray(product.sizes) ? { sizes: product.sizes.filter((size): size is string => typeof size === "string") } : {}),
+    ...(Array.isArray(product.colors) ? { colors: product.colors.filter((color): color is string => typeof color === "string") } : {}),
     created: product.created ?? (typeof product.createdAt === "string" ? Date.parse(product.createdAt) : 0),
     sold: product.sold ?? 0,
     ...(typeof product.stock === "number" ? { stock: product.stock } : {}),
@@ -96,11 +102,28 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
     ...(originalPrice === undefined ? (typeof product.basePrice === "number" && product.basePrice > price ? { originalPrice: product.basePrice } : {}) : { originalPrice }),
   };
 }
-const PRODUCT_CACHE_TTL = 60_000;
 const PRODUCT_CACHE_STORAGE_KEY = "tribull-storefront-products";
 
-let cachedProducts: StorefrontProduct[] | undefined;
-let cachedProductsAt = 0;
+function readProductCache(): StorefrontProduct[] | undefined {
+  if (typeof window === "undefined") return undefined;
+  try {
+    const saved = window.localStorage.getItem(PRODUCT_CACHE_STORAGE_KEY);
+    if (!saved) return undefined;
+    const cached = JSON.parse(saved) as { products?: unknown };
+    if (!Array.isArray(cached.products)) throw new Error("Cached storefront products are invalid.");
+    return cached.products.map((product) => mapApiProduct(product as ApiProduct));
+  } catch (error) {
+    console.error("Could not read the cached storefront products.", error);
+    try {
+      window.localStorage.removeItem(PRODUCT_CACHE_STORAGE_KEY);
+    } catch (storageError) {
+      console.error("Could not remove the invalid cached storefront products.", storageError);
+    }
+    return undefined;
+  }
+}
+
+let cachedProducts: StorefrontProduct[] | undefined = readProductCache();
 let productsRequest: Promise<StorefrontProduct[]> | undefined;
 let productRequestGeneration = 0;
 
@@ -126,7 +149,13 @@ function requestProducts(): Promise<StorefrontProduct[]> {
       .then((products) => {
         if (productRequestGeneration !== requestGeneration) return requestProducts();
         cachedProducts = products;
-        cachedProductsAt = Date.now();
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(PRODUCT_CACHE_STORAGE_KEY, JSON.stringify({ products }));
+          }
+        } catch (error) {
+          console.error("Could not save the cached storefront products.", error);
+        }
         return products;
       });
     let sharedRequest: Promise<StorefrontProduct[]>;
@@ -140,7 +169,6 @@ function requestProducts(): Promise<StorefrontProduct[]> {
 
 function invalidateProductCache() {
   cachedProducts = undefined;
-  cachedProductsAt = 0;
   productRequestGeneration += 1;
   productsRequest = undefined;
   try {
@@ -151,10 +179,6 @@ function invalidateProductCache() {
 }
 
 export function getCachedProducts() {
-  if (cachedProducts && Date.now() - cachedProductsAt > PRODUCT_CACHE_TTL) {
-    cachedProducts = undefined;
-    cachedProductsAt = 0;
-  }
   return cachedProducts || [];
 }
 

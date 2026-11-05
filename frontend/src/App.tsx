@@ -176,11 +176,14 @@ function App() {
   useLayoutEffect(() => {
     if (location.startsWith("/admin26")) return;
 
-    const root = document.documentElement;
-    const previousScrollBehavior = root.style.scrollBehavior;
-    root.style.scrollBehavior = "auto";
-    window.scrollTo(0, 0);
-    root.style.scrollBehavior = previousScrollBehavior;
+    const scrollToTop = () => {
+      window.scrollTo({ left: 0, top: 0, behavior: "instant" });
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+    scrollToTop();
+    const frame = window.requestAnimationFrame(scrollToTop);
+    return () => window.cancelAnimationFrame(frame);
   }, [location]);
 
   useLayoutEffect(() => {

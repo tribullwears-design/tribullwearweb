@@ -451,6 +451,7 @@ export default function CategoryPage() {
   const hasSelectedEntry = !lang || Boolean(activeDefinition?.subcategories.some((entry) =>
     entry.slug === selectedEntrySlug || normalizeCategorySlug(entry.label) === selectedEntrySlug,
   ));
+  const canRenderCategory = Boolean(activeDefinition && hasSelectedEntry);
   const categoryImage = hierarchy.main.find((category) => normalizeCategorySlug(category.value) === categorySlug)?.image || "";
   const heroFallback = existingHeroBanners[categorySlug] || categoryImage;
   const [heroBanner, setHeroBanner] = useState<{ categorySlug: string; image: string } | null>(null);
@@ -472,7 +473,7 @@ export default function CategoryPage() {
     if (fetchedHierarchy.error) setRouteLoading(false);
   }, [activeDefinition, fetchedHierarchy.error, fetchedHierarchy.loaded, hasSelectedEntry, setRouteLoading]);
 
-  if (!hierarchy.loaded) {
+  if (!hierarchy.loaded && !canRenderCategory) {
     return fetchedHierarchy.error
       ? <div className="category-route-loading" role="alert">Categories could not be loaded. <button type="button" onClick={fetchedHierarchy.retry}>Retry</button></div>
       : <div className="category-route-loading" role="status" aria-live="polite">Loading category...</div>;

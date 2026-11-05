@@ -1,26 +1,32 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock("./api", () => ({ apiFetch: mocks.apiFetch }));
 
 import { fetchProducts, getCachedProducts, getProductIdentifier, mapApiProduct, productHref } from "./products";
 
+beforeEach(() => {
+  mocks.apiFetch.mockReset();
+});
+
 describe("storefront product identifiers", () => {
-  it("does not render a persisted product cache before the API refreshes it", () => {
-    const products = [{
+  it("persists the latest product catalog for fast homepage and detail-page loads", async () => {
+    const setItem = vi.fn();
+    vi.stubGlobal("window", { localStorage: { setItem } });
+    mocks.apiFetch.mockResolvedValueOnce(new Response(JSON.stringify([{
       id: "saved-product",
       name: "Saved product",
-      image: "/product.png",
       category: "products",
       price: 599,
-      created: 0,
-      sold: 0,
-    }];
-    const getItem = vi.fn(() => JSON.stringify({ updatedAt: Date.now(), products }));
-    vi.stubGlobal("window", { localStorage: { getItem } });
+      image: "/product.png",
+      status: "Active",
+    }]), { status: 200, headers: { "content-type": "application/json" } }));
     try {
-      expect(getCachedProducts()).toEqual([]);
-      expect(getItem).not.toHaveBeenCalled();
+      await fetchProducts();
+      expect(setItem).toHaveBeenCalledWith(
+        "tribull-storefront-products",
+        expect.stringContaining("\"id\":\"saved-product\""),
+      );
     } finally {
       vi.unstubAllGlobals();
     }
@@ -49,6 +55,9 @@ describe("storefront product identifiers", () => {
       headers: undefined,
       body: undefined,
     });
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 120_000);
+    expect(getCachedProducts()[0]?.id).toBe("saved-product");
+    nowSpy.mockRestore();
   });
 
   it("prefers the stable API id and supports legacy Mongo _id responses", () => {
@@ -81,6 +90,27 @@ describe("storefront product identifiers", () => {
       image: "/product.png",
       stock: 0,
     } as never).stock).toBe(0);
+  });
+
+  it("preserves product details needed to render detail pages from the catalog cache", () => {
+    expect(mapApiProduct({
+      id: "saved-product",
+      name: "Saved product",
+      description: "A lightweight cotton tee.",
+      category: "oversized",
+      price: 599,
+      compareAt: 799,
+      image: "/product.png",
+      sizes: ["S", "M", "L"],
+      colors: ["Black", "White"],
+      stock: 12,
+    } as never)).toMatchObject({
+      description: "A lightweight cotton tee.",
+      sizes: ["S", "M", "L"],
+      colors: ["Black", "White"],
+      stock: 12,
+      originalPrice: 799,
+    });
   });
 
   it("preserves distinct additional product images for cards that support hover views", () => {
