@@ -10,7 +10,7 @@ export type { ProductTypeCategory };
 
 export const productTypeCategoriesUpdatedEvent = "tribull-product-type-categories-updated";
 
-let cachedProductTypeCategories = defaultProductTypeCategories;
+let cachedProductTypeCategories: ProductTypeCategory[] | undefined;
 let pendingProductTypeRequest: Promise<ProductTypeCategory[]> | undefined;
 
 async function readResponse(response: Response): Promise<ProductTypeCategory[]> {
@@ -51,21 +51,24 @@ export function saveProductTypeCategories(categories: ProductTypeCategory[]) {
 }
 
 export function useProductTypeCategories() {
-  const [categories, setCategories] = useState<ProductTypeCategory[]>(cachedProductTypeCategories);
+  const [categories, setCategories] = useState<ProductTypeCategory[]>(cachedProductTypeCategories || []);
 
   useEffect(() => {
     let active = true;
     const syncCategories = () => {
-      setCategories(cachedProductTypeCategories);
+      if (cachedProductTypeCategories) setCategories(cachedProductTypeCategories);
       void fetchProductTypeCategories()
         .then((next) => {
           if (active) setCategories(next);
         })
         .catch((error: unknown) => {
           console.error("Could not load product type categories.", error);
+          if (active) setCategories(cachedProductTypeCategories || defaultProductTypeCategories);
         });
     };
-    const onUpdated = () => setCategories(cachedProductTypeCategories);
+    const onUpdated = () => {
+      if (cachedProductTypeCategories) setCategories(cachedProductTypeCategories);
+    };
     window.addEventListener(productTypeCategoriesUpdatedEvent, onUpdated);
     window.addEventListener("focus", syncCategories);
     syncCategories();
