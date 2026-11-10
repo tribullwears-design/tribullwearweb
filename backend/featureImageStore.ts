@@ -1,4 +1,5 @@
 import { getDatabase } from "./database.js";
+import sharp from "sharp";
 
 export const featureImageTypes = ["customize", "corporate"] as const;
 export type FeatureImageType = typeof featureImageTypes[number];
@@ -11,6 +12,18 @@ const collections: Record<FeatureImageType, string> = {
   corporate: "corporate-image",
 };
 const featureImageCache = new Map<FeatureImageType, { mimeType: string; data: Buffer }>();
+
+async function optimizeFeatureImage(value: string) {
+  const match = value.match(/^data:image\/(png|jpeg|webp);base64,([a-z0-9+/]+=*)$/i);
+  if (!match?.[2]) throw new FeatureImageValidationError("Upload a valid JPG, PNG, or WEBP image");
+
+  const data = await sharp(Buffer.from(match[2], "base64"), { limitInputPixels: 40_000_000 })
+    .rotate()
+    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 78, effort: 3 })
+    .toBuffer();
+  return { image: `data:image/webp;base64,${data.toString("base64")}`, mimeType: "image/webp", data };
+}
 
 function cacheFeatureImage(type: FeatureImageType, value: string) {
   if (typeof value !== "string") {
@@ -46,13 +59,28 @@ function normalizeImage(value: unknown) {
 export async function listFeatureImages(): Promise<FeatureImages> {
   const db = await getDatabase();
   const entries = await Promise.all(featureImageTypes.map(async (type) => {
-    const document = await db.collection<{ _id: string; updatedAt?: string }>(collections[type]).findOne(
+    const collection = db.collection<{ _id: string; image?: string; imageOptimized?: boolean; updatedAt?: string }>(collections[type]);
+    const document = await collection.findOne(
       { _id: "current" },
-      { projection: { _id: 1, updatedAt: 1 } },
+      { projection: { _id: 1, imageOptimized: 1, updatedAt: 1 } },
     );
-    const imageUrl = document
-      ? `/api/storefront/feature-images/${type}?v=${encodeURIComponent(document.updatedAt || "initial")}`
-      : null;
+    if (!document) return [type, null] as const;
+
+    let updatedAt = document.updatedAt || "initial";
+    if (!document.imageOptimized) {
+      const legacyImage = await collection.findOne({ _id: "current" }, { projection: { image: 1 } });
+      if (legacyImage?.image) {
+        const optimized = await optimizeFeatureImage(legacyImage.image);
+        updatedAt = new Date().toISOString();
+        await collection.updateOne(
+          { _id: "current" },
+          { $set: { image: optimized.image, imageOptimized: true, updatedAt } },
+        );
+        featureImageCache.set(type, { mimeType: optimized.mimeType, data: optimized.data });
+      }
+    }
+
+    const imageUrl = `/api/storefront/feature-images/${type}?v=${encodeURIComponent(updatedAt)}`;
     return [type, imageUrl] as const;
   }));
   return Object.fromEntries(entries) as FeatureImages;
@@ -73,14 +101,15 @@ export async function getFeatureImage(type: FeatureImageType) {
 }
 
 export async function saveFeatureImage(type: FeatureImageType, value: unknown) {
-  const image = normalizeImage(value);
+  const normalized = normalizeImage(value);
+  const optimized = await optimizeFeatureImage(normalized);
   const db = await getDatabase();
   const now = new Date().toISOString();
-  await db.collection<{ _id: string; image: string; updatedAt: string }>(collections[type]).updateOne(
+  await db.collection<{ _id: string; image: string; imageOptimized: boolean; updatedAt: string }>(collections[type]).updateOne(
     { _id: "current" },
-    { $set: { image, updatedAt: now } },
+    { $set: { image: optimized.image, imageOptimized: true, updatedAt: now } },
     { upsert: true },
   );
-  cacheFeatureImage(type, image);
+  featureImageCache.set(type, { mimeType: optimized.mimeType, data: optimized.data });
   return { type, image: `/api/storefront/feature-images/${type}?v=${encodeURIComponent(now)}` };
 }

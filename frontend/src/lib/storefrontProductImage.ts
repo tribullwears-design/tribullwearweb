@@ -1,7 +1,7 @@
 const showcaseProductImages = [
-  "/products/Black T-Shirt Front and Back Mockup.png",
+  "/products/Black T-Shirt Front and Back Mockup.webp",
   "/products/Blank White T-Shirt Front and Back Views.png",
-  "/products/Black Hoodie Front and Back Mockup.png",
+  "/products/Black Hoodie Front and Back Mockup.webp",
   "/products/Plain White Hoodies, Front and Back.png",
 ];
 
