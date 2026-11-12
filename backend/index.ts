@@ -128,7 +128,11 @@ async function startServer() {
   app.use(createAdminOrderRouter());
   app.use(createCustomerRouter());
   app.get("/health", (_req, res) => {
-    res.json({ status: "ok" });
+    res.status(200).json({
+      status: "ok",
+      message: "Backend is running",
+      timestamp: new Date().toISOString(),
+    });
   });
 
   const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: "draft-8", legacyHeaders: false });

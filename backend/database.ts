@@ -32,10 +32,12 @@ export async function getDatabase(): Promise<Db> {
     .filter(Boolean);
   if (dnsServers?.length) dns.setServers(dnsServers);
   if (!clientPromise) {
-    clientPromise = new MongoClient(uri).connect().catch((error: unknown) => {
-      clientPromise = undefined;
-      throw error;
-    });
+    clientPromise = new MongoClient(uri, { serverSelectionTimeoutMS: 10000 })
+      .connect()
+      .catch((error: unknown) => {
+        clientPromise = undefined;
+        throw error;
+      });
   }
   const client = await clientPromise;
   return client.db(process.env.MONGODB_DB || "tribull");
