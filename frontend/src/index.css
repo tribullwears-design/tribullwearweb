@@ -4312,9 +4312,9 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   }
   .wordmark { width:108px; height:42px; }
   .category-nav { padding:14px 8px 12px; }
-  .category-nav__track { width:max-content; min-width:100%; justify-content:flex-start; gap:8px; }
-  .category-nav__item { flex:0 0 68px; gap:5px; }
-  .category-nav__image { width:56px; height:56px; border-radius:10px; }
+  .category-nav__track { width:100%; min-width:100%; justify-content:flex-start; gap:8px; padding:0; }
+  .category-nav__item { flex:0 0 calc((100% - 32px) / 4.5); gap:5px; }
+  .category-nav__image { width:100%; max-width:56px; height:auto; aspect-ratio:1; border-radius:10px; }
   .category-nav__label { font:600 7px/1 Montserrat,sans-serif; letter-spacing:.02em; }
   .category-catalog-tabs { display:grid; grid-template-columns:repeat(2, minmax(0, 136px)); justify-content:center; justify-items:center; width:min(100%, 286px); margin-inline:auto; overflow:visible; }
   .category-catalog-tab { width:136px; max-width:136px; min-width:0; flex:initial; margin:0; }
