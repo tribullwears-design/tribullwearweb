@@ -303,8 +303,8 @@ export default function Home() {
     touchStartX.current = null;
 
     if (Math.abs(deltaX) < 30) return;
-    if (deltaX > 0) scrollLifestyle("right");
-    else scrollLifestyle("left");
+    if (deltaX > 0) scrollLifestyle("left");
+    else scrollLifestyle("right");
   };
 
   const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;

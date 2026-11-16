@@ -4164,6 +4164,9 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
     margin-left: 12px;
     margin-right: 12px;
   }
+  .tribull-page .peach-wrapper {
+    width: auto;
+  }
 }
 
 .tribull-page .cooperate__container {
