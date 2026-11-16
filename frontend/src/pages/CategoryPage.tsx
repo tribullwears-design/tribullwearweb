@@ -32,10 +32,10 @@ type CategoryDefinition = {
 
 const categoryHierarchyFallback: CategoryHierarchy = defaultCategoryHierarchy;
 const existingHeroBanners: Record<string, string> = {
-  cinema: "/products/hero.png",
-  sports: "/products/sportsbanner.png",
-  games: "/products/game banner.png",
-  motorsports: "/products/motosportsbanner.png",
+  cinema: "/products/hero.webp",
+  sports: "/products/sportsbanner.webp",
+  games: "/products/game banner.webp",
+  motorsports: "/products/motosportsbanner.webp",
 };
 
 function getCachedCategoryProducts(categorySlug: string, entrySlugs: readonly string[]) {
@@ -90,14 +90,14 @@ interface CategoryHeroProps {
   image: string;
 }
 
-function CategoryHero({ title, subtitle, description, categorySlug, image }: CategoryHeroProps) {
+function CategoryHero({ title, subtitle, description, categorySlug, image, fallbackImage }: CategoryHeroProps & { fallbackImage: string }) {
   const heroImgRef = useRef<HTMLImageElement>(null);
   const heroCopyRef = useRef<HTMLDivElement>(null);
   const heroStampRef = useRef<HTMLDivElement>(null);
-  const [directImageFailed, setDirectImageFailed] = useState(false);
-  const [directImageRequestKey] = useState(() => Date.now());
+  const imageSource = image || fallbackImage;
+  const [imageFailed, setImageFailed] = useState(false);
 
-  useEffect(() => setDirectImageFailed(false), [categorySlug]);
+  useEffect(() => setImageFailed(false), [categorySlug, imageSource]);
 
   useEffect(() => {
     let raf = 0;
@@ -126,14 +126,14 @@ function CategoryHero({ title, subtitle, description, categorySlug, image }: Cat
         <div className="hero__image">
           <img
             ref={heroImgRef}
-            src={directImageFailed && image
-              ? image
-              : `/api/banners/${encodeURIComponent(categorySlug)}/image?v=${directImageRequestKey}`}
+            src={imageFailed ? fallbackImage : imageSource}
             alt={`${title} collection hero`}
             loading="eager"
             fetchPriority="high"
             decoding="async"
-            onError={() => setDirectImageFailed(true)}
+            onError={() => {
+              if (imageSource !== fallbackImage) setImageFailed(true);
+            }}
           />
         </div>
       </div>
@@ -495,6 +495,7 @@ export default function CategoryPage() {
           subtitle={definition.subtitle}
           categorySlug={categorySlug}
           image={currentHeroBanner}
+          fallbackImage={heroFallback}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -523,6 +524,7 @@ export default function CategoryPage() {
           subtitle={definition.subtitle}
           categorySlug={categorySlug}
           image={currentHeroBanner}
+          fallbackImage={heroFallback}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -551,6 +553,7 @@ export default function CategoryPage() {
           subtitle={definition.subtitle}
           categorySlug={categorySlug}
           image={currentHeroBanner}
+          fallbackImage={heroFallback}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -579,6 +582,7 @@ export default function CategoryPage() {
           subtitle={definition.subtitle}
           categorySlug={categorySlug}
           image={currentHeroBanner}
+          fallbackImage={heroFallback}
         />
 
         <div className="section-heading category-best-selling-heading">
@@ -633,6 +637,7 @@ export default function CategoryPage() {
         subtitle={fallback.subtitle}
         categorySlug={categorySlug}
         image={currentHeroBanner}
+        fallbackImage={heroFallback}
       />
 
       <div className="section-heading category-best-selling-heading">

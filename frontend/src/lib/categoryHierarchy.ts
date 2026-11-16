@@ -11,9 +11,9 @@ export const defaultCategoryHierarchy: CategoryHierarchy = {
   ],
   subcategories: {
     cinema: [
-      { value: "hollywood", label: "Hollywood", image: "/products/hollywood.jpg" },
+      { value: "hollywood", label: "Hollywood", image: "/products/hollywood.webp" },
       { value: "bollywood", label: "Bollywood", image: "/products/bollywood.jpg" },
-      { value: "kollywood", label: "Kollywood", image: "/products/kollywood.jpg" },
+      { value: "kollywood", label: "Kollywood", image: "/products/kollywood.webp" },
       { value: "tollywood", label: "Tollywood", image: "/products/tollywood.jpg" },
       { value: "mollywood", label: "Mollywood", image: "/products/mollywood.jpg" },
       { value: "sandalwood", label: "Sandalwood", image: "/products/sandalwood.jpg" },

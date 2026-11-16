@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { adjustProductInventory, cacheProductStorefrontImage, createProduct, getCachedProductStorefrontImage, getProduct, getProductImage, InsufficientInventoryError, listProducts, validateInventoryAdjustment } from "./productStore.js";
+import { adjustProductInventory, cacheProductStorefrontImage, createProduct, getCachedProductStorefrontImage, getProduct, getProductImage, InsufficientInventoryError, listProducts, updateProduct, validateInventoryAdjustment } from "./productStore.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -216,6 +216,54 @@ describe("createProduct", () => {
   it.each([{ sizes: [] }, { sizes: ["", "  "] }])("requires at least one non-empty size", async ({ sizes }) => {
     await expect(createProduct({ ...validProduct, sizes })).rejects.toThrow("At least one product size is required");
     expect(mocks.getDatabase).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateProduct", () => {
+  it("persists edits to the products collection and keeps an unset legacy product type", async () => {
+    const existing = {
+      id: "product-1",
+      name: "Original shirt",
+      description: "",
+      price: 1000,
+      compareAt: null,
+      image: "/shirt.jpg",
+      stock: 5,
+      sizes: ["M"],
+      colors: ["Black"],
+      status: "Active" as const,
+      mainCategoryId: "",
+      subcategoryId: "",
+      mainCategory: "",
+      subcategory: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    };
+    const saved = { ...existing, name: "Updated shirt", updatedAt: "2026-01-02T00:00:00.000Z" };
+    mocks.findOne.mockResolvedValue(existing);
+    mocks.findOneAndUpdate.mockResolvedValue(saved);
+
+    await expect(updateProduct("product-1", {
+      name: "Updated shirt",
+      description: existing.description,
+      price: existing.price,
+      compareAt: existing.compareAt,
+      image: existing.image,
+      stock: existing.stock,
+      sizes: existing.sizes,
+      colors: existing.colors,
+      status: existing.status,
+      mainCategoryId: existing.mainCategoryId,
+      subcategoryId: existing.subcategoryId,
+    })).resolves.toMatchObject({ name: "Updated shirt" });
+
+    expect(mocks.collection).toHaveBeenCalledWith("products");
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+      { id: "product-1" },
+      { $set: expect.objectContaining({ name: "Updated shirt", updatedAt: expect.any(String) }) },
+      { returnDocument: "after" },
+    );
+    expect(mocks.findOneAndUpdate.mock.calls[0]?.[1].$set).not.toHaveProperty("productType");
   });
 });
 

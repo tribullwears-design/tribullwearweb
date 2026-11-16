@@ -291,7 +291,11 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     price: input.price === undefined ? existing.price : input.price,
     compareAt: input.compareAt === undefined ? existing.compareAt : input.compareAt,
     image: input.image === undefined ? existing.image : input.image,
-    productType: input.productType === undefined ? existing.productType : input.productType,
+    ...(input.productType !== undefined
+      ? { productType: input.productType }
+      : typeof existing.productType === "string"
+        ? { productType: existing.productType }
+        : {}),
     stock: input.stock === undefined ? existing.stock : input.stock,
     sizes: input.sizes === undefined ? existing.sizes : input.sizes,
     colors: input.colors === undefined ? existing.colors : input.colors,

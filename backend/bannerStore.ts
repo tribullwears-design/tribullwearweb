@@ -19,11 +19,11 @@ export type BannerDocument = {
 type StoredBanner = Omit<BannerDocument, "id">;
 type CachedBannerImage = { mimeType: string; data: Buffer; updatedAt: string };
 
-const existingHeroBanners: Record<string, string> = {
-  cinema: "/products/hero.png",
-  sports: "/products/sportsbanner.png",
-  games: "/products/game banner.png",
-  motorsports: "/products/motosportsbanner.png",
+const existingHeroBanners: Record<string, { legacy: string; optimized: string }> = {
+  cinema: { legacy: "/products/hero.png", optimized: "/products/hero.webp" },
+  sports: { legacy: "/products/sportsbanner.png", optimized: "/products/sportsbanner.webp" },
+  games: { legacy: "/products/game banner.png", optimized: "/products/game banner.webp" },
+  motorsports: { legacy: "/products/motosportsbanner.png", optimized: "/products/motosportsbanner.webp" },
 };
 
 let indexPromise: Promise<string> | undefined;
@@ -98,23 +98,29 @@ function seedExistingHeroBanners(collection: Collection<StoredBanner>) {
     const operation = (async () => {
       const migrations = collection.db.collection<{ _id: string }>("schema_migrations");
       const migrationId = "seed-category-hero-banners-v1";
-      if (await migrations.findOne({ _id: migrationId })) return;
-
+      const alreadySeeded = Boolean(await migrations.findOne({ _id: migrationId }));
       const categories = await listCategories();
       for (const category of categories) {
-        const image = existingHeroBanners[category.value];
-        if (!image) continue;
+        const bannerAssets = existingHeroBanners[category.value];
+        if (!bannerAssets) continue;
         const now = new Date().toISOString();
+        await collection.updateOne(
+          { categoryId: category.value, image: bannerAssets.legacy },
+          { $set: { image: bannerAssets.optimized, imageUrl: bannerAssets.optimized, updatedAt: now } },
+        );
+        if (alreadySeeded) continue;
         await collection.updateOne(
           { categoryId: category.value },
           {
             $set: { categoryName: category.label },
-            $setOnInsert: { image, imageUrl: image, createdAt: now, updatedAt: now },
+            $setOnInsert: { image: bannerAssets.optimized, imageUrl: bannerAssets.optimized, createdAt: now, updatedAt: now },
           },
           { upsert: true },
         );
       }
-      await migrations.updateOne({ _id: migrationId }, { $setOnInsert: { _id: migrationId } }, { upsert: true });
+      if (!alreadySeeded) {
+        await migrations.updateOne({ _id: migrationId }, { $setOnInsert: { _id: migrationId } }, { upsert: true });
+      }
     })();
     seedPromise = operation.catch((error: unknown) => {
       seedPromise = undefined;

@@ -69,7 +69,7 @@ function ProductCard({ item, showMeta = true, href, originalPrice, hoverImage, l
 }
 
 export default function Home() {
-  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback, false);
+  const fetchedHierarchy = useCategoryHierarchy(categoryHierarchyFallback);
   const hierarchy = getStorefrontCategoryHierarchy(fetchedHierarchy);
   const mainCategories = getStorefrontHomeCategories(hierarchy);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>([]);
@@ -80,7 +80,6 @@ export default function Home() {
   const [reviewsError, setReviewsError] = useState("");
   const [customerReviewPage, setCustomerReviewPage] = useState(0);
   const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
-  const [homeBannerResolved, setHomeBannerResolved] = useState(false);
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
   const [featureImages, setFeatureImages] = useState<FeatureImages>({ customize: null, corporate: null });
@@ -245,8 +244,6 @@ export default function Home() {
       }
     }).catch((error: unknown) => {
       console.error("Homepage banner request failed.", error);
-    }).finally(() => {
-      if (active) setHomeBannerResolved(true);
     });
     return () => { active = false; };
   }, []);
@@ -341,7 +338,7 @@ export default function Home() {
         <HeaderActions />
       </header>
 
-      {fetchedHierarchy.loaded && mainCategories.length > 0 ? <nav className="category-nav" aria-label="Shop by category">
+      {mainCategories.length > 0 && !fetchedHierarchy.error ? <nav className="category-nav" aria-label="Shop by category">
         <div className="category-nav__track">
           {mainCategories.map(({ value, label, image, href }) => (
             <Link className="category-nav__item" href={href} key={value} aria-label={`Shop ${label}`}>
@@ -358,7 +355,7 @@ export default function Home() {
         <section className="hero" aria-label="Tribull new collection">
           <div className={`hero__images${homeBannerImageLoaded ? "" : " hero__images--loading"}`}>
             <div className="hero__image">
-              {!homeBannerImageFailed && (homeBanner?.image || homeBannerResolved) && (
+              {!homeBannerImageFailed && (
                 <picture>
                   <source
                     media="(max-width: 640px)"
@@ -482,13 +479,13 @@ export default function Home() {
             ].map((item) => {
               const image = getShowcaseProductImage(item.imageIndex);
               return (
-                <a key={item.label} href="#footer" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
+                <Link key={item.label} href="/products" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
                   <div className="essential-card__visual">
                     <div className="essential-card__backdrop" aria-hidden="true" />
                     <img src={image} alt={item.alt} loading="lazy" decoding="async" />
                   </div>
                   <span>{item.label}</span>
-                </a>
+                </Link>
               );
             })}
           </Reveal>

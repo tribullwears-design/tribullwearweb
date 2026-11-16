@@ -1,6 +1,6 @@
 import { getDiscountPercentage, parsePrice, formatProductPrice } from "../lib/productPrice";
 import { useEffect, useState } from "react";
-import { fetchProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts } from "../lib/products";
 import type { Product } from "../../../shared/products";
 
 type ProductPriceProps = {
@@ -15,6 +15,10 @@ export default function ProductPrice({ sellingPrice, originalPrice, productName,
   useEffect(() => {
     if (!productName) return;
     let active = true;
+    const cachedMatch = getCachedProducts().find((product) =>
+      product.name.trim().toLowerCase() === productName.trim().toLowerCase(),
+    );
+    if (cachedMatch) setCatalogProduct(cachedMatch);
     const loadProductPrice = () => {
       void fetchProducts().then((products) => {
         if (!active) return;
@@ -24,7 +28,7 @@ export default function ProductPrice({ sellingPrice, originalPrice, productName,
         console.error("Failed to load original product prices.", error);
       });
     };
-    loadProductPrice();
+    if (!cachedMatch) loadProductPrice();
     const syncProductPrices = () => loadProductPrice();
     window.addEventListener("tribull-products-updated", syncProductPrices);
     window.addEventListener("tribull-products-cache-updated", syncProductPrices);

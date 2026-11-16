@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CollectionConflictError, CollectionValidationError, createStoreCollection, validateStoreCollection } from "./collectionStore.js";
+import { CollectionConflictError, CollectionValidationError, createStoreCollection, updateStoreCollection, validateStoreCollection } from "./collectionStore.js";
 
 const mocks = vi.hoisted(() => ({
   createIndex: vi.fn(),
   find: vi.fn(),
   findOne: vi.fn(),
+  findOneAndUpdate: vi.fn(),
   insertOne: vi.fn(),
   getDatabase: vi.fn(),
   getProduct: vi.fn(),
@@ -20,14 +21,35 @@ beforeEach(() => {
       createIndex: mocks.createIndex,
       find: mocks.find,
       findOne: mocks.findOne,
+      findOneAndUpdate: mocks.findOneAndUpdate,
       insertOne: mocks.insertOne,
     }),
   });
+
   mocks.findOne.mockResolvedValue(null);
   mocks.getProduct.mockResolvedValue({ status: "Active" });
 });
 
 const validInput = { name: "Summer drop", description: "New season", productIds: ["shirt-1"], isVisible: true };
+
+describe("updateStoreCollection", () => {
+  it("persists collection edits and returns the saved document", async () => {
+    const existing = { id: "collection-1", ...validInput, nameKey: "summer drop" };
+    const updated = { ...existing, name: "Winter drop", nameKey: "winter drop", updatedAt: "2026-01-02T00:00:00.000Z" };
+    mocks.findOne.mockImplementation((filter: Record<string, unknown>) =>
+      Promise.resolve(filter.id === "collection-1" ? existing : null));
+    mocks.findOneAndUpdate.mockResolvedValue(updated);
+
+    await expect(updateStoreCollection("collection-1", { ...validInput, name: "Winter drop" }))
+      .resolves.toEqual(updated);
+
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+      { id: "collection-1" },
+      { $set: expect.objectContaining({ name: "Winter drop", nameKey: "winter drop", updatedAt: expect.any(String) }) },
+      { returnDocument: "after", projection: { _id: 0 } },
+    );
+  });
+});
 
 describe("validateStoreCollection", () => {
   it("accepts valid collection data", () => {
