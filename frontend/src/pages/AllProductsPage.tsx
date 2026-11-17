@@ -30,6 +30,13 @@ function readStorage<T>(key: string, fallback: T): T {
 }
 
 export default function AllProductsPage() {
+  const searchParams = new URLSearchParams(window.location.search);
+  const collectionParam = searchParams.get("collection");
+  const collection = collectionParam === "new-arrivals" || collectionParam === "best-selling"
+    ? collectionParam
+    : "all";
+  const initialType = searchParams.get("type");
+  const isTypeLandingPage = collection === "all" && Boolean(initialType);
   const [wishlist, setWishlist] = useState<string[]>(() =>
     readStorage("tribull-wishlist", [])
   );
@@ -37,8 +44,18 @@ export default function AllProductsPage() {
     readStorage("tribull-cart", {})
   );
   const [addedProduct, setAddedProduct] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState("oversized");
+  const [selectedType, setSelectedType] = useState(initialType || "oversized");
   const productTypes = useProductTypeCategories().filter((category) => category.isVisible);
+  const selectedTypeLabel = productTypes.find((category) => category.id === selectedType)?.label
+    || initialType?.split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")
+    || "";
+  const pageTitle = collection === "new-arrivals"
+    ? "New Arrivals"
+    : collection === "best-selling"
+      ? "Best Selling"
+      : isTypeLandingPage
+        ? `List of ${selectedTypeLabel}`
+        : "All Products";
   const [catalogProducts, setCatalogProducts] =
     useState<StorefrontProduct[]>([]);
   const fetchedHierarchy = useCategoryHierarchy(defaultCategoryHierarchy);
@@ -83,7 +100,11 @@ export default function AllProductsPage() {
     if (!hierarchy.loaded) return [];
     const eligibleProducts = getEligibleStorefrontProducts(catalogProducts, hierarchy);
     return eligibleProducts
-      .filter(product => productTypes.some((category) => category.id === selectedType) && product.category === selectedType)
+      .filter(product =>
+        (collection === "all" || product[collection === "new-arrivals" ? "newArrival" : "bestSelling"] === true)
+        && productTypes.some((category) => category.id === selectedType)
+        && product.category === selectedType
+      )
       .map(product => ({
         id: product.id,
         name: product.name,
@@ -93,7 +114,7 @@ export default function AllProductsPage() {
           : { originalPrice: product.originalPrice }),
         image: product.image,
       }));
-  }, [catalogProducts, hierarchy, productTypes, selectedType]);
+  }, [catalogProducts, collection, hierarchy, productTypes, selectedType]);
   useEffect(() => {
     const syncWishlist = () => setWishlist(readStorage("tribull-wishlist", []));
     const syncCart = () => setCart(readStorage("tribull-cart", {}));
@@ -159,27 +180,31 @@ export default function AllProductsPage() {
       <main className="all-products-content">
         <div className="all-products-heading-wrap">
           <p className="all-products-kicker">The foundation</p>
-          <h1>All Products</h1>
+          <h1>{pageTitle}</h1>
         </div>
 
-        <div
-          className="category-catalog-tabs all-products-category-tabs"
-          aria-label="Product types"
-        >
-          {productTypes.map(({ id, label, image }) => (
-            <button
-              key={id}
-              type="button"
-              className={`category-catalog-tab ${selectedType === id ? "is-active" : ""}`}
-              onClick={() => setSelectedType(id)}
-              aria-pressed={selectedType === id}
+        {!isTypeLandingPage && (
+          <>
+            <div
+              className="category-catalog-tabs all-products-category-tabs"
+              aria-label="Product types"
             >
-              {image && <img src={image} alt="" />}
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-        {productTypes.length === 0 && <p role="status">No product types are currently visible.</p>}
+              {productTypes.map(({ id, label, image }) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`category-catalog-tab ${selectedType === id ? "is-active" : ""}`}
+                  onClick={() => setSelectedType(id)}
+                  aria-pressed={selectedType === id}
+                >
+                  {image && <img src={image} alt="" />}
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+            {productTypes.length === 0 && <p role="status">No product types are currently visible.</p>}
+          </>
+        )}
         {!hierarchy.loaded && (
           <p role={fetchedHierarchy.error ? "alert" : "status"}>
             {fetchedHierarchy.error
@@ -191,7 +216,7 @@ export default function AllProductsPage() {
           </p>
         )}
 
-        <section className="all-products-grid" aria-label="All products grid">
+        <section className="all-products-grid" aria-label={`${pageTitle} grid`}>
           {displayProducts.map(product => {
             const productHref = `/product/${encodeURIComponent(product.id)}`;
             return (

@@ -308,13 +308,13 @@ export default function Home() {
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-    href: "/products",
+    href: `/product/${encodeURIComponent(product.id)}`,
     originalPrice: product.originalPrice,
     hoverImage: getAlternateProductImage(product),
   }));
   const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-      href: "/products",
+      href: `/product/${encodeURIComponent(product.id)}`,
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));
@@ -419,7 +419,7 @@ export default function Home() {
                 />
               ))}
             </div>
-            <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
+            <a className="view-all text-link" href="/products?collection=new-arrivals">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
@@ -441,7 +441,7 @@ export default function Home() {
                 />
               ))}
             </div>
-            <a className="view-all text-link" href="/products">View all <ArrowUpRight size={16} /></a>
+            <a className="view-all text-link" href="/products?collection=best-selling">View all <ArrowUpRight size={16} /></a>
           </div>
         </div>
 
@@ -474,12 +474,12 @@ export default function Home() {
           </Reveal>
           <Reveal className="essentials-grid essentials-grid--compact">
             {[
-              { label: "Oversized", alt: "Black oversized T-shirt front and back views", imageIndex: 0, theme: "oversized" },
-              { label: "Hoodie", alt: "Black hoodie front and back views", imageIndex: 2, theme: "hoodie" },
+              { label: "Oversized", productType: "oversized", alt: "Black oversized T-shirt front and back views", imageIndex: 0, theme: "oversized" },
+              { label: "Hoodie", productType: "hoodie", alt: "Black hoodie front and back views", imageIndex: 2, theme: "hoodie" },
             ].map((item) => {
               const image = getShowcaseProductImage(item.imageIndex);
               return (
-                <Link key={item.label} href="/products" className={`essential-card essential-card--${item.theme} parallax-tilt`}>
+                <Link key={item.label} href={`/products?type=${encodeURIComponent(item.productType)}`} className={`essential-card essential-card--${item.theme} parallax-tilt`}>
                   <div className="essential-card__visual">
                     <div className="essential-card__backdrop" aria-hidden="true" />
                     <img src={image} alt={item.alt} loading="lazy" decoding="async" />
