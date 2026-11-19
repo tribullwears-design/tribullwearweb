@@ -318,6 +318,7 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
 
   const cartCount = Object.values(cart).reduce((total, quantity) => total + quantity, 0);
   const selectedLabel = catalogTabs.find((tab) => tab.id === selectedTab)?.label;
+  const selectedTabIndex = Math.max(0, catalogTabs.findIndex((tab) => tab.id === selectedTab));
   const productKey = (item: CategoryProduct) => item.id || `${categorySlug}-${entrySlug}-${item.name}`;
 
   const addToCart = (item: CategoryProduct) => {
@@ -345,6 +346,16 @@ function CategoryProductsView({ categorySlug, entrySlug }: { categorySlug: strin
     <>
       <div className="category-catalog-controls">
         <div className="category-catalog-tabs" aria-label="Product categories">
+          {catalogTabs.length > 0 && (
+            <span
+              className="category-catalog-tabs__indicator"
+              aria-hidden="true"
+              style={{
+                left: `calc(50% - ${catalogTabs.length * 77}px)`,
+                transform: `translateX(${selectedTabIndex * 100}%)`,
+              }}
+            />
+          )}
           {catalogTabs.map(({ id, label, image }) => (
             <button key={id} type="button" className={`category-catalog-tab ${selectedTab === id ? "is-active" : ""}`} onClick={() => setSelectedTab(id)} aria-pressed={selectedTab === id}>
               {image && <img src={image} alt="" />}
