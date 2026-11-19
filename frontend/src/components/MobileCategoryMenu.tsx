@@ -32,13 +32,21 @@ export default function MobileCategoryMenu() {
         {open ? <X size={20} strokeWidth={1.5} /> : <Menu size={20} strokeWidth={1.5} />}
       </button>
 
-      {open && typeof document !== "undefined" && createPortal(
+      {typeof document !== "undefined" && createPortal(
         <>
-          <button className="mobile-category-menu__overlay" type="button" aria-label="Close menu" onClick={closeMenu} />
+          <button
+            className={`mobile-category-menu__overlay ${open ? "mobile-category-menu__overlay--open" : ""}`}
+            type="button"
+            aria-label="Close menu"
+            aria-hidden={!open}
+            tabIndex={open ? 0 : -1}
+            onClick={closeMenu}
+          />
           <div
             id="mobile-category-navigation"
-            className="mobile-category-menu__panel mobile-category-menu__panel--open"
+            className={`mobile-category-menu__panel ${open ? "mobile-category-menu__panel--open" : ""}`}
             aria-hidden={!open}
+            inert={!open}
           >
             <div className="mobile-category-menu__header">
               <span>Menu</span>

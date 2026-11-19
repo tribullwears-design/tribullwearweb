@@ -22,6 +22,7 @@ import { createAdminRouter } from "./adminRoutes.js";
 import { configureProxyTrust } from "./proxyTrust.js";
 import { createRazorpayCheckoutRouter } from "./razorpayRoutes.js";
 import { createAdminOrderRouter } from "./orderRoutes.js";
+import { createOrderTrackingRouter } from "./orderTrackingRoutes.js";
 import { createCustomerRouter } from "./customerRoutes.js";
 import { logRazorpayConfigurationStatus } from "./razorpayService.js";
 import { requireAdminPermission } from "./adminAuth.js";
@@ -126,6 +127,7 @@ async function startServer() {
   app.use(createAdminRouter());
   app.use(createRazorpayCheckoutRouter());
   app.use(createAdminOrderRouter());
+  app.use(createOrderTrackingRouter());
   app.use(createCustomerRouter());
   app.get("/health", (_req, res) => {
     res.status(200).json({

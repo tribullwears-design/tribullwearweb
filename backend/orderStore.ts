@@ -81,6 +81,38 @@ export async function listCustomerOrders(customerId: string, page = 1, limit = 2
   return { orders, total, page, limit };
 }
 
+export async function findOrderForTracking(id: string, submittedName: string) {
+  const order = await (await getCollection()).findOne(
+    { id },
+    {
+      projection: {
+        _id: 0,
+        id: 1,
+        status: 1,
+        createdAt: 1,
+        statusUpdatedAt: 1,
+        "customer.name": 1,
+        "shippingAddress.recipientName": 1,
+      },
+    },
+  );
+  if (!order) return null;
+
+  const normalizeName = (name: string) => name.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+  const normalizedSubmittedName = normalizeName(submittedName);
+  const orderNames = [order.customer?.name, order.shippingAddress?.recipientName].filter(
+    (name): name is string => typeof name === "string",
+  );
+  if (!orderNames.some((name) => normalizeName(name) === normalizedSubmittedName)) return null;
+
+  return {
+    id: order.id,
+    status: order.status,
+    createdAt: order.createdAt,
+    ...(order.statusUpdatedAt ? { statusUpdatedAt: order.statusUpdatedAt } : {}),
+  };
+}
+
 export async function createOrder(order: Omit<OrderDocument, "createdAt" | "status"> & { status?: OrderStatus }) {
   const collection = await getCollection();
   if (!order.id || !order.customer?.name || !order.customer?.email || !order.items?.length) throw new Error("Order details are incomplete");

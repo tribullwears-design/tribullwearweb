@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { createOrder, listOrders, updateOrderStatus, updateRazorpayPayment } from "./orderStore.js";
+import { createOrder, findOrderForTracking, listOrders, updateOrderStatus, updateRazorpayPayment } from "./orderStore.js";
 
 const order = {
   id: "TB-20261017-ORDER",
@@ -90,6 +90,41 @@ describe("order store", () => {
         address: "10 Test Street",
       }),
     }));
+  });
+
+  it("returns only order status after matching the order name or delivery recipient", async () => {
+    const trackedOrder = {
+      id: order.id,
+      customer: { name: "Test Customer" },
+      shippingAddress: { recipientName: "Delivery Recipient" },
+      status: "Shipped" as const,
+      createdAt: "2026-10-17T10:00:00.000Z",
+      statusUpdatedAt: "2026-10-18T10:00:00.000Z",
+    };
+    mocks.findOne.mockResolvedValue(trackedOrder);
+
+    await expect(findOrderForTracking(order.id, "  test   customer ")).resolves.toEqual({
+      id: order.id,
+      status: "Shipped",
+      createdAt: trackedOrder.createdAt,
+      statusUpdatedAt: trackedOrder.statusUpdatedAt,
+    });
+    await expect(findOrderForTracking(order.id, "Delivery Recipient")).resolves.toMatchObject({ status: "Shipped" });
+    await expect(findOrderForTracking(order.id, "Different Person")).resolves.toBeNull();
+    expect(mocks.findOne).toHaveBeenCalledWith(
+      { id: order.id },
+      {
+        projection: {
+          _id: 0,
+          id: 1,
+          status: 1,
+          createdAt: 1,
+          statusUpdatedAt: 1,
+          "customer.name": 1,
+          "shippingAddress.recipientName": 1,
+        },
+      },
+    );
   });
 
   it("persists the payment ID and paid status only through the matched provider order update", async () => {
