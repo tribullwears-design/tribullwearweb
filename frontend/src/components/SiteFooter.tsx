@@ -7,7 +7,7 @@ type SiteFooterProps = {
   className?: string;
 };
 
-type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "careers" | "vouchers" | "community" | "terms" | "privacy" | "shipping" | "exchange";
+type FooterTopic = "contact" | "returns" | "faqs" | "about" | "investors" | "community" | "terms" | "privacy" | "shipping" | "exchange";
 
 const footerTopicContent: Record<FooterTopic, { title: string; description: string; action: string }> = {
   contact: {
@@ -34,16 +34,6 @@ const footerTopicContent: Record<FooterTopic, { title: string; description: stri
     title: "Investor Relations",
     description: "For investor and business enquiries, contact the Tribull team directly.",
     action: "Contact Tribull",
-  },
-  careers: {
-    title: "Careers at Tribull",
-    description: "Interested in working with Tribull? Send the team a message with the role or area you are interested in.",
-    action: "Get in touch",
-  },
-  vouchers: {
-    title: "Gift Vouchers",
-    description: "Contact us to ask about gifting options and available vouchers.",
-    action: "Ask about gifting",
   },
   community: {
     title: "Community Initiatives",
@@ -111,7 +101,7 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
   }, [activeTopic]);
 
   const openAccount = (section?: "orders") => {
-    window.dispatchEvent(new CustomEvent("tribull-open-account", { detail: { section } }));
+    window.dispatchEvent(new CustomEvent("tribull-open-login", { detail: { section } }));
   };
 
   const openTopic = (topic: FooterTopic) => (event: MouseEvent<HTMLButtonElement>) => {
@@ -149,8 +139,6 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
           <div className="footer__links">
             <button type="button" onClick={openTopic("about")}>About Us</button>
             <button type="button" onClick={openTopic("investors")}>Investor Relation</button>
-            <button type="button" onClick={openTopic("careers")}>Careers</button>
-            <button type="button" onClick={openTopic("vouchers")}>Gift Vouchers</button>
             <button type="button" onClick={openTopic("community")}>Community Initiatives</button>
           </div>
         </div>
