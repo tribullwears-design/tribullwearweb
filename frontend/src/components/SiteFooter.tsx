@@ -18,7 +18,7 @@ const footerTopicContent: Record<FooterTopic, { title: string; description: stri
   },
   about: {
     title: "About Tribull",
-    description: "Tribull creates graphic T-shirts and everyday streetwear for people who like to wear their interests. Browse the collection to find your next favourite.",
+    description: "TRIBULL is an online custom printed T-shirt brand in India, offering unique designs, trendy oversized T-shirts and quality prints. We bring creative styles and everyday fashion together, making it easy to find T-shirts that match your style. Explore our latest collections and shop your favourite designs online.",
     action: "Browse products",
   },
   community: {

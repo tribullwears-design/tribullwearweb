@@ -63,6 +63,33 @@ describe("storefront main categories", () => {
     expect(getStorefrontCategoryHierarchy(hierarchy).main.map(({ value }) => value)).toEqual(["games"]);
   });
 
+  it("maps cinema language artwork to the correct category for storefront display", () => {
+    const hierarchy = fromApiDocuments([{
+      value: "cinema",
+      label: "Cinema",
+      subcategories: [
+        { value: "hollywood", label: "Hollywood", image: "data:image/webp;base64,tamil" },
+        { value: "bollywood", label: "Bollywood", image: "data:image/webp;base64,malayalam" },
+        { value: "kollywood", label: "Kollywood", image: "data:image/webp;base64,telugu" },
+        { value: "tollywood", label: "Tollywood", image: "data:image/webp;base64,kannada" },
+        { value: "mollywood", label: "Mollywood", image: "data:image/webp;base64,hindi" },
+        { value: "sandalwood", label: "Sandalwood", image: "data:image/webp;base64,english" },
+      ],
+    }]);
+
+    const storefront = getStorefrontCategoryHierarchy(hierarchy);
+
+    expect(storefront.subcategories.cinema?.map(({ value, image }) => ({ value, image }))).toEqual([
+      { value: "hollywood", image: "data:image/webp;base64,english" },
+      { value: "bollywood", image: "data:image/webp;base64,hindi" },
+      { value: "kollywood", image: "data:image/webp;base64,tamil" },
+      { value: "tollywood", image: "data:image/webp;base64,telugu" },
+      { value: "mollywood", image: "data:image/webp;base64,malayalam" },
+      { value: "sandalwood", image: "data:image/webp;base64,kannada" },
+    ]);
+    expect(hierarchy.subcategories.cinema?.[0].image).toBe("data:image/webp;base64,tamil");
+  });
+
   it("surfaces API failures to the caller for the homepage error state", async () => {
     mocks.apiFetch.mockResolvedValue(new Response("unavailable", { status: 503 }));
 

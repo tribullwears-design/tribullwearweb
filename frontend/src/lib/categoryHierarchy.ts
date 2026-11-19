@@ -34,15 +34,39 @@ export const defaultCategoryHierarchy: CategoryHierarchy = {
   },
 };
 
+const cinemaImageSourceByValue: Record<string, string> = {
+  hollywood: "sandalwood",
+  bollywood: "mollywood",
+  kollywood: "hollywood",
+  tollywood: "kollywood",
+  mollywood: "bollywood",
+  sandalwood: "tollywood",
+};
+
+function mapCinemaLanguageImages(subcategories: CategoryChoice[]) {
+  const imageByValue = new Map(subcategories.map(({ value, image }) => [value.toLowerCase(), image]));
+  const values = Object.keys(cinemaImageSourceByValue);
+  if (!values.every((value) => imageByValue.get(value)?.startsWith("data:image/"))) return subcategories;
+
+  return subcategories.map((subcategory) => {
+    const sourceValue = cinemaImageSourceByValue[subcategory.value.toLowerCase()];
+    const image = sourceValue ? imageByValue.get(sourceValue) : undefined;
+    return image ? { ...subcategory, image } : subcategory;
+  });
+}
+
 export function getStorefrontCategoryHierarchy(hierarchy: CategoryHierarchy): CategoryHierarchy {
   const main = hierarchy.main.filter((category) => category.isVisible !== false);
   return {
     ...hierarchy,
     main,
-    subcategories: Object.fromEntries(main.map(({ value }) => [
-      value,
-      (hierarchy.subcategories[value] || []).filter((subcategory) => subcategory.isVisible !== false),
-    ])),
+    subcategories: Object.fromEntries(main.map(({ value, label }) => {
+      const subcategories = hierarchy.subcategories[value] || [];
+      const mappedSubcategories = value.toLowerCase() === "cinema" || label.trim().toLowerCase() === "cinema"
+        ? mapCinemaLanguageImages(subcategories)
+        : subcategories;
+      return [value, mappedSubcategories.filter((subcategory) => subcategory.isVisible !== false)];
+    })),
   };
 }
 
