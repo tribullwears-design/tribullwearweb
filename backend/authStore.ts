@@ -15,6 +15,7 @@ export type CustomerDocument = {
   adminStatus?: "Active" | "Inactive";
   adminPermissions?: AdminPermissions;
   googleId?: string;
+  googlePhoto?: string;
   authProviders: ("password" | "google")[];
   isProfileComplete: boolean;
   tokenVersion: number;
@@ -38,6 +39,7 @@ export type SafeCustomer = {
   username: string;
   email: string;
   mobile: string;
+  profileImage?: string;
   isProfileComplete: boolean;
 };
 
@@ -67,6 +69,7 @@ export function safeCustomer(customer: CustomerDocument): SafeCustomer {
     username: customer.name,
     email: customer.email,
     mobile: customer.mobile,
+    ...(customer.googlePhoto ? { profileImage: customer.googlePhoto } : {}),
     isProfileComplete: customer.isProfileComplete,
   };
 }
@@ -116,6 +119,28 @@ export async function findCustomerById(id: string) {
 
 export async function findCustomerByGoogleId(googleId: string) {
   return (await getCollection()).findOne({ googleId });
+}
+
+export async function linkGoogleCustomerByEmail(email: string, googleId: string) {
+  return (await getCollection()).findOneAndUpdate(
+    {
+      email: normalizeCustomerEmail(email),
+      $or: [{ googleId: { $exists: false } }, { googleId }],
+    },
+    {
+      $set: { googleId, updatedAt: new Date() },
+      $addToSet: { authProviders: "google" },
+    },
+    { returnDocument: "after" },
+  );
+}
+
+export async function updateGoogleCustomerPhoto(googleId: string, photo: string) {
+  return (await getCollection()).findOneAndUpdate(
+    { googleId },
+    { $set: { googlePhoto: photo, updatedAt: new Date() } },
+    { returnDocument: "after" },
+  );
 }
 
 export async function insertCustomer(customer: Omit<CustomerDocument, "_id">) {

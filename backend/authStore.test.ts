@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { consumePasswordReset } from "./authStore.js";
+import { consumePasswordReset, linkGoogleCustomerByEmail, safeCustomer, updateGoogleCustomerPhoto } from "./authStore.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -65,5 +65,55 @@ describe("consumePasswordReset", () => {
     );
     expect(passwordHash).toMatch(/^\$2[aby]\$12\$/);
     expect(passwordHash).not.toContain(password);
+  });
+
+});
+
+describe("linkGoogleCustomerByEmail", () => {
+  it("only links accounts with the matching email and no conflicting Google identity", async () => {
+    const linkedCustomer = { _id: "customer-id", email: "customer@example.com" };
+    mocks.findOneAndUpdate.mockResolvedValue(linkedCustomer);
+
+    await expect(linkGoogleCustomerByEmail(" CUSTOMER@example.com ", "google-subject"))
+      .resolves.toBe(linkedCustomer);
+
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        email: "customer@example.com",
+        $or: [{ googleId: { $exists: false } }, { googleId: "google-subject" }],
+      },
+      {
+        $set: { googleId: "google-subject", updatedAt: expect.any(Date) },
+        $addToSet: { authProviders: "google" },
+      },
+      { returnDocument: "after" },
+    );
+  });
+});
+
+describe("updateGoogleCustomerPhoto", () => {
+  it("saves the verified Google photo and exposes it as the safe profile image", async () => {
+    const photo = "https://lh3.googleusercontent.com/a/profile";
+    const customer = {
+      _id: "customer-id",
+      name: "Customer",
+      email: "customer@example.com",
+      mobile: "+919999999999",
+      googlePhoto: photo,
+      authProviders: ["google" as const],
+      isProfileComplete: true,
+      tokenVersion: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mocks.findOneAndUpdate.mockResolvedValue(customer);
+
+    await expect(updateGoogleCustomerPhoto("google-subject", photo)).resolves.toBe(customer);
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
+      { googleId: "google-subject" },
+      { $set: { googlePhoto: photo, updatedAt: expect.any(Date) } },
+      { returnDocument: "after" },
+    );
+    expect(safeCustomer(customer).profileImage).toBe(photo);
   });
 });

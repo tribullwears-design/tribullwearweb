@@ -1,4 +1,4 @@
-import { ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, Eye, EyeOff, Heart, LockKeyhole, Mail, Phone, Search, ShoppingBag, User, X, Minus, Plus, Trash2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiFetch } from "../lib/api";
@@ -68,12 +68,13 @@ function normalizeProfileName(value: string) {
   return { valid: true, value: normalized, message: "" };
 }
 
-function isCustomerLoginResponse(value: unknown): value is { user: { username: string; email?: string; mobile?: string } } {
+function isCustomerLoginResponse(value: unknown): value is { user: { username: string; email?: string; mobile?: string; profileImage?: string } } {
   if (typeof value !== "object" || value === null || !("user" in value) || typeof value.user !== "object" || value.user === null || !("username" in value.user) || typeof value.user.username !== "string") {
     return false;
   }
   return (!("email" in value.user) || typeof value.user.email === "string")
-    && (!("mobile" in value.user) || typeof value.user.mobile === "string");
+    && (!("mobile" in value.user) || typeof value.user.mobile === "string")
+    && (!("profileImage" in value.user) || typeof value.user.profileImage === "string");
 }
 
 type GooglePromptNotification = { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean };
@@ -213,6 +214,7 @@ export default function HeaderActions() {
             username: data.user.username,
             email: data.user.email,
             phone: data.user.mobile,
+            profileImage: data.user.profileImage,
             isAuthenticated: true,
           };
           setAuthUser(user);
@@ -259,7 +261,7 @@ export default function HeaderActions() {
           username: profile.name,
           email: profile.email,
           phone: profile.phone,
-          profileImage: profile.photo,
+          profileImage: profile.photo || authUser.profileImage,
           isAuthenticated: true,
         };
         setAuthUser(user);
@@ -269,7 +271,7 @@ export default function HeaderActions() {
             username: profile.name,
             email: profile.email,
             phone: profile.phone,
-            profileImage: profile.photo,
+            profileImage: profile.photo || authUser.profileImage,
           });
         }
         setProfileLoadError("");
@@ -529,7 +531,7 @@ export default function HeaderActions() {
         username: savedProfile.name,
         phone: savedProfile.phone,
         email: savedProfile.email,
-        profileImage: savedProfile.photo,
+        profileImage: savedProfile.photo || authUser.profileImage,
         isAuthenticated: true,
       };
       persistUser(nextUser);
@@ -537,7 +539,7 @@ export default function HeaderActions() {
         username: savedProfile.name,
         phone: savedProfile.phone,
         email: savedProfile.email,
-        profileImage: savedProfile.photo,
+        profileImage: savedProfile.photo || authUser.profileImage,
       });
       setProfileLoadError("");
       setProfilePhotoChanged(false);
@@ -703,6 +705,7 @@ export default function HeaderActions() {
                 username: data.user.username,
                 email: data.user.email,
                 phone: data.user.mobile,
+                profileImage: data.user.profileImage,
                 isAuthenticated: true,
               });
               setLoginSuccess("Signed in successfully.");
@@ -943,6 +946,7 @@ export default function HeaderActions() {
         username: data.user.username,
         email: data.user.email,
         phone: data.user.mobile,
+        profileImage: data.user.profileImage,
         isAuthenticated: true,
       });
       setPendingGoogleToken("");
@@ -1254,7 +1258,7 @@ export default function HeaderActions() {
 
               {accountSection === "profile" && (
                 <div className="header-account-section">
-                  <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
+                  <button type="button" className="header-account-section__back" aria-label="Back to account" onClick={() => setAccountSection("main")}><ArrowLeft size={14} aria-hidden="true" />Back</button>
                   <div className="header-account-section__content">
                     {profileLoadError && <p className="header-form-error" role="alert">{profileLoadError}</p>}
                     <div className="header-profile-avatar-editor">
@@ -1309,7 +1313,7 @@ export default function HeaderActions() {
 
               {accountSection === "orders" && (
                 <div className="header-account-section">
-                  <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
+                  <button type="button" className="header-account-section__back" aria-label="Back to account" onClick={() => setAccountSection("main")}><ArrowLeft size={14} aria-hidden="true" />Back</button>
                   <div className="header-account-section__content">
                     <h3>My Orders</h3>
                     {ordersError && <p className="header-form-error" role="alert">{ordersError}</p>}
@@ -1378,7 +1382,7 @@ export default function HeaderActions() {
 
               {accountSection === "wishlist" && (
                 <div className="header-account-section">
-                  <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
+                  <button type="button" className="header-account-section__back" aria-label="Back to account" onClick={() => setAccountSection("main")}><ArrowLeft size={14} aria-hidden="true" />Back</button>
                   <div className="header-account-section__content">
                     <h3>Wishlist</h3>
                     <div className="header-account-wishlist">
@@ -1407,7 +1411,7 @@ export default function HeaderActions() {
 
               {accountSection === "addresses" && (
                 <div className="header-account-section">
-                  <button type="button" className="header-account-section__back" onClick={() => setAccountSection("main")}>← Account</button>
+                  <button type="button" className="header-account-section__back" aria-label="Back to account" onClick={() => setAccountSection("main")}><ArrowLeft size={14} aria-hidden="true" />Back</button>
                   <div className="header-account-section__content">
                     <h3>Addresses</h3>
                     {addressesLoading && <p role="status">Loading saved addresses…</p>}
@@ -1548,7 +1552,7 @@ export default function HeaderActions() {
                   </label>
                 </>}
                 {loginStep === "login" && <button className="forgot-password" type="button" onClick={openForgotPassword}>Forgot Password?</button>}
-                <button className="header-account-modal__submit" type="submit" disabled={isSigningIn}>{isSigningIn ? (loginStep === "signup" ? "Creating Account..." : loginStep === "forgot" ? "Sending OTP..." : loginStep === "verify-otp" ? "Verifying OTP..." : loginStep === "new-password" ? "Resetting Password..." : loginStep === "google-profile" ? "Saving Profile..." : "Signing In...") : <>{loginStep === "signup" ? "Create Account" : loginStep === "forgot" ? "Send OTP" : loginStep === "verify-otp" ? "Verify OTP" : loginStep === "new-password" ? "Reset Password" : loginStep === "google-profile" ? "Complete Sign Up" : "Sign In"} <ArrowRight size={22} /></>}</button>
+                <button className="header-account-modal__submit" type="submit" disabled={isSigningIn}>{isSigningIn ? (loginStep === "signup" ? "Creating Account..." : loginStep === "forgot" ? "Sending OTP..." : loginStep === "verify-otp" ? "Verifying OTP..." : loginStep === "new-password" ? "Resetting Password..." : loginStep === "google-profile" ? "Saving Profile..." : "Signing In...") : <>{loginStep === "signup" ? "Create Account" : loginStep === "forgot" ? "Send OTP" : loginStep === "verify-otp" ? "Verify OTP" : loginStep === "new-password" ? "Reset Password" : loginStep === "google-profile" ? "Continue" : "Sign In"} <ArrowRight size={22} /></>}</button>
               </form>
               {loginStep === "verify-otp" && <div className="recovery-step-actions">
                 <button type="button" className="forgot-password" onClick={() => { setLoginStep("forgot"); setRecoveryOtp(""); setRecoveryResendSeconds(0); setLoginError(""); }}>Change email</button>

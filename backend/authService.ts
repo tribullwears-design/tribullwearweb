@@ -10,6 +10,7 @@ import {
   findCustomerById,
   isValidCustomerEmail,
   insertCustomer,
+  linkGoogleCustomerByEmail,
   normalizeCustomerEmail,
   normalizeCustomerMobile,
   updateGoogleProfile,
@@ -154,8 +155,13 @@ export async function getSessionAdmin(request: Request) {
   return customer;
 }
 
-export function createPendingGoogleToken(profile: { sub: string; email: string; name: string }) {
-  return jwt.sign({ type: "google-profile", email: profile.email, name: profile.name }, jwtSecret(), {
+export function createPendingGoogleToken(profile: { sub: string; email: string; name: string; picture?: string }) {
+  return jwt.sign({
+    type: "google-profile",
+    email: profile.email,
+    name: profile.name,
+    ...(profile.picture ? { picture: profile.picture } : {}),
+  }, jwtSecret(), {
     subject: profile.sub,
     expiresIn: 600,
     issuer: "tribull-store",
@@ -168,7 +174,12 @@ export function readPendingGoogleToken(token: string) {
   if (typeof claims === "string" || claims.type !== "google-profile" || typeof claims.sub !== "string" || typeof claims.email !== "string" || typeof claims.name !== "string") {
     throw new Error("Invalid Google profile completion token");
   }
-  return { sub: claims.sub, email: claims.email, name: claims.name };
+  return {
+    sub: claims.sub,
+    email: claims.email,
+    name: claims.name,
+    ...(typeof claims.picture === "string" ? { picture: claims.picture } : {}),
+  };
 }
 
 export async function createPasswordCustomer(name: string, email: string, mobile: string, password: string) {
@@ -241,6 +252,16 @@ async function authenticateCustomerPassword(customer: CustomerDocument | null, p
   return { customer, reason: null };
 }
 
+function isGoogleProfilePhoto(picture: string) {
+  try {
+    const url = new URL(picture);
+    return url.protocol === "https:"
+      && (url.hostname === "googleusercontent.com" || url.hostname.endsWith(".googleusercontent.com"));
+  } catch {
+    return false;
+  }
+}
+
 export async function verifyGoogleCredential(credential: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) throw new Error("GOOGLE_CLIENT_ID is not configured");
@@ -251,11 +272,30 @@ export async function verifyGoogleCredential(credential: string) {
     sub: payload.sub,
     email: normalizeCustomerEmail(payload.email),
     name: typeof payload.name === "string" ? payload.name.trim() : "",
+    ...(typeof payload.picture === "string" && isGoogleProfilePhoto(payload.picture) ? { picture: payload.picture } : {}),
   };
 }
 
 export async function findGoogleCustomer(googleId: string) {
   return findCustomerByGoogleId(googleId);
+}
+
+export async function findOrLinkGoogleCustomer(profile: { sub: string; email: string }) {
+  const linked = await findCustomerByGoogleId(profile.sub);
+  if (linked) return linked;
+
+  const emailCustomer = await findCustomerByEmail(profile.email);
+  if (!emailCustomer || emailCustomer.googleId && emailCustomer.googleId !== profile.sub) return null;
+
+  try {
+    const linkedByEmail = await linkGoogleCustomerByEmail(profile.email, profile.sub);
+    if (linkedByEmail) return linkedByEmail;
+  } catch (error) {
+    if (!(typeof error === "object" && error !== null && "code" in error && error.code === 11000)) throw error;
+  }
+
+  const racedCustomer = await findCustomerByGoogleId(profile.sub);
+  return racedCustomer && normalizeCustomerEmail(racedCustomer.email) === profile.email ? racedCustomer : null;
 }
 
 export async function completeGoogleProfile(sub: string, name: string, mobile: string) {

@@ -43,6 +43,7 @@ import {
   listCustomersForAdmin,
   normalizeCustomerEmail,
   safeCustomer,
+  updateGoogleCustomerPhoto,
   issuePasswordOtp,
   verifyPasswordOtp,
 } from "./authStore.js";
@@ -55,6 +56,7 @@ import {
   createEmailOtp,
   createPasswordResetAuthorization,
   findGoogleCustomer,
+  findOrLinkGoogleCustomer,
   getPasswordResetAuthorization,
   getSessionCustomer,
   hashPassword,
@@ -191,22 +193,25 @@ async function startServer() {
     if (flow !== "signin" && flow !== "signup") return res.status(400).json({ error: "Choose sign in or sign up to continue with Google" });
     try {
       const profile = await verifyGoogleCredential(credential);
-      const linked = await findGoogleCustomer(profile.sub);
+      const linked = await findOrLinkGoogleCustomer(profile);
       if (linked) {
         if (normalizeCustomerEmail(linked.email) !== profile.email) {
           return res.status(409).json({ error: "This Google account is linked to a different email address." });
         }
-        const name = typeof linked.name === "string" && linked.name.trim() ? linked.name.trim() : profile.name;
-        const mobile = typeof linked.mobile === "string" && isValidCustomerMobile(linked.mobile)
-          ? linked.mobile
+        const linkedCustomer = profile.picture
+          ? await updateGoogleCustomerPhoto(profile.sub, profile.picture) ?? linked
+          : linked;
+        const name = typeof linkedCustomer.name === "string" && linkedCustomer.name.trim() ? linkedCustomer.name.trim() : profile.name;
+        const mobile = typeof linkedCustomer.mobile === "string" && isValidCustomerMobile(linkedCustomer.mobile)
+          ? linkedCustomer.mobile
           : "";
         const missingFields: ("name" | "mobile")[] = [];
         if (name.trim().length < 2 || name.trim().length > 80) missingFields.push("name");
         if (!mobile) missingFields.push("mobile");
 
         if (missingFields.length === 0) {
-          const customer = linked.isProfileComplete
-            ? linked
+          const customer = linkedCustomer.isProfileComplete
+            ? linkedCustomer
             : await completeGoogleProfile(profile.sub, name, mobile);
           if (!customer) return res.status(409).json({ error: "Unable to complete your Google profile." });
           issueCustomerSession(res, customer);
@@ -223,11 +228,8 @@ async function startServer() {
       }
 
       const emailCustomer = await findCustomerByEmail(profile.email);
-      if (flow === "signin") {
-        return res.status(404).json({ error: "Google account not registered. Please sign up first." });
-      }
       if (emailCustomer) {
-        return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
+        return res.status(409).json({ error: "This Google account could not be linked to the existing account." });
       }
 
       const missingFields: ("name" | "mobile")[] = [];
@@ -253,7 +255,7 @@ async function startServer() {
     if (typeof pendingToken !== "string") return res.status(400).json({ error: "Google profile token is required" });
     try {
       const profile = readPendingGoogleToken(pendingToken);
-      const linked = await findGoogleCustomer(profile.sub);
+      const linked = await findOrLinkGoogleCustomer(profile);
       if (linked && normalizeCustomerEmail(linked.email) !== profile.email) {
         return res.status(409).json({ error: "This Google account is linked to a different email address." });
       }
@@ -281,6 +283,9 @@ async function startServer() {
         } else {
           return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
         }
+      }
+      if (profile.picture) {
+        customer = await updateGoogleCustomerPhoto(profile.sub, profile.picture) ?? customer;
       }
       issueCustomerSession(res, customer);
       return res.json({ user: safeCustomer(customer) });

@@ -372,7 +372,9 @@ body.header-overlay-open { overflow:hidden; }
 .header-account-drawer__signout { min-height:46px; border:1px solid rgba(27,54,45,.14) !important; background:transparent; }
 .header-account-drawer__cta { display:inline-flex; align-items:center; justify-content:center; width:100%; min-height:44px; border:0; background:var(--tribull-green); color:var(--tribull-cream); cursor:pointer; font:700 11px/1 Montserrat,sans-serif; letter-spacing:.1em; text-transform:uppercase; }
 .header-account-section { padding:0 20px 22px; }
-.header-account-section__back { display:inline-flex; align-items:center; gap:8px; margin:18px 0 12px; border:0; background:transparent; color:var(--tribull-green); cursor:pointer; font:700 11px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; }
+.header-account-section__back { align-self:flex-start; display:inline-flex; align-items:center; gap:7px; min-height:34px; margin:14px 0 16px; padding:0 12px 0 9px; border:1px solid rgba(27,54,45,.14); border-radius:999px; background:#fff; color:var(--tribull-green); cursor:pointer; font:700 10px/1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:uppercase; transition:background-color .18s ease,border-color .18s ease; }
+.header-account-section__back:hover { border-color:rgba(27,54,45,.28); background:rgba(27,54,45,.05); }
+.header-account-section__back:focus-visible { outline:2px solid var(--tribull-green); outline-offset:2px; }
 .header-account-section__content { display:flex; flex-direction:column; gap:12px; }
 .header-account-section__content h3 { margin:0; font:700 14px/1.2 Montserrat,sans-serif; letter-spacing:.12em; text-transform:uppercase; }
 .header-account-section__handle { margin:0; font:700 15px/1.1 Montserrat,sans-serif; letter-spacing:.08em; text-transform:lowercase; }

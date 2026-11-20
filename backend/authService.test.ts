@@ -2,17 +2,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
-import { findCustomerByEmail, findCustomerById } from "./authStore.js";
-import { authenticateAdminLoginPassword, authenticatePassword, adminCookieName, clearAdminSession, customerCookieName, getSessionAdmin, getSessionCustomer, hashPassword, issueAdminSession, issueCustomerSession } from "./authService.js";
+import { findCustomerByEmail, findCustomerByGoogleId, findCustomerById, linkGoogleCustomerByEmail } from "./authStore.js";
+import { authenticateAdminLoginPassword, authenticatePassword, adminCookieName, clearAdminSession, createPendingGoogleToken, customerCookieName, findOrLinkGoogleCustomer, getSessionAdmin, getSessionCustomer, hashPassword, issueAdminSession, issueCustomerSession, readPendingGoogleToken } from "./authService.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 
 const adminTestMocks = vi.hoisted(() => ({
   findByEmail: vi.fn(),
   findById: vi.fn(),
 }));
+const googleAuthMocks = vi.hoisted(() => ({
+  findById: vi.fn(),
+  linkByEmail: vi.fn(),
+}));
 vi.mock("./authStore.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./authStore.js")>();
-  return { ...actual, findCustomerByEmail: vi.fn(), findCustomerById: vi.fn() };
+  return {
+    ...actual,
+    findCustomerByEmail: vi.fn(),
+    findCustomerById: vi.fn(),
+    findCustomerByGoogleId: googleAuthMocks.findById,
+    linkGoogleCustomerByEmail: googleAuthMocks.linkByEmail,
+  };
 });
 vi.mock("./adminTestStore.js", () => ({
   findAdminTestAccountByEmail: adminTestMocks.findByEmail,
@@ -21,6 +31,8 @@ vi.mock("./adminTestStore.js", () => ({
 
 const findCustomerByEmailMock = vi.mocked(findCustomerByEmail);
 const findCustomer = vi.mocked(findCustomerById);
+const findGoogleCustomerMock = vi.mocked(findCustomerByGoogleId);
+const linkGoogleCustomerMock = vi.mocked(linkGoogleCustomerByEmail);
 
 const customer = {
   _id: new ObjectId(),
@@ -38,6 +50,8 @@ const adminCustomer = { ...customer, adminRole: "admin" as const, adminTitle: "S
 beforeEach(() => {
   findCustomerByEmailMock.mockReset();
   findCustomer.mockReset();
+  findGoogleCustomerMock.mockReset();
+  linkGoogleCustomerMock.mockReset();
   adminTestMocks.findByEmail.mockReset();
   adminTestMocks.findById.mockReset();
   findCustomerByEmailMock.mockResolvedValue(null);
@@ -46,6 +60,45 @@ beforeEach(() => {
   vi.stubEnv("JWT_SECRET", "a".repeat(32));
   vi.stubEnv("JWT_EXPIRES_IN", "7d");
   delete process.env.AUTH_COOKIE_SAME_SITE;
+});
+
+describe("Google customer linking", () => {
+  it("preserves the verified Google photo through profile completion", () => {
+    const profile = {
+      sub: "google-subject",
+      email: "customer@example.com",
+      name: "Customer",
+      picture: "https://lh3.googleusercontent.com/a/profile",
+    };
+
+    expect(readPendingGoogleToken(createPendingGoogleToken(profile))).toEqual(profile);
+  });
+
+  it("links a verified Google identity to an existing account with the same email", async () => {
+    const profile = { sub: "google-subject", email: "customer@example.com" };
+    const linkedCustomer = {
+      ...customer,
+      googleId: profile.sub,
+      authProviders: ["password", "google"] as ("password" | "google")[],
+    };
+    findGoogleCustomerMock.mockResolvedValue(null);
+    findCustomerByEmailMock.mockResolvedValue(customer);
+    linkGoogleCustomerMock.mockResolvedValue(linkedCustomer);
+
+    await expect(findOrLinkGoogleCustomer(profile)).resolves.toBe(linkedCustomer);
+    expect(linkGoogleCustomerMock).toHaveBeenCalledWith(profile.email, profile.sub);
+  });
+
+  it("does not link a Google identity to an account already linked to another Google user", async () => {
+    findGoogleCustomerMock.mockResolvedValue(null);
+    findCustomerByEmailMock.mockResolvedValue({ ...customer, googleId: "another-google-subject" });
+
+    await expect(findOrLinkGoogleCustomer({
+      sub: "google-subject",
+      email: customer.email,
+    })).resolves.toBeNull();
+    expect(linkGoogleCustomerMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("password customer authentication", () => {
