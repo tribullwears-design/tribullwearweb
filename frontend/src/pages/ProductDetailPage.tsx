@@ -4,7 +4,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { fetchProducts, getCachedProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, type StorefrontProduct } from "../lib/products";
 import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
 import { fetchProductSideImages } from "../lib/productSideImages";
@@ -72,18 +72,31 @@ function getDefaultProductColor(colors: string[] = []) {
   return colors.find((color) => color.trim().toLowerCase() === oppositeColor) || colors[0] || "";
 }
 
+function getProductColorFromName(name: string | undefined): "Black" | "White" | undefined {
+  const color = name?.match(/\s+(Black|White)$/i)?.[1]?.toLowerCase();
+  return color === "black" ? "Black" : color === "white" ? "White" : undefined;
+}
+
+function getProductColorBaseName(name: string) {
+  return name.replace(/\s+(?:Black|White)$/i, "").trim().toLowerCase();
+}
+
+const MAX_PRODUCT_GALLERY_IMAGES = 5;
+
 export default function ProductDetailPage() {
   const logo = useSiteLogo();
   const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProduct(id));
+  const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(() => getCachedProducts());
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sideImages, setSideImages] = useState<string[]>([]);
+  const [isSideImagesLoading, setIsSideImagesLoading] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const [failedThumbnailIndexes, setFailedThumbnailIndexes] = useState<number[]>([]);
   const [isProductLoading, setIsProductLoading] = useState(true);
@@ -241,7 +254,10 @@ export default function ProductDetailPage() {
     const loadRecommendations = () => {
       void fetchProducts()
         .then((products) => {
-          if (active) setRecommendationProducts(getRecommendationProducts(products, id));
+          if (active) {
+            setCatalogProducts(products);
+            setRecommendationProducts(getRecommendationProducts(products, id));
+          }
         })
         .catch((error: unknown) => console.error("Product recommendations request failed.", error));
     };
@@ -257,31 +273,62 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     setSideImages([]);
-    if (!id) return () => { active = false; };
+    setIsSideImagesLoading(true);
+    if (!id) {
+      setIsSideImagesLoading(false);
+      return () => { active = false; };
+    }
     void fetchProductSideImages(id)
       .then((images) => {
-        if (active) setSideImages(images.filter((image): image is string => Boolean(image)));
+        if (active) {
+          setSideImages(images.filter((image): image is string => Boolean(image)));
+          setIsSideImagesLoading(false);
+        }
       })
       .catch((error: unknown) => {
-        if (active) console.error("Product side images request failed.", error);
+        if (active) {
+          console.error("Product side images request failed.", error);
+          setIsSideImagesLoading(false);
+        }
       });
     return () => { active = false; };
   }, [id]);
   const product = storedProduct?.id === id ? storedProduct : null;
   const isShowingDifferentProduct = Boolean(storedProduct && storedProduct.id !== id);
-  const isTShirtColorVariant = Boolean(product?.colors?.length);
-  const productColorOptions = product?.colors?.length
-    ? product.colors.map((name) => ({
+  const currentProductColor = getProductColorFromName(product?.name);
+  const colorVariantProducts = product?.id && currentProductColor
+    ? catalogProducts.filter((candidate) => (
+      candidate.id !== product.id
+      && getProductColorBaseName(candidate.name) === getProductColorBaseName(product.name)
+    ))
+    : [];
+  const variantColorNames = colorVariantProducts
+    .map((candidate) => getProductColorFromName(candidate.name))
+    .filter((color): color is "Black" | "White" => Boolean(color));
+  const productColorNames = colorVariantProducts.length && currentProductColor
+    ? [currentProductColor, ...variantColorNames]
+    : product?.colors || [];
+  const preferredFirstColor = currentProductColor === "Black"
+    ? "White"
+    : currentProductColor === "White"
+      ? "Black"
+      : getDefaultProductColor(productColorNames);
+  const orderedProductColorNames = Array.from(
+    new Map(productColorNames.map((name) => [name.toLowerCase(), name])).values(),
+  ).sort((left, right) => Number(right.toLowerCase() === preferredFirstColor.toLowerCase())
+    - Number(left.toLowerCase() === preferredFirstColor.toLowerCase()));
+  const productColorOptions = orderedProductColorNames
+    .map((name) => ({
       name,
       value: tShirtColors.find((color) => color.name.toLowerCase() === name.toLowerCase())?.value || name.toLowerCase(),
-    }))
-    : [];
-  const hasProductColors = isTShirtColorVariant || Boolean(product?.colors?.length);
+    }));
+  const isTShirtColorVariant = productColorOptions.length > 0;
+  const hasProductColors = isTShirtColorVariant;
   const availableSizes = product?.sizes || [];
-  const initialColor = getDefaultProductColor(product?.colors);
+  const initialColor = currentProductColor || getDefaultProductColor(product?.colors);
   const activeColor = selectedColor ?? initialColor;
-  const productImageViews = product?.image ? [product.image, ...sideImages] : [];
-  const selectedProductImage = productImageViews[selectedImageIndex] || product?.image || "";
+  const productImageViews = sideImages.slice(0, MAX_PRODUCT_GALLERY_IMAGES);
+  const selectedProductImage = productImageViews[selectedImageIndex] || "";
 
   const navigateGallery = (direction: "next" | "prev") => {
     if (productImageViews.length < 2) return;
@@ -295,11 +342,11 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (product?.image) {
       setSelectedImageIndex(0);
-      setSelectedColor(getDefaultProductColor(product?.colors));
+      setSelectedColor(getProductColorFromName(product.name) || getDefaultProductColor(product.colors));
       setImageFailed(false);
       setFailedThumbnailIndexes([]);
     }
-  }, [product?.id, product?.image, product?.colors]);
+  }, [product?.id, product?.image, product?.colors, product?.name]);
 
   useEffect(() => {
     if (!product || !appliedCoupon) return;
@@ -466,7 +513,11 @@ export default function ProductDetailPage() {
           <section className="product-detail-gallery" aria-label="Product gallery">
             <div className="product-detail-gallery__status">
               <span className="product-detail-gallery__label">Tribull Studio</span>
-              <span className="product-detail-gallery__count">{String(selectedImageIndex + 1).padStart(2, "0")} / {String(productImageViews.length).padStart(2, "0")}</span>
+              <span className="product-detail-gallery__count">
+                {isSideImagesLoading
+                  ? "Loading"
+                  : `${String(productImageViews.length ? selectedImageIndex + 1 : 0).padStart(2, "0")} / ${String(productImageViews.length).padStart(2, "0")}`}
+              </span>
             </div>
 
             <div className="product-detail-gallery__body">
@@ -486,9 +537,18 @@ export default function ProductDetailPage() {
               </div>
               <div className="product-detail-gallery__media">
                 <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
-                  {imageFailed
-                    ? <span className="product-detail-gallery__fallback">Image unavailable</span>
-                    : <img src={selectedProductImage} alt={product.name} onError={() => setImageFailed(true)} />}
+                  {imageFailed ||
+                  (!selectedProductImage && !isSideImagesLoading) ? (
+                    <span className="product-detail-gallery__fallback">
+                      Image unavailable
+                    </span>
+                  ) : selectedProductImage ? (
+                    <img
+                      src={selectedProductImage}
+                      alt={product.name}
+                      onError={() => setImageFailed(true)}
+                    />
+                  ) : null}
                 </div>
                 <div className="product-detail-gallery__nav">
                   <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view" disabled={productImageViews.length < 2}>
@@ -559,6 +619,13 @@ export default function ProductDetailPage() {
                       className={activeColor === option.name ? "is-selected" : ""}
                       type="button"
                       onClick={() => {
+                        const variantProduct = colorVariantProducts.find(
+                          (candidate) => getProductColorFromName(candidate.name)?.toLowerCase() === option.name.toLowerCase(),
+                        );
+                        if (variantProduct) {
+                          setLocation(`/product/${encodeURIComponent(variantProduct.id)}`);
+                          return;
+                        }
                         setSelectedColor(option.name);
                         setSelectedImageIndex(0);
                       }}

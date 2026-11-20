@@ -25,6 +25,7 @@ const AllReviewsPage = lazy(() => import("./pages/AllReviewsPage"));
 const FAQsPage = lazy(() => import("./pages/FAQsPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const TrackOrderPage = lazy(() => import("./pages/TrackOrderPage"));
+const FooterInfoPage = lazy(() => import("./pages/FooterInfoPage"));
 
 
 function Router() {
@@ -78,6 +79,7 @@ function Router() {
       <Route path={"/faqs"} component={FAQsPage} />
       <Route path={"/contact"} component={ContactPage} />
       <Route path={"/track-order"} component={TrackOrderPage} />
+      <Route path={"/footer/:slug"} component={FooterInfoPage} />
       <Route path={"/qr-code"} component={ReviewPage} />
       <Route path={"/product/:id"} component={ProductDetailPage} />
       <Route path={"/category/:slug/:lang"} component={CategoryPage} />
