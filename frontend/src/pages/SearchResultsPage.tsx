@@ -3,7 +3,7 @@ import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import ProductPrice from "../components/ProductPrice";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, productHref, refreshProducts } from "../lib/products";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import { getProductSearchCategory, getSearchableProducts, matchesProductSearch } from "../lib/productSearch";
 
@@ -14,7 +14,7 @@ function SearchResultCard({ product }: { product: Product }) {
 
   return (
     <Link
-      href={`/product/${encodeURIComponent(product.id)}`}
+      href={productHref(product)}
       className="search-page__card-link"
     >
       <article className="search-page__card parallax-tilt">

@@ -27,8 +27,21 @@ export function getProductIdentifier(product: { id?: unknown; _id?: unknown }) {
   return "";
 }
 
-export function productHref(product: { id: string }) {
-  return `/product/${encodeURIComponent(product.id)}`;
+export function productHref(product: { id?: string; name?: string }) {
+  if (!product.id) return "/products";
+  if (!product.name?.trim()) return `/product/${encodeURIComponent(product.id)}`;
+  const slug = product.name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\u0080-\uFFFF]+/g, "-")
+    .replace(/^-|-$/g, "") || "product";
+  return `/product/${slug}--id--${encodeURIComponent(product.id)}`;
+}
+
+export function productIdFromRouteParam(routeParam: string) {
+  const idMarker = "--id--";
+  const markerIndex = routeParam.indexOf(idMarker);
+  return markerIndex < 0 ? routeParam : routeParam.slice(markerIndex + idMarker.length);
 }
 
 type ApiProduct = Omit<StorefrontProduct, "price" | "originalPrice"> & {

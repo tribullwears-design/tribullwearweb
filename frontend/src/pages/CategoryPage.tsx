@@ -1,6 +1,6 @@
 import { ArrowUpRight, Check, Heart, ShoppingCart } from "lucide-react";
 import { Link, useParams } from "wouter";
-import { fetchProducts, getCachedProducts } from "../lib/products";
+import { fetchProducts, getCachedProducts, productHref } from "../lib/products";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
@@ -160,7 +160,7 @@ function CategoryHero({ title, subtitle, description, categorySlug, image, fallb
 }
 
 function ProductCard({ item, isWishlisted, onWishlist, onAddToCart, isAdded }: { item: CategoryProduct; isWishlisted: boolean; onWishlist: (source: HTMLElement) => void; onAddToCart: () => void; isAdded: boolean }) {
-  const productLink = `/product/${encodeURIComponent(item.id)}`;
+  const productLink = productHref(item);
 
   return (
     <Link href={productLink} className="block h-full">
@@ -440,7 +440,7 @@ function DynamicBestSelling({ categorySlug, entrySlugs }: { categorySlug: string
   return (
     <div className="category-best-selling-grid">
       {products.map((item) => (
-        <Link key={item.id} href={`/product/${encodeURIComponent(item.id)}`} className="product-card">
+        <Link key={item.id} href={productHref(item)} className="product-card">
           <div className="product-card__image"><img src={item.image} alt={item.name} loading="lazy" fetchPriority="low" decoding="async" /></div>
         </Link>
       ))}

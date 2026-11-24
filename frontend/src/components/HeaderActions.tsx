@@ -14,7 +14,7 @@ import { fetchCustomerProfile, readProfilePhotoFile, saveCustomerProfile } from 
 import { preserveGuestWishlist, restoreGuestWishlist, syncCustomerWishlist, toggleWishlistItem } from "../lib/wishlist";
 import { getCheckoutPaymentLabel, indianStatesAndTerritories, normalizeIndianState } from "../../../shared/checkout";
 import type { Product } from "../../../shared/products";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, productHref, refreshProducts } from "../lib/products";
 import { matchesProductSearch } from "../lib/productSearch";
 import { getOrderStatusDisplay } from "../lib/orderStatus";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
@@ -1214,7 +1214,7 @@ export default function HeaderActions() {
             <h3>{query.trim() ? `Products (${searchResults.length})` : "Popular products"}</h3>
             {searchResults.length ? searchResults.slice(0, 5).map((product) => (
               <div className="header-search-result" key={product.id}>
-                <button className="header-search-result__product" type="button" onClick={() => { closeOverlay(); setLocation(`/product/${encodeURIComponent(product.id)}`); }}>
+                <button className="header-search-result__product" type="button" onClick={() => { closeOverlay(); setLocation(productHref(product)); }}>
                   <img src={product.image} alt="" />
                   <span><strong>{product.name}</strong><small>{product.category}</small><b>{formatPrice(product.price)}</b></span>
                 </button>

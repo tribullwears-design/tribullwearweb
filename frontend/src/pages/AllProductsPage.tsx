@@ -9,6 +9,7 @@ import type { AllProduct } from "../lib/allProducts";
 import { resolveOriginalPrice } from "../lib/productPrice";
 import {
   fetchProducts,
+  productHref,
   refreshProducts,
 } from "../lib/products";
 import { getEligibleStorefrontProducts } from "../lib/products";
@@ -218,12 +219,12 @@ export default function AllProductsPage() {
 
         <section className="all-products-grid" aria-label={`${pageTitle} grid`}>
           {displayProducts.map(product => {
-            const productHref = `/product/${encodeURIComponent(product.id)}`;
+            const productUrl = productHref(product);
             return (
               <article className="all-products-card" key={product.id}>
                 <div className="all-products-card__image">
                   <Link
-                    href={productHref}
+                    href={productUrl}
                     className="all-products-card__product-link"
                     aria-label={`View ${product.name}`}
                   >
@@ -274,7 +275,7 @@ export default function AllProductsPage() {
                   </button>
                 </div>
                 <Link
-                  href={productHref}
+                  href={productUrl}
                   className="all-products-card__meta all-products-card__meta-link"
                 >
                   <h2>{product.name}</h2>

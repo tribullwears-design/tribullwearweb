@@ -4,7 +4,7 @@ import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
 import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPrice";
-import { fetchProducts, getCachedProducts, type StorefrontProduct } from "../lib/products";
+import { fetchProducts, getCachedProducts, productHref, productIdFromRouteParam, type StorefrontProduct } from "../lib/products";
 import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
 import { fetchProductColorImages, fetchProductSideImages } from "../lib/productSideImages";
@@ -89,8 +89,9 @@ export default function ProductDetailPage() {
   const logo = useSiteLogo();
   const setRouteLoading = useRouteLoading();
   const { id } = useParams<{ id: string }>();
+  const routeProductId = productIdFromRouteParam(id);
   const [, setLocation] = useLocation();
-  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProduct(id));
+  const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProduct(routeProductId));
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(() => getCachedProducts());
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
@@ -129,14 +130,14 @@ export default function ProductDetailPage() {
     const continueCheckoutAfterLogin = () => {
       try {
         const selection = JSON.parse(window.sessionStorage.getItem("tribull-checkout-selection") || "null") as { productId?: string } | null;
-        if (selection?.productId === (id || storedProduct?.id)) setLocation("/checkout");
+        if (selection?.productId === (routeProductId || storedProduct?.id)) setLocation("/checkout");
       } catch {
         // Ignore malformed checkout state; checkout validation handles it.
       }
     };
     window.addEventListener("tribull-customer-authenticated", continueCheckoutAfterLogin);
     return () => window.removeEventListener("tribull-customer-authenticated", continueCheckoutAfterLogin);
-  }, [id, storedProduct?.id, setLocation]);
+  }, [routeProductId, storedProduct?.id, setLocation]);
 
   useEffect(() => {
     window.localStorage.setItem("tribull-cart", JSON.stringify(cart));
@@ -161,18 +162,18 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     const loadStoredProduct = () => {
-      const cachedProduct = getCachedProduct(id);
+      const cachedProduct = getCachedProduct(routeProductId);
       if (cachedProduct) setStoredProduct(cachedProduct);
       setIsProductLoading(!cachedProduct);
       setRouteLoading(!cachedProduct);
       setProductLoadError(false);
-      if (!id || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+      if (!routeProductId || !/^[A-Za-z0-9_-]{1,128}$/.test(routeProductId)) {
         setStoredProduct(null);
         setIsProductLoading(false);
         setRouteLoading(false);
         return;
       }
-      void apiFetch(`/api/products/${encodeURIComponent(id)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
+      void apiFetch(`/api/products/${encodeURIComponent(routeProductId)}`, { cache: "no-store", signal: AbortSignal.timeout(15000) })
         .then(async (response) => {
           if (!response.ok) {
             if (response.status === 404) return null;
@@ -257,7 +258,7 @@ export default function ProductDetailPage() {
       active = false;
       window.removeEventListener("tribull-products-updated", loadStoredProduct);
     };
-  }, [id, productRetry, setRouteLoading]);
+  }, [routeProductId, id, productRetry, setRouteLoading]);
 
   useEffect(() => {
     let active = true;
@@ -266,7 +267,7 @@ export default function ProductDetailPage() {
         .then((products) => {
           if (active) {
             setCatalogProducts(products);
-            setRecommendationProducts(getRecommendationProducts(products, id));
+            setRecommendationProducts(getRecommendationProducts(products, routeProductId));
           }
         })
         .catch((error: unknown) => console.error("Product recommendations request failed.", error));
@@ -279,16 +280,16 @@ export default function ProductDetailPage() {
       window.removeEventListener("tribull-products-updated", loadRecommendations);
       window.removeEventListener("tribull-products-cache-updated", loadRecommendations);
     };
-  }, [id]);
+  }, [routeProductId]);
   useEffect(() => {
     let active = true;
     setSideImages([]);
     setIsSideImagesLoading(true);
-    if (!id) {
+    if (!routeProductId) {
       setIsSideImagesLoading(false);
       return () => { active = false; };
     }
-    void fetchProductSideImages(id)
+    void fetchProductSideImages(routeProductId)
       .then((images) => {
         if (active) {
           setSideImages(images);
@@ -302,9 +303,9 @@ export default function ProductDetailPage() {
         }
       });
     return () => { active = false; };
-  }, [id]);
-  const product = storedProduct?.id === id ? storedProduct : null;
-  const isShowingDifferentProduct = Boolean(storedProduct && storedProduct.id !== id);
+  }, [routeProductId]);
+  const product = storedProduct?.id === routeProductId ? storedProduct : null;
+  const isShowingDifferentProduct = Boolean(storedProduct && storedProduct.id !== routeProductId);
   const currentProductColor = getProductColorFromName(product?.name);
   const colorVariantProducts = product?.id && currentProductColor
     ? catalogProducts.filter((candidate) => (
@@ -340,8 +341,8 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     setColorImages(null);
-    if (!id || !activeColor) return () => { active = false; };
-    void fetchProductColorImages(id, activeColor)
+    if (!routeProductId || !activeColor) return () => { active = false; };
+    void fetchProductColorImages(routeProductId, activeColor)
       .then((images) => {
         if (!active) return;
         if (!images.some(Boolean)) return;
@@ -354,7 +355,7 @@ export default function ProductDetailPage() {
         if (active) console.error("Product color gallery request failed.", error);
       });
     return () => { active = false; };
-  }, [id, activeColor]);
+  }, [routeProductId, activeColor]);
   const productImageViews = (colorImages ?? sideImages).slice(0, MAX_PRODUCT_GALLERY_IMAGES);
   const availableProductImageIndexes = productImageViews.flatMap((image, index) => image ? [index] : []);
   const selectedProductImage = productImageViews[selectedImageIndex] || "";
@@ -482,7 +483,7 @@ export default function ProductDetailPage() {
       setSizeError("Please select a size before checking out.");
       return;
     }
-    const productId = product.id || id || "";
+    const productId = product.id || routeProductId || "";
     const metadata = {
       productId,
       name: product.name,
@@ -510,7 +511,7 @@ export default function ProductDetailPage() {
       return;
     }
 
-    const productId = product.id || id || "";
+    const productId = product.id || routeProductId || "";
     if (!productId) {
       toast.error("This product could not be added to cart.");
       return;
@@ -608,7 +609,7 @@ export default function ProductDetailPage() {
                 (candidate) => getProductColorFromName(candidate.name)?.toLowerCase() === option.name.toLowerCase(),
               );
               if (variantProduct) {
-                setLocation(`/product/${encodeURIComponent(variantProduct.id)}`);
+                setLocation(productHref(variantProduct));
                 return;
               }
               setSelectedColor(option.name);
@@ -912,13 +913,13 @@ export default function ProductDetailPage() {
                 key={recommendation.id}
                 className="product-detail-recommendation-card"
               >
-                <Link href={`/product/${encodeURIComponent(recommendation.id || "")}`}>
+                <Link href={productHref(recommendation)}>
                   <div className="product-detail-recommendation-card__image">
                     <img src={recommendation.image} alt={recommendation.name} className="product-image-primary" decoding="async" />
                   </div>
                 </Link>
                 <div className="product-detail-recommendation-card__details">
-                  <Link href={`/product/${encodeURIComponent(recommendation.id || "")}`} className="product-detail-recommendation-card__info">
+                  <Link href={productHref(recommendation)} className="product-detail-recommendation-card__info">
                     <h3>{recommendation.name}</h3>
                     <ProductPrice
                       sellingPrice={recommendation.price}

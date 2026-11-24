@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ apiFetch: vi.fn() }));
 vi.mock("./api", () => ({ apiFetch: mocks.apiFetch }));
 
-import { fetchProducts, getCachedProducts, getProductIdentifier, mapApiProduct, productHref } from "./products";
+import { fetchProducts, getCachedProducts, getProductIdentifier, mapApiProduct, productHref, productIdFromRouteParam } from "./products";
 
 beforeEach(() => {
   mocks.apiFetch.mockReset();
@@ -69,6 +69,16 @@ describe("storefront product identifiers", () => {
   it("builds the same detail URL used by homepage and listing cards", () => {
     expect(productHref({ id: "saved-product" })).toBe("/product/saved-product");
     expect(productHref({ id: "product with spaces" })).toBe("/product/product%20with%20spaces");
+    expect(productHref({ id: "saved-product", name: "Pokkiri Knotcode Oversized" }))
+      .toBe("/product/pokkiri-knotcode-oversized--id--saved-product");
+    expect(productHref({ id: "saved-product", name: "தமிழ் Hoodie" }))
+      .toBe("/product/தமிழ்-hoodie--id--saved-product");
+    expect(productHref({ name: "Pokkiri Knotcode Oversized" })).toBe("/products");
+  });
+
+  it("extracts product IDs from named detail paths and supports legacy paths", () => {
+    expect(productIdFromRouteParam("pokkiri-knotcode-oversized--id--saved-product")).toBe("saved-product");
+    expect(productIdFromRouteParam("saved-product")).toBe("saved-product");
   });
 
   it("maps a product without id using its legacy Mongo identifier", () => {

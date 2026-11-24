@@ -8,7 +8,7 @@ import MovingNavbar from "../components/MovingNavbar";
 import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
-import { fetchProducts, getEligibleStorefrontProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
 import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
 import { loadCategoryBanner } from "../lib/categoryBanners";
@@ -308,13 +308,13 @@ export default function Home() {
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-    href: `/product/${encodeURIComponent(product.id)}`,
+    href: productHref(product),
     originalPrice: product.originalPrice,
     hoverImage: getAlternateProductImage(product),
   }));
   const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
-      href: `/product/${encodeURIComponent(product.id)}`,
+      href: productHref(product),
       originalPrice: product.originalPrice,
       hoverImage: getAlternateProductImage(product),
     }));

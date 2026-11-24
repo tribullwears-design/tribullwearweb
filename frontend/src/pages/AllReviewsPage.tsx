@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import StorefrontHeader from "../components/StorefrontHeader";
 import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
-import { fetchProducts, type StorefrontProduct } from "../lib/products";
+import { fetchProducts, productHref, type StorefrontProduct } from "../lib/products";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import "./AllReviewsPage.css";
 
@@ -85,7 +85,7 @@ export default function AllReviewsPage() {
                   <article className="all-reviews-page__card" key={review.id}>
                     <Link
                       className="all-reviews-page__product"
-                      href={product ? `/product/${encodeURIComponent(product.id)}` : "/products"}
+                      href={product ? productHref(product) : "/products"}
                       aria-label={`View ${review.productName}`}
                     >
                       <img

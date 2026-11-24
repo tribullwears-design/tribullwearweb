@@ -11,7 +11,7 @@ import { toggleWishlistItem } from "../lib/wishlist";
 import type { Product } from "../../../shared/products";
 import ProductPrice from "../components/ProductPrice";
 import MovingNavbar from "../components/MovingNavbar";
-import { fetchProducts, refreshProducts } from "../lib/products";
+import { fetchProducts, productHref, refreshProducts } from "../lib/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import { useProductTypeCategories } from "../lib/productTypeCategories";
 
@@ -194,11 +194,11 @@ export default function ProductsPage() {
                 key={product.id}
                 role="link"
                 tabIndex={0}
-                onClick={() => setLocation(`/product/${encodeURIComponent(product.id)}`)}
+                onClick={() => setLocation(productHref(product))}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    setLocation(`/product/${encodeURIComponent(product.id)}`);
+                    setLocation(productHref(product));
                   }
                 }}
               >
