@@ -329,7 +329,7 @@ export default function Home() {
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
-      {homeBanner?.image && <link rel="preload" as="image" href={homeBanner.image} fetchPriority="high" />}
+      {homeBanner?.image && <link rel="preload" as="image" href={homeBanner.image} media="(min-width: 641px)" fetchPriority="high" />}
       <MovingNavbar />
 
       <header className="site-header">
@@ -359,7 +359,7 @@ export default function Home() {
                 <picture>
                   <source
                     media="(max-width: 640px)"
-                    srcSet={homeBanner?.image || "/products/mobile-banner.webp"}
+                    srcSet="/products/banners/banner2.png"
                   />
                   <img
                     src={homeBanner?.image || brandAssets.hero}
