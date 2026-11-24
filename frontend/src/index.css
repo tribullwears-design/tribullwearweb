@@ -2155,7 +2155,6 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 .product-detail-recommendations__heading h2 { margin: 0; font: 700 clamp(22px, 2.2vw, 32px)/1.1 Montserrat, sans-serif; letter-spacing: .04em; text-transform: none; color: var(--tribull-green); }
 .product-detail-recommendations__grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
 .product-detail-recommendation-card { min-width: 0; overflow: hidden; border-radius: 12px; background: #fff; color: var(--tribull-green); box-shadow: 0 6px 18px rgba(27,54,45,.08); transition: transform .28s var(--ease-out), box-shadow .28s ease; }
-.product-detail-recommendation-card:hover { transform: translateY(-5px); box-shadow: 0 14px 26px rgba(27,54,45,.14); }
 .product-detail-recommendation-card img { display: block; width: 100%; aspect-ratio: 1 / 1.05; object-fit: cover; }
 .product-detail-recommendation-card h3 { margin: 12px 12px 5px; font: 700 11px/1.3 Montserrat, sans-serif; }
 .product-detail-recommendation-card p { margin: 0 12px 14px; font: 700 12px/1 Montserrat, sans-serif; }
@@ -2877,12 +2876,6 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   border: 1px solid rgba(25,25,24,0.08);
   color: #191918;
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.product-detail-recommendation-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(25,25,24,0.18);
-  box-shadow: 0 16px 32px rgba(25,25,24,0.08);
 }
 
 .product-detail-recommendation-card img {
@@ -3734,7 +3727,6 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
 }
 
 .product-detail-recommendation-card:hover {
-  transform: translateY(-2px);
   box-shadow: none;
 }
 
@@ -3762,26 +3754,6 @@ h2 { margin:0; font:800 clamp(28px, 3.5vw, 52px)/.95 Playfair Display,serif; let
   object-fit: cover;
   aspect-ratio: auto;
   transition: opacity .28s ease, transform .5s var(--ease-out);
-}
-
-@keyframes recommendationImagePop {
-  0% { opacity: 0; transform: scale(.78); }
-  65% { opacity: 1; transform: scale(1.06); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.product-detail-recommendation-card__image {
-  animation: recommendationImagePop .55s var(--ease-back) both;
-}
-
-.product-detail-recommendation-card:nth-child(2) .product-detail-recommendation-card__image { animation-delay: .08s; }
-.product-detail-recommendation-card:nth-child(3) .product-detail-recommendation-card__image { animation-delay: .16s; }
-.product-detail-recommendation-card:nth-child(4) .product-detail-recommendation-card__image { animation-delay: .24s; }
-
-.product-detail-recommendation-card:active .product-detail-recommendation-card__image,
-.product-detail-recommendation-card:focus-visible .product-detail-recommendation-card__image {
-  transform: scale(1.04);
-  transition: transform .18s var(--ease-back);
 }
 
 @media (hover: hover) and (pointer: fine) {
