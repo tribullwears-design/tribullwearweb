@@ -174,12 +174,12 @@
   font-size: 14px;
 }
 
-.product-detail-gallery__nav {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
+.product-detail-page .product-detail-gallery__nav {
+  position: static;
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
+  margin-top: 8px;
 }
 
 .product-detail-gallery__nav button {
