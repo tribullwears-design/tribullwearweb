@@ -252,6 +252,7 @@ describe("updateProduct", () => {
       stock: existing.stock,
       sizes: existing.sizes,
       colors: existing.colors,
+      colorImageIndexes: { black: 2 },
       status: existing.status,
       mainCategoryId: existing.mainCategoryId,
       subcategoryId: existing.subcategoryId,
@@ -264,6 +265,32 @@ describe("updateProduct", () => {
       { returnDocument: "after" },
     );
     expect(mocks.findOneAndUpdate.mock.calls[0]?.[1].$set).not.toHaveProperty("productType");
+    expect(mocks.findOneAndUpdate.mock.calls[0]?.[1].$set).toHaveProperty("colorImageIndexes", { black: 2 });
+  });
+
+  it("rejects color image mappings outside the product gallery", async () => {
+    mocks.findOne.mockResolvedValue({
+      id: "product-1",
+      name: "Original shirt",
+      description: "",
+      price: 1000,
+      compareAt: null,
+      image: "/shirt.jpg",
+      stock: 5,
+      sizes: ["M"],
+      colors: ["Black"],
+      status: "Active",
+      mainCategoryId: "",
+      subcategoryId: "",
+      mainCategory: "",
+      subcategory: "",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    await expect(updateProduct("product-1", {
+      colorImageIndexes: { black: 5 },
+    })).rejects.toThrow("Product color image mappings are invalid");
   });
 });
 

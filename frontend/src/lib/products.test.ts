@@ -123,4 +123,26 @@ describe("storefront product identifiers", () => {
       images: ["/front.png", "/back.png"],
     } as never).images).toEqual(["/front.png", "/back.png"]);
   });
+
+  it("preserves color-to-gallery-image mappings in cached product details", () => {
+    expect(mapApiProduct({
+      id: "saved-product",
+      name: "Saved product",
+      category: "products",
+      price: 599,
+      image: "/front.png",
+      colorImageIndexes: { black: 2 },
+    } as never).colorImageIndexes).toEqual({ black: 2 });
+  });
+
+  it("rejects color-to-gallery-image mappings outside the visible gallery", () => {
+    expect(() => mapApiProduct({
+      id: "saved-product",
+      name: "Saved product",
+      category: "products",
+      price: 599,
+      image: "/front.png",
+      colorImageIndexes: { black: 5 },
+    } as never)).toThrow("invalid color image mappings");
+  });
 });

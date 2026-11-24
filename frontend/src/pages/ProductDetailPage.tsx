@@ -9,7 +9,8 @@ import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
 import { fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
-import { useEffect, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
+import { isProductColorImageIndexes, MAX_PRODUCT_GALLERY_IMAGES } from "../../../shared/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import { useRouteLoading } from "../contexts/RouteLoadingContext";
 import "./ProductDetailPage.css";
@@ -23,6 +24,7 @@ interface ProductData extends OriginalPriceFields {
   description?: string;
   sizes?: string[];
   colors?: string[];
+  colorImageIndexes?: Record<string, number>;
   stock?: number;
   basePrice?: number;
   detailsLoaded?: boolean;
@@ -55,6 +57,7 @@ function getCachedProduct(productId: string | undefined): ProductData | null {
     category: cached.category,
     sizes: cached.sizes || [],
     colors: cached.colors || [],
+    colorImageIndexes: cached.colorImageIndexes,
     stock: cached.stock,
     basePrice: cached.basePrice,
     detailsLoaded: false,
@@ -81,8 +84,6 @@ function getProductColorBaseName(name: string) {
   return name.replace(/\s+(?:Black|White)$/i, "").trim().toLowerCase();
 }
 
-const MAX_PRODUCT_GALLERY_IMAGES = 5;
-
 export default function ProductDetailPage() {
   const logo = useSiteLogo();
   const setRouteLoading = useRouteLoading();
@@ -95,9 +96,12 @@ export default function ProductDetailPage() {
   const [selectedSize, setSelectedSize] = useState("");
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [sideImages, setSideImages] = useState<string[]>([]);
+  const [sideImages, setSideImages] = useState<Array<string | null>>([]);
   const [isSideImagesLoading, setIsSideImagesLoading] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
+  const [isGalleryZoomActive, setIsGalleryZoomActive] = useState(false);
+  const [isDraggingGalleryZoom, setIsDraggingGalleryZoom] = useState(false);
+  const [galleryZoomPosition, setGalleryZoomPosition] = useState({ x: 50, y: 50 });
   const [failedThumbnailIndexes, setFailedThumbnailIndexes] = useState<number[]>([]);
   const [isProductLoading, setIsProductLoading] = useState(true);
   const [productLoadError, setProductLoadError] = useState(false);
@@ -183,13 +187,15 @@ export default function ProductDetailPage() {
             mainCategory: string;
             sizes: string[];
             colors: string[];
+            colorImageIndexes?: Record<string, number>;
             stock: number;
             basePrice?: number;
           }>;
           if (typeof product.id !== "string" || !product.id || typeof product.name !== "string"
             || typeof product.price !== "number" || !Number.isFinite(product.price)
             || typeof product.image !== "string" || typeof product.mainCategory !== "string"
-            || !Array.isArray(product.sizes) || !Array.isArray(product.colors) || typeof product.stock !== "number") {
+            || !Array.isArray(product.sizes) || !Array.isArray(product.colors) || typeof product.stock !== "number"
+            || (product.colorImageIndexes !== undefined && !isProductColorImageIndexes(product.colorImageIndexes))) {
             throw new Error("Product response was incomplete.");
           }
           return product as {
@@ -202,6 +208,7 @@ export default function ProductDetailPage() {
             mainCategory: string;
             sizes: string[];
             colors: string[];
+            colorImageIndexes?: Record<string, number>;
             stock: number;
             basePrice?: number;
           };
@@ -224,6 +231,7 @@ export default function ProductDetailPage() {
             category: product.mainCategory,
             sizes: product.sizes,
             colors: product.colors,
+            colorImageIndexes: product.colorImageIndexes,
             stock: product.stock,
             basePrice: product.basePrice,
             detailsLoaded: true,
@@ -281,7 +289,7 @@ export default function ProductDetailPage() {
     void fetchProductSideImages(id)
       .then((images) => {
         if (active) {
-          setSideImages(images.filter((image): image is string => Boolean(image)));
+          setSideImages(images);
           setIsSideImagesLoading(false);
         }
       })
@@ -328,15 +336,38 @@ export default function ProductDetailPage() {
   const initialColor = currentProductColor || getDefaultProductColor(product?.colors);
   const activeColor = selectedColor ?? initialColor;
   const productImageViews = sideImages.slice(0, MAX_PRODUCT_GALLERY_IMAGES);
+  const availableProductImageIndexes = productImageViews.flatMap((image, index) => image ? [index] : []);
   const selectedProductImage = productImageViews[selectedImageIndex] || "";
+  const selectedProductImagePosition = availableProductImageIndexes.indexOf(selectedImageIndex);
+
+  useEffect(() => {
+    if (selectedProductImage) return;
+    const firstAvailableImageIndex = availableProductImageIndexes[0];
+    if (firstAvailableImageIndex !== undefined && firstAvailableImageIndex !== selectedImageIndex) {
+      setSelectedImageIndex(firstAvailableImageIndex);
+    }
+  }, [availableProductImageIndexes, selectedImageIndex, selectedProductImage]);
+
+  const updateGalleryZoomPosition = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== "mouse" && !isDraggingGalleryZoom) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setGalleryZoomPosition({
+      x: Math.min(100, Math.max(0, ((event.clientX - bounds.left) / bounds.width) * 100)),
+      y: Math.min(100, Math.max(0, ((event.clientY - bounds.top) / bounds.height) * 100)),
+    });
+    setIsGalleryZoomActive(true);
+  };
 
   const navigateGallery = (direction: "next" | "prev") => {
-    if (productImageViews.length < 2) return;
-    const nextIndex = direction === "next"
-      ? (selectedImageIndex + 1) % productImageViews.length
-      : (selectedImageIndex - 1 + productImageViews.length) % productImageViews.length;
-    setSelectedImageIndex(nextIndex);
+    if (availableProductImageIndexes.length < 2) return;
+    const currentPosition = Math.max(0, selectedProductImagePosition);
+    const nextPosition = direction === "next"
+      ? (currentPosition + 1) % availableProductImageIndexes.length
+      : (currentPosition - 1 + availableProductImageIndexes.length) % availableProductImageIndexes.length;
+    setSelectedImageIndex(availableProductImageIndexes[nextPosition]);
     setImageFailed(false);
+    setIsGalleryZoomActive(false);
+    setIsDraggingGalleryZoom(false);
   };
 
   useEffect(() => {
@@ -344,6 +375,8 @@ export default function ProductDetailPage() {
       setSelectedImageIndex(0);
       setSelectedColor(getProductColorFromName(product.name) || getDefaultProductColor(product.colors));
       setImageFailed(false);
+      setIsGalleryZoomActive(false);
+      setIsDraggingGalleryZoom(false);
       setFailedThumbnailIndexes([]);
     }
   }, [product?.id, product?.image, product?.colors, product?.name]);
@@ -510,33 +543,77 @@ export default function ProductDetailPage() {
 
       <main className="product-detail-page__main">
         <div className="product-detail-page__shell">
-          <section className="product-detail-gallery" aria-label="Product gallery">
+          <section
+            className={`product-detail-gallery${isGalleryZoomActive ? " is-zoom-active" : ""}`}
+            aria-label="Product gallery"
+          >
             <div className="product-detail-gallery__status">
               <span className="product-detail-gallery__label">Tribull Studio</span>
               <span className="product-detail-gallery__count">
                 {isSideImagesLoading
                   ? "Loading"
-                  : `${String(productImageViews.length ? selectedImageIndex + 1 : 0).padStart(2, "0")} / ${String(productImageViews.length).padStart(2, "0")}`}
+                  : `${String(selectedProductImagePosition >= 0 ? selectedProductImagePosition + 1 : 0).padStart(2, "0")} / ${String(availableProductImageIndexes.length).padStart(2, "0")}`}
               </span>
             </div>
 
             <div className="product-detail-gallery__body">
               <div className="product-detail-gallery__thumbs" aria-label="Product image views">
-                {productImageViews.map((image, viewIndex) => (
+                {availableProductImageIndexes.map((viewIndex, viewPosition) => {
+                  const image = productImageViews[viewIndex];
+                  if (!image) return null;
+                  return (
                   <button
                     key={`${image}-${viewIndex}`}
                     type="button"
                     className={selectedImageIndex === viewIndex ? "is-active" : ""}
-                    onClick={() => { setSelectedImageIndex(viewIndex); setImageFailed(false); }}
-                    aria-label={`View product image ${viewIndex + 1}`}
+                    onClick={() => {
+                      setSelectedImageIndex(viewIndex);
+                      setImageFailed(false);
+                      setIsGalleryZoomActive(false);
+                      setIsDraggingGalleryZoom(false);
+                    }}
+                    aria-label={`View product image ${viewPosition + 1}`}
                     aria-pressed={selectedImageIndex === viewIndex}
                   >
                     {failedThumbnailIndexes.includes(viewIndex) ? <span aria-hidden="true">Image</span> : <img src={image} alt="" aria-hidden="true" onError={() => setFailedThumbnailIndexes((current) => current.includes(viewIndex) ? current : [...current, viewIndex])} />}
                   </button>
-                ))}
+                  );
+                })}
               </div>
               <div className="product-detail-gallery__media">
-                <div className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}`}>
+                <div
+                  className={`product-detail-gallery__viewport${isTShirtColorVariant ? " product-detail-gallery__viewport--shirt" : ""}${selectedProductImage && !imageFailed ? " product-detail-gallery__viewport--zoomable" : ""}`}
+                  onPointerEnter={(event) => {
+                    if (event.pointerType === "mouse") setIsGalleryZoomActive(true);
+                  }}
+                  onPointerMove={updateGalleryZoomPosition}
+                  onPointerLeave={() => {
+                    if (!isDraggingGalleryZoom) setIsGalleryZoomActive(false);
+                  }}
+                  onPointerDown={(event) => {
+                    if (event.pointerType !== "mouse") return;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                    setIsDraggingGalleryZoom(true);
+                    updateGalleryZoomPosition(event);
+                  }}
+                  onPointerUp={(event) => {
+                    if (event.pointerType !== "mouse") return;
+                    setIsDraggingGalleryZoom(false);
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    setIsGalleryZoomActive(
+                      event.clientX >= bounds.left && event.clientX <= bounds.right
+                      && event.clientY >= bounds.top && event.clientY <= bounds.bottom,
+                    );
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture(event.pointerId);
+                    }
+                  }}
+                  onPointerCancel={() => {
+                    setIsDraggingGalleryZoom(false);
+                    setIsGalleryZoomActive(false);
+                  }}
+                  title={selectedProductImage && !imageFailed ? "Hover or drag to zoom" : undefined}
+                >
                   {imageFailed ||
                   (!selectedProductImage && !isSideImagesLoading) ? (
                     <span className="product-detail-gallery__fallback">
@@ -547,14 +624,27 @@ export default function ProductDetailPage() {
                       src={selectedProductImage}
                       alt={product.name}
                       onError={() => setImageFailed(true)}
+                      draggable={false}
                     />
                   ) : null}
                 </div>
+                {isGalleryZoomActive && selectedProductImage && !imageFailed && (
+                  <div className="product-detail-gallery__zoom" aria-hidden="true">
+                    <img
+                      src={selectedProductImage}
+                      alt=""
+                      draggable={false}
+                      style={{
+                        transform: `translate(${25 - galleryZoomPosition.x}%, ${25 - galleryZoomPosition.y}%)`,
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="product-detail-gallery__nav">
-                  <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view" disabled={productImageViews.length < 2}>
+                  <button type="button" onClick={() => navigateGallery("prev")} aria-label="Previous image view" disabled={availableProductImageIndexes.length < 2}>
                     <ChevronLeft size={18} />
                   </button>
-                  <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image view" disabled={productImageViews.length < 2}>
+                  <button type="button" onClick={() => navigateGallery("next")} aria-label="Next image view" disabled={availableProductImageIndexes.length < 2}>
                     <ChevronRight size={18} />
                   </button>
                 </div>
@@ -627,7 +717,15 @@ export default function ProductDetailPage() {
                           return;
                         }
                         setSelectedColor(option.name);
-                        setSelectedImageIndex(0);
+                        const mappedImageIndex = product.colorImageIndexes?.[option.name.trim().toLowerCase()];
+                        const defaultImageIndex = availableProductImageIndexes[0] ?? 0;
+                        setSelectedImageIndex(
+                          mappedImageIndex !== undefined && productImageViews[mappedImageIndex]
+                            ? mappedImageIndex
+                            : defaultImageIndex,
+                        );
+                        setImageFailed(false);
+                        setIsGalleryZoomActive(false);
                       }}
                       aria-label={`Select ${option.name} T-shirt`}
                       aria-pressed={activeColor === option.name}

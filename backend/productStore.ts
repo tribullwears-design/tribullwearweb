@@ -2,6 +2,7 @@ import { ObjectId, type Collection, type Filter, type WithId } from "mongodb";
 import { listCategories, type CategoryDocument } from "./categoryStore.js";
 import { getDatabase } from "./database.js";
 import { findActiveDiscount, calculateOfferDiscount } from "./marketingStore.js";
+import { isProductColorImageIndexes, type ProductColorImageIndexes } from "../shared/products.js";
 
 export type ProductDocument = {
   id: string;
@@ -11,6 +12,7 @@ export type ProductDocument = {
   compareAt: number | null;
   image: string;
   images?: string[];
+  colorImageIndexes?: ProductColorImageIndexes;
   imageCount?: number;
   storefrontImages?: Partial<Record<"640" | "960", string>>;
   storefrontImageUpdatedAt?: string;
@@ -113,6 +115,9 @@ function validateProduct(input: ProductInput, requireImage = true, allowUncatego
     || (input.bestSelling !== undefined && typeof input.bestSelling !== "boolean")) {
     throw new Error("New Arrival and Best Selling must be boolean values");
   }
+  if (input.colorImageIndexes !== undefined && !isProductColorImageIndexes(input.colorImageIndexes)) {
+    throw new Error("Product color image mappings are invalid");
+  }
   if (!Number.isFinite(input.price) || input.price < 0 || !Number.isFinite(input.stock) || input.stock < 0) {
     throw new Error("Product price and stock must be valid non-negative numbers");
   }
@@ -132,6 +137,7 @@ function isProductInput(value: unknown): value is Partial<ProductInput> {
     "price",
     "compareAt",
     "image",
+    "colorImageIndexes",
     "productType",
     "stock",
     "sizes",
@@ -177,6 +183,7 @@ export async function listProducts(mainCategoryId?: string, subcategoryId?: stri
     newArrival: 1,
     bestSelling: 1,
     discountOfferId: 1,
+    colorImageIndexes: 1,
     basePrice: 1,
     mainCategoryId: 1,
     subcategoryId: 1,
@@ -299,6 +306,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>) {
     stock: input.stock === undefined ? existing.stock : input.stock,
     sizes: input.sizes === undefined ? existing.sizes : input.sizes,
     colors: input.colors === undefined ? existing.colors : input.colors,
+    colorImageIndexes: input.colorImageIndexes === undefined ? existing.colorImageIndexes || {} : input.colorImageIndexes,
     status: input.status === undefined ? existing.status : input.status,
     newArrival: input.newArrival === undefined ? existing.newArrival ?? false : input.newArrival,
     bestSelling: input.bestSelling === undefined ? existing.bestSelling ?? false : input.bestSelling,

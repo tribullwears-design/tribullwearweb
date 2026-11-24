@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import type { Product } from "../../../shared/products";
+import { MAX_PRODUCT_GALLERY_IMAGES, type Product, type ProductColorImageIndexes } from "../../../shared/products";
 import { defaultProductTypeCategories, type ProductTypeCategory } from "../../../shared/productTypeCategories";
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation } from "wouter";
@@ -44,6 +44,7 @@ type AdminProduct = Omit<Product, "category"> & {
   newArrival?: boolean;
   bestSelling?: boolean;
   discountOfferId?: string;
+  colorImageIndexes?: ProductColorImageIndexes;
 };
 type StoredProduct = {
   id: string;
@@ -57,6 +58,7 @@ type StoredProduct = {
   stock: number;
   sizes: string[];
   colors: string[];
+  colorImageIndexes?: ProductColorImageIndexes;
   status: "Active" | "Draft";
   newArrival?: boolean;
   bestSelling?: boolean;
@@ -529,11 +531,21 @@ function MovingNavbarManagement({ canEdit }: { canEdit: boolean }) {
   );
 }
 
-type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; status: string; newArrival: boolean; bestSelling: boolean; discountOfferId: string };
-function ProductSideImagesField({ productId, pendingImages, onPendingImagesChange, disabled }: {
+type ProductFormState = { name: string; description: string; price: string; compareAt: string; category: string; subcategory: string; productType: string; image: string; stock: string; sizes: string; colors: string; colorImageIndexes: ProductColorImageIndexes; status: string; newArrival: boolean; bestSelling: boolean; discountOfferId: string };
+
+function areColorImageIndexesEqual(left: ProductColorImageIndexes, right: ProductColorImageIndexes = {}) {
+  const leftEntries = Object.entries(left);
+  return leftEntries.length === Object.keys(right).length
+    && leftEntries.every(([color, imageIndex]) => right[color] === imageIndex);
+}
+
+function ProductSideImagesField({ productId, pendingImages, onPendingImagesChange, colors, colorImageIndexes, onColorImageIndexesChange, disabled }: {
   productId?: string;
   pendingImages: Array<string | null>;
   onPendingImagesChange: React.Dispatch<React.SetStateAction<Array<string | null>>>;
+  colors: string[];
+  colorImageIndexes: ProductColorImageIndexes;
+  onColorImageIndexesChange: React.Dispatch<React.SetStateAction<ProductColorImageIndexes>>;
   disabled: boolean;
 }) {
   const [savedImages, setSavedImages] = useState<Array<string | null>>(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
@@ -606,6 +618,8 @@ function ProductSideImagesField({ productId, pendingImages, onPendingImagesChang
   };
 
   const images = productId ? savedImages : pendingImages;
+  const colorOptions = Array.from(new Map(colors.map((color) => [color.trim().toLowerCase(), color.trim()])).values());
+  const availableImageIndexes = images.flatMap((image, index) => image && index < MAX_PRODUCT_GALLERY_IMAGES ? [index] : []);
   return <section className="admin-product-side-images" aria-label="Product side images">
     <div><strong>Side images</strong><small>Upload up to 6 additional images. Select an empty slot to add an image.</small></div>
     {loading ? <p>Loading saved side images...</p> : <div className="admin-product-side-images__grid">{Array.from({ length: MAX_PRODUCT_SIDE_IMAGES }, (_, index) => {
@@ -618,6 +632,41 @@ function ProductSideImagesField({ productId, pendingImages, onPendingImagesChang
         {image && <button className="admin-text-button" type="button" disabled={disabled || savingIndex !== null} onClick={() => void removeImage(index)}>Remove</button>}
       </div>;
     })}</div>}
+    {colorOptions.length > 0 && <div className="admin-product-side-images__color-mappings">
+      <div>
+        <strong>Images by color</strong>
+        <small>Choose a gallery image for each color. Add the color image to a side-image slot first.</small>
+      </div>
+      {colorOptions.map((color) => {
+        const colorKey = color.toLowerCase();
+        const selectedImageIndex = colorImageIndexes[colorKey];
+        const selectionIsAvailable = selectedImageIndex !== undefined && availableImageIndexes.includes(selectedImageIndex);
+        return <label key={colorKey}>
+          <span>{color} image</span>
+          <select
+            disabled={disabled || loading}
+            value={selectedImageIndex !== undefined ? String(selectedImageIndex) : ""}
+            onChange={(event) => {
+              const value = event.currentTarget.value;
+              onColorImageIndexesChange((current) => {
+                const next = { ...current };
+                if (value === "") delete next[colorKey];
+                else next[colorKey] = Number(value);
+                return next;
+              });
+            }}
+          >
+            <option value="">Default image</option>
+            {!selectionIsAvailable && selectedImageIndex !== undefined && (
+              <option value={selectedImageIndex} disabled>Image {selectedImageIndex + 1} (not uploaded)</option>
+            )}
+            {availableImageIndexes.map((imageIndex) => (
+              <option key={imageIndex} value={imageIndex}>Gallery image {imageIndex + 1}</option>
+            ))}
+          </select>
+        </label>;
+      })}
+    </div>}
     {error && <small className="admin-image-error" role="alert">{error}</small>}
   </section>;
 }
@@ -629,6 +678,7 @@ const productTypeOptions = [
 ];
 function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoading, hierarchyError, onRetryHierarchy, onSave, onCancel, imageError, onImageChange, savedNotice, productSaving, discountOffers = latestDiscountOffers, submitLabel = "Save Product", productId, pendingSideImages, onPendingSideImagesChange }: { productForm: ProductFormState; setProductForm: React.Dispatch<React.SetStateAction<ProductFormState>>; hierarchy: CategoryHierarchy; hierarchyLoading: boolean; hierarchyError: string; onRetryHierarchy?: () => void; onSave: (event: React.FormEvent<HTMLFormElement>) => void | Promise<void>; onCancel: () => void; imageError: string; onImageChange: (event: React.ChangeEvent<HTMLInputElement>) => void; savedNotice: string; productSaving: boolean; discountOffers?: AdminOffer[]; submitLabel?: string; productId?: string; pendingSideImages: Array<string | null>; onPendingSideImagesChange: React.Dispatch<React.SetStateAction<Array<string | null>>> }) {
   const subcategories = hierarchy.subcategories[productForm.category] || [];
+  const colors = Array.from(new Map(productForm.colors.split(",").map((color) => color.trim()).filter(Boolean).map((color) => [color.toLowerCase(), color])).values());
   const updateCategory = (category: string) => setProductForm((current) => ({ ...current, category, subcategory: "" }));
   return <form className="admin-form" onSubmit={onSave}>
     <label><span>Product name</span><input required value={productForm.name} onChange={(event) => setProductForm({ ...productForm, name: event.target.value })} /></label>
@@ -638,7 +688,20 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.isActive).map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.discountType === "percentage" ? `${offer.value}% off` : `₹${offer.value.toLocaleString("en-IN")} off`}</option>)}</select></label>
     <label><span>Product type</span><select required={!productId} value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
-    <ProductSideImagesField productId={productId} pendingImages={pendingSideImages} onPendingImagesChange={onPendingSideImagesChange} disabled={productSaving} />
+    <ProductSideImagesField
+      productId={productId}
+      pendingImages={pendingSideImages}
+      onPendingImagesChange={onPendingSideImagesChange}
+      colors={colors}
+      colorImageIndexes={productForm.colorImageIndexes}
+      onColorImageIndexesChange={(colorImageIndexes) => setProductForm((current) => ({
+        ...current,
+        colorImageIndexes: typeof colorImageIndexes === "function"
+          ? colorImageIndexes(current.colorImageIndexes)
+          : colorImageIndexes,
+      }))}
+      disabled={productSaving}
+    />
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
     <label><span>Colors (optional; first color should match the image)</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
@@ -1422,7 +1485,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [isProductEditorOpen, setIsProductEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<StoredProduct | null>(null);
   const [editingProductTarget, setEditingProductTarget] = useState<AdminProduct | null>(null);
-  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", status: "Draft", newArrival: false, bestSelling: false, discountOfferId: "" });
+  const [editingProductForm, setEditingProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "", image: "", stock: "", sizes: "", colors: "", colorImageIndexes: {}, status: "Draft", newArrival: false, bestSelling: false, discountOfferId: "" });
   const [editingProductCategory, setEditingProductCategory] = useState("");
   const [editingProductSubcategory, setEditingProductSubcategory] = useState("");
   const [productUpdateError, setProductUpdateError] = useState("");
@@ -1470,7 +1533,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [generalSettingsError, setGeneralSettingsError] = useState("");
   const [generalSettingsNotice, setGeneralSettingsNotice] = useState("");
   const [newCategory, setNewCategory] = useState("");
-  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" });
+  const [productForm, setProductForm] = useState<ProductFormState>({ name: "", description: "", price: "", compareAt: "", category: "", subcategory: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", colorImageIndexes: {}, status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" });
   const [pendingProductSideImages, setPendingProductSideImages] = useState<Array<string | null>>(() => Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
   const [discountOffers, setDiscountOffers] = useState<AdminOffer[]>([]);
   const [editProductLoading, setEditProductLoading] = useState(initialScreen === "edit-product");
@@ -1527,6 +1590,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           stock: String(product.stock),
           sizes: product.sizes.join(", "),
           colors: product.colors.join(", "),
+          colorImageIndexes: product.colorImageIndexes || {},
           productType: product.productType || "",
           status: product.status,
           newArrival: product.newArrival === true,
@@ -1904,6 +1968,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           stock: productForm.stock ? Number(productForm.stock) : 0,
           sizes,
           colors: productForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
+          colorImageIndexes: productForm.colorImageIndexes,
           status: productForm.status,
           newArrival: productForm.newArrival,
           bestSelling: productForm.bestSelling,
@@ -1939,7 +2004,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           ? `Product saved, but ${failedSideImageCount} side image${failedSideImageCount === 1 ? "" : "s"} could not be uploaded. Edit the product to retry.`
           : "Product saved successfully.");
         setPendingProductSideImages(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null));
-        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" }));
+        setProductForm((current) => ({ ...current, name: "", description: "", price: "", compareAt: "", productType: "round-neck", image: "", stock: "", sizes: "S, M, L, XL", colors: "Black", colorImageIndexes: {}, status: "Active", newArrival: false, bestSelling: false, discountOfferId: "" }));
         if (failedSideImageCount) toast.error("Some product side images could not be uploaded. Edit the product to retry.");
         else toast.success("Product added successfully!");
         window.setTimeout(() => setSavedNotice(""), 2500);
@@ -1949,6 +2014,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       setSavedNotice(error instanceof Error ? error.message : "Unable to save product. Please try again.");
       toast.error("Failed to save product. Please try again.");
     } finally {
+      productUpdateInFlight.current = false;
       setProductSaving(false);
     }
   };
@@ -2045,6 +2111,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
         stock: String(savedProduct.stock),
         sizes: savedProduct.sizes.join(", "),
         colors: savedProduct.colors.join(", "),
+        colorImageIndexes: savedProduct.colorImageIndexes || {},
         status: savedProduct.status,
         newArrival: savedProduct.newArrival === true,
         bestSelling: savedProduct.bestSelling === true,
@@ -2077,6 +2144,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
       || editingProductForm.newArrival !== (editingProduct.newArrival === true)
       || editingProductForm.bestSelling !== (editingProduct.bestSelling === true)
       || editingProductForm.discountOfferId !== (editingProduct.discountOfferId || "")
+      || !areColorImageIndexesEqual(editingProductForm.colorImageIndexes, editingProduct.colorImageIndexes || {})
     );
     if (!force && hasUnsavedChanges && !window.confirm("Discard your unsaved changes?")) return;
     editProductRequest.current?.abort();
@@ -2131,6 +2199,7 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
           stock,
           sizes,
           colors: editingProductForm.colors.split(",").map((color) => color.trim()).filter(Boolean),
+          colorImageIndexes: editingProductForm.colorImageIndexes,
           status: editingProductForm.status,
           newArrival: editingProductForm.newArrival,
           bestSelling: editingProductForm.bestSelling,

@@ -1,4 +1,4 @@
-import type { Product } from "../../../shared/products";
+import { isProductColorImageIndexes, type Product } from "../../../shared/products";
 import type { CategoryHierarchy } from "./categoryHierarchy";
 import { parsePrice, resolveOriginalPrice } from "./productPrice";
 import { apiFetch } from "./api";
@@ -64,6 +64,9 @@ export type ProductWrite = Omit<Product, "price" | "id" | "created" | "sold" | "
 export function mapApiProduct(product: ApiProduct): StorefrontProduct {
   const id = getProductIdentifier(product);
   if (!id) throw new Error("Product response is missing its stable identifier");
+  if (product.colorImageIndexes !== undefined && !isProductColorImageIndexes(product.colorImageIndexes)) {
+    throw new Error(`Product ${id} returned invalid color image mappings`);
+  }
   const price = [
     product.sellingPrice,
     product.salePrice,
@@ -87,6 +90,7 @@ export function mapApiProduct(product: ApiProduct): StorefrontProduct {
         : "products"),
     image: product.image,
     ...(Array.isArray(product.images) ? { images: product.images.filter((image): image is string => typeof image === "string" && Boolean(image.trim())) } : {}),
+    ...(product.colorImageIndexes ? { colorImageIndexes: product.colorImageIndexes } : {}),
     ...(Array.isArray(product.sizes) ? { sizes: product.sizes.filter((size): size is string => typeof size === "string") } : {}),
     ...(Array.isArray(product.colors) ? { colors: product.colors.filter((color): color is string => typeof color === "string") } : {}),
     created: product.created ?? (typeof product.createdAt === "string" ? Date.parse(product.createdAt) : 0),

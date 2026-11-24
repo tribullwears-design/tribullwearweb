@@ -8,7 +8,6 @@ type SiteFooterProps = {
 };
 
 const footerInfoPaths = {
-  returns: "/footer/returns-refunds",
   about: "/footer/about-us",
   community: "/footer/community-initiatives",
   account: "/footer/account",
@@ -50,7 +49,6 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
           <div className="footer__links">
             <Link href="/contact">Contact Us</Link>
             <Link href="/track-order">Track Order</Link>
-            <Link href={footerInfoPaths.returns}>Returns &amp; Refunds</Link>
             <Link href="/faqs">FAQs</Link>
             <Link href={footerInfoPaths.account}>My Account</Link>
           </div>

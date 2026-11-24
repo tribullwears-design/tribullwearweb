@@ -1,3 +1,18 @@
+export const MAX_PRODUCT_GALLERY_IMAGES = 5;
+
+export type ProductColorImageIndexes = Record<string, number>;
+
+export function isProductColorImageIndexes(value: unknown): value is ProductColorImageIndexes {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.entries(value).every(([color, imageIndex]) => (
+    color.length > 0
+    && color === color.trim().toLowerCase()
+    && Number.isInteger(imageIndex)
+    && imageIndex >= 0
+    && imageIndex < MAX_PRODUCT_GALLERY_IMAGES
+  ));
+}
+
 export type Product = {
   id: string;
   name: string;
@@ -5,6 +20,7 @@ export type Product = {
   price: number;
   originalPrice?: number;
   image: string;
+  colorImageIndexes?: ProductColorImageIndexes;
   created: number;
   sold: number;
 };
