@@ -72,7 +72,7 @@ function ProductCard({ item, productId, showMeta = true, href, originalPrice, ho
   return (
     <Link href={href} className="product-card-link" aria-label={`Browse products, including ${item[1]}`}>
       <article
-        className={cls("product-card", "parallax-tilt", hoverImageLoaded ? "product-card--has-hover-image" : null)}
+        className={cls("product-card", hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
         <div className="product-card__image">
           <img src={item[0]} alt={item[1]} className="product-image-primary" loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" />
