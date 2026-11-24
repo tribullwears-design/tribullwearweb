@@ -1,10 +1,13 @@
 import type { Collection } from "mongodb";
 import { randomUUID } from "node:crypto";
 import { getDatabase } from "./database.js";
+import { MAX_PRODUCT_GALLERY_IMAGES } from "../shared/products.js";
 
 export const MAX_PRODUCT_SIDE_IMAGES = 6;
+export const MAX_PRODUCT_COLOR_IMAGES = MAX_PRODUCT_GALLERY_IMAGES;
 export const MAX_PRODUCT_SIDE_IMAGE_BYTES = 6 * 1024 * 1024;
 const allowedImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+let colorImagesIndexPromise: Promise<void> | undefined;
 
 type ProductSideImageDocument = {
   productId: string;
@@ -12,6 +15,10 @@ type ProductSideImageDocument = {
   image: string;
   updatedAt: string;
   version: string;
+};
+
+type ProductColorImageDocument = ProductSideImageDocument & {
+  color: string;
 };
 
 export class ProductSideImageValidationError extends Error {
@@ -25,6 +32,20 @@ export function validateProductSideImage(index: unknown, image: unknown): assert
   if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_SIDE_IMAGES) {
     throw new ProductSideImageValidationError(`Image index must be between 0 and ${MAX_PRODUCT_SIDE_IMAGES - 1}.`);
   }
+  validateImageData(image);
+}
+
+export function validateProductColorImage(color: unknown, index: unknown, image: unknown): asserts image is string {
+  if (typeof color !== "string" || !color.trim() || color !== color.trim().toLowerCase() || color.length > 64) {
+    throw new ProductSideImageValidationError("Product color is invalid.");
+  }
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_COLOR_IMAGES) {
+    throw new ProductSideImageValidationError(`Color image index must be between 0 and ${MAX_PRODUCT_COLOR_IMAGES - 1}.`);
+  }
+  validateImageData(image);
+}
+
+function validateImageData(image: unknown): asserts image is string {
   if (typeof image !== "string") {
     throw new ProductSideImageValidationError("A product side image is required.");
   }
@@ -44,6 +65,18 @@ export function validateProductSideImage(index: unknown, image: unknown): assert
 async function getCollection(): Promise<Collection<ProductSideImageDocument>> {
   const collection = (await getDatabase()).collection<ProductSideImageDocument>("product_side_images");
   await collection.createIndex({ productId: 1, index: 1 }, { unique: true });
+  return collection;
+}
+
+async function getColorCollection(): Promise<Collection<ProductColorImageDocument>> {
+  const collection = (await getDatabase()).collection<ProductColorImageDocument>("product_color_images");
+  colorImagesIndexPromise ||= collection.createIndex({ productId: 1, color: 1, index: 1 }, { unique: true })
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      colorImagesIndexPromise = undefined;
+      throw error;
+    });
+  await colorImagesIndexPromise;
   return collection;
 }
 
@@ -83,4 +116,45 @@ export async function deleteProductSideImage(productId: string, index: number): 
 
 export async function deleteProductSideImages(productId: string): Promise<void> {
   await (await getCollection()).deleteMany({ productId });
+}
+
+export async function listProductColorImages(productId: string, color: string): Promise<Array<ProductColorImageDocument | null>> {
+  const documents = await (await getColorCollection())
+    .find({ productId, color })
+    .sort({ index: 1 })
+    .toArray();
+  const images: Array<ProductColorImageDocument | null> = Array.from({ length: MAX_PRODUCT_COLOR_IMAGES }, () => null);
+  for (const document of documents) images[document.index] = document;
+  return images;
+}
+
+export async function getProductColorImage(productId: string, color: string, index: number): Promise<ProductColorImageDocument | null> {
+  return (await getColorCollection()).findOne({ productId, color, index });
+}
+
+export async function saveProductColorImage(productId: string, color: string, index: number, image: unknown): Promise<ProductColorImageDocument> {
+  validateProductColorImage(color, index, image);
+  const updatedAt = new Date().toISOString();
+  const document = { productId, color, index, image, updatedAt, version: randomUUID() };
+  await (await getColorCollection()).updateOne(
+    { productId, color, index },
+    { $set: document },
+    { upsert: true },
+  );
+  return document;
+}
+
+export async function deleteProductColorImage(productId: string, color: string, index: number): Promise<boolean> {
+  if (typeof color !== "string" || !color.trim() || color !== color.trim().toLowerCase() || color.length > 64) {
+    throw new ProductSideImageValidationError("Product color is invalid.");
+  }
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_COLOR_IMAGES) {
+    throw new ProductSideImageValidationError(`Color image index must be between 0 and ${MAX_PRODUCT_COLOR_IMAGES - 1}.`);
+  }
+  const result = await (await getColorCollection()).deleteOne({ productId, color, index });
+  return result.deletedCount > 0;
+}
+
+export async function deleteProductColorImages(productId: string): Promise<void> {
+  await (await getColorCollection()).deleteMany({ productId });
 }

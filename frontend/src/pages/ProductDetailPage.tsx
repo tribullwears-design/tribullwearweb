@@ -7,7 +7,7 @@ import { resolveOriginalPrice, type OriginalPriceFields } from "../lib/productPr
 import { fetchProducts, getCachedProducts, type StorefrontProduct } from "../lib/products";
 import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
-import { fetchProductSideImages } from "../lib/productSideImages";
+import { fetchProductColorImages, fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
 import { isProductColorImageIndexes, MAX_PRODUCT_GALLERY_IMAGES } from "../../../shared/products";
@@ -97,6 +97,7 @@ export default function ProductDetailPage() {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sideImages, setSideImages] = useState<Array<string | null>>([]);
+  const [colorImages, setColorImages] = useState<Array<string | null> | null>(null);
   const [isSideImagesLoading, setIsSideImagesLoading] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const [isGalleryZoomActive, setIsGalleryZoomActive] = useState(false);
@@ -335,7 +336,25 @@ export default function ProductDetailPage() {
   const availableSizes = product?.sizes || [];
   const initialColor = currentProductColor || getDefaultProductColor(product?.colors);
   const activeColor = selectedColor ?? initialColor;
-  const productImageViews = sideImages.slice(0, MAX_PRODUCT_GALLERY_IMAGES);
+  useEffect(() => {
+    let active = true;
+    setColorImages(null);
+    if (!id || !activeColor) return () => { active = false; };
+    void fetchProductColorImages(id, activeColor)
+      .then((images) => {
+        if (!active) return;
+        if (!images.some(Boolean)) return;
+        setColorImages(images);
+        const firstImageIndex = images.findIndex(Boolean);
+        if (firstImageIndex >= 0) setSelectedImageIndex(firstImageIndex);
+        setImageFailed(false);
+      })
+      .catch((error: unknown) => {
+        if (active) console.error("Product color gallery request failed.", error);
+      });
+    return () => { active = false; };
+  }, [id, activeColor]);
+  const productImageViews = (colorImages ?? sideImages).slice(0, MAX_PRODUCT_GALLERY_IMAGES);
   const availableProductImageIndexes = productImageViews.flatMap((image, index) => image ? [index] : []);
   const selectedProductImage = productImageViews[selectedImageIndex] || "";
   const selectedProductImagePosition = availableProductImageIndexes.indexOf(selectedImageIndex);
@@ -468,7 +487,7 @@ export default function ProductDetailPage() {
       name: product.name,
       price: priceValue,
       originalPrice: originalPriceNumber,
-      image: product.image,
+      image: selectedProductImage || product.image,
       ...(appliedCoupon ? {
         couponCode: appliedCoupon.code,
         couponDiscountType: appliedCoupon.discountType,

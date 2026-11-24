@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_PRODUCT_COLOR_IMAGES,
   MAX_PRODUCT_SIDE_IMAGES,
   ProductSideImageValidationError,
+  validateProductColorImage,
   validateProductSideImage,
 } from "./productSideImageStore.js";
 
@@ -27,6 +29,20 @@ describe("validateProductSideImage", () => {
     expect(() => validateProductSideImage(-1, "data:image/webp;base64,aGVsbG8="))
       .toThrow(ProductSideImageValidationError);
     expect(() => validateProductSideImage(1.5, "data:image/webp;base64,aGVsbG8="))
+      .toThrow(ProductSideImageValidationError);
+  });
+});
+
+describe("validateProductColorImage", () => {
+  it("accepts a supported image in a normalized color gallery", () => {
+    expect(() => validateProductColorImage("black", 4, "data:image/webp;base64,aGVsbG8=")).not.toThrow();
+    expect(MAX_PRODUCT_COLOR_IMAGES).toBe(5);
+  });
+
+  it("rejects invalid colors and image slots", () => {
+    expect(() => validateProductColorImage("Black", 0, "data:image/webp;base64,aGVsbG8="))
+      .toThrow(ProductSideImageValidationError);
+    expect(() => validateProductColorImage("black", 5, "data:image/webp;base64,aGVsbG8="))
       .toThrow(ProductSideImageValidationError);
   });
 });

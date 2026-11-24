@@ -13,7 +13,21 @@ import {
   getCachedStorefrontProductImage,
   getCachedStorefrontProductImageByKey,
 } from "./productImageOptimizer.js";
-import { deleteProductSideImage, deleteProductSideImages, getProductSideImage, listProductSideImages, MAX_PRODUCT_SIDE_IMAGES, ProductSideImageValidationError, saveProductSideImage } from "./productSideImageStore.js";
+import {
+  deleteProductColorImage,
+  deleteProductColorImages,
+  deleteProductSideImage,
+  deleteProductSideImages,
+  getProductColorImage,
+  getProductSideImage,
+  listProductColorImages,
+  listProductSideImages,
+  MAX_PRODUCT_COLOR_IMAGES,
+  MAX_PRODUCT_SIDE_IMAGES,
+  ProductSideImageValidationError,
+  saveProductColorImage,
+  saveProductSideImage,
+} from "./productSideImageStore.js";
 import { AdminSettingsValidationError, getFeaturedProductIds, getGeneralSettings, getMovingNavbarSettings, getProductTypeCategories, getSocialSettings, saveFeaturedProductIds, saveGeneralSettings, saveMovingNavbarSettings, saveProductTypeCategories, saveSocialSettings } from "./adminSettingsStore.js";
 import { CollectionConflictError, CollectionValidationError, createStoreCollection, deleteStoreCollection, listStoreCollections, updateStoreCollection } from "./collectionStore.js";
 import { createOffer, deleteOffer, findActiveCoupon, isOfferKind, listOffers, OfferConflictError, OfferValidationError, updateOffer } from "./marketingStore.js";
@@ -774,6 +788,18 @@ async function startServer() {
     const prefix = admin ? "/api/admin/products" : "/api/products";
     return `${prefix}/${encodeURIComponent(productId)}/side-images/${index}/image?v=${encodeURIComponent(version)}`;
   };
+  const productColorImageUrl = (productId: string, color: string, index: number, version: string, admin = false) => {
+    const prefix = admin ? "/api/admin/products" : "/api/products";
+    return `${prefix}/${encodeURIComponent(productId)}/color-images/${encodeURIComponent(color)}/${index}/image?v=${encodeURIComponent(version)}`;
+  };
+  const normalizeProductColorKey = (requestedColor: string) => {
+    const color = requestedColor.trim().toLowerCase();
+    return color && color.length <= 64 ? color : null;
+  };
+  const getProductColorKey = (product: { colors: string[] }, requestedColor: string) => {
+    const color = normalizeProductColorKey(requestedColor);
+    return color && product.colors.some((productColor) => productColor.trim().toLowerCase() === color) ? color : null;
+  };
 
   app.get("/api/products/:id/side-images", async (req, res) => {
     try {
@@ -801,6 +827,116 @@ async function startServer() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product side images request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/products/:id/color-images/:color", async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = getProductColorKey(product, req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const images = await listProductColorImages(product.id, color);
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        images: images.map((image, index) => image ? productColorImageUrl(product.id, color, index, image.version) : null),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product color images request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/admin/products/:id/color-images/:color", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = normalizeProductColorKey(req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const images = await listProductColorImages(product.id, color);
+      res.set("Cache-Control", "no-store");
+      return res.json({
+        images: images.map((image, index) => image ? productColorImageUrl(product.id, color, index, image.version, true) : null),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product color images request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/products/:id/color-images/:color/:index/image", async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = getProductColorKey(product, req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const index = Number(req.params.index);
+      if (!Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_COLOR_IMAGES) {
+        return res.status(400).json({ error: "Product color image index is invalid" });
+      }
+      const image = await getProductColorImage(product.id, color, index);
+      if (!image) return res.status(404).json({ error: "Product color image not found" });
+      const isVersioned = req.query.v === image.version;
+      res.set("Cache-Control", isVersioned ? "public, max-age=31536000, immutable" : "public, max-age=60");
+      const match = image.image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+      if (!match) return res.status(415).json({ error: "Product color image format is not supported" });
+      return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product color image request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.get("/api/admin/products/:id/color-images/:color/:index/image", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = normalizeProductColorKey(req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const index = Number(req.params.index);
+      if (!Number.isInteger(index) || index < 0 || index >= MAX_PRODUCT_COLOR_IMAGES) {
+        return res.status(400).json({ error: "Product color image index is invalid" });
+      }
+      const image = await getProductColorImage(product.id, color, index);
+      if (!image) return res.status(404).json({ error: "Product color image not found" });
+      res.set("Cache-Control", "no-store");
+      const match = image.image.match(/^data:(image\/[a-z0-9.+-]+);base64,([\s\S]+)$/i);
+      if (!match) return res.status(415).json({ error: "Product color image format is not supported" });
+      return res.type(match[1]).send(Buffer.from(match[2], "base64"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Product color image request failed";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.put("/api/admin/products/:id/color-images/:color/:index", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = normalizeProductColorKey(req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const image = await saveProductColorImage(product.id, color, Number(req.params.index), req.body?.image);
+      return res.json({ imageUrl: productColorImageUrl(product.id, color, image.index, image.version, true) });
+    } catch (error) {
+      if (error instanceof ProductSideImageValidationError) return res.status(400).json({ error: error.message });
+      const message = error instanceof Error ? error.message : "Product color image could not be saved";
+      return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
+    }
+  });
+
+  app.delete("/api/admin/products/:id/color-images/:color/:index", requireAdminPermission("products", "edit"), async (req, res) => {
+    try {
+      const product = await getProduct(req.params.id, true);
+      if (!product) return res.status(404).json({ error: "Product not found" });
+      const color = normalizeProductColorKey(req.params.color);
+      if (!color) return res.status(404).json({ error: "Product color not found" });
+      const deleted = await deleteProductColorImage(product.id, color, Number(req.params.index));
+      if (!deleted) return res.status(404).json({ error: "Product color image not found" });
+      return res.json({ deleted: true });
+    } catch (error) {
+      if (error instanceof ProductSideImageValidationError) return res.status(400).json({ error: error.message });
+      const message = error instanceof Error ? error.message : "Product color image could not be deleted";
       return res.status(message.toLowerCase().includes("invalid") ? 400 : 500).json({ error: message });
     }
   });
@@ -1016,6 +1152,7 @@ async function startServer() {
     try {
       if (!await deleteProduct(req.params.id)) return res.status(404).json({ error: "Product not found" });
       await deleteProductSideImages(req.params.id);
+      await deleteProductColorImages(req.params.id);
       return res.json({ deleted: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Product could not be deleted";
