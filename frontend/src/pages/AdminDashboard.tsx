@@ -761,7 +761,7 @@ function ProductColorImagesField({ productId, colors, pendingImages, onPendingIm
   return <section className="admin-product-side-images" aria-label="Product photos by color">
     <div>
       <strong>Photos for each color</strong>
-      <small>Example: choose Black and upload all 5 black hoodie photos. Choose White to add its photos. The product gallery switches to the selected color’s photos.</small>
+      <small>Choose Black and upload its photos; choose White to upload its photos. On the website, each photo set appears when that color is selected.</small>
     </div>
     <label>
       <span>Choose a color to add its photos</span>
@@ -801,6 +801,7 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     <label><span>Discount</span><select value={productForm.discountOfferId} onChange={(event) => setProductForm({ ...productForm, discountOfferId: event.target.value })}><option value="">No Discount</option>{discountOffers.filter((offer) => offer.kind === "discount" && offer.isActive).map((offer) => <option key={offer.id} value={offer.id}>{offer.name} — {offer.discountType === "percentage" ? `${offer.value}% off` : `₹${offer.value.toLocaleString("en-IN")} off`}</option>)}</select></label>
     <label><span>Product type</span><select required={!productId} value={productForm.productType} onChange={(event) => setProductForm({ ...productForm, productType: event.target.value })}><option value="">Select product type</option>{productTypeOptions.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}</select></label>
     <div className="admin-product-image-field"><span>Product image</span>{productForm.image ? <div className="admin-product-image-upload admin-product-image-upload--preview"><img src={productForm.image} alt="Product preview" /><div className="admin-product-image-actions"><label className="admin-secondary-button">Change Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><button className="admin-secondary-button" type="button" onClick={() => setProductForm({ ...productForm, image: "" })}>Remove Image</button></div></div> : <div className="admin-product-image-upload"><Image size={22} /><strong>Upload Product Image</strong><label className="admin-primary-button">Choose Image<input className="admin-product-image-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onChange={onImageChange} /></label><small>JPG, PNG, WEBP supported</small></div>}<label><span>Image URL or data URL</span><input type="text" inputMode="url" value={productForm.image.startsWith("data:") ? "" : productForm.image} onChange={(event) => setProductForm({ ...productForm, image: event.target.value })} placeholder="https://example.com/product.jpg or /products/image.jpg" /></label>{imageError && <small className="admin-image-error">{imageError}</small>}</div>
+    <label><span>Colors (optional; comma-separated, e.g. Black, White)</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
     <ProductSideImagesField
       productId={productId}
       pendingImages={pendingSideImages}
@@ -816,7 +817,6 @@ function AddProductForm({ productForm, setProductForm, hierarchy, hierarchyLoadi
     />
     <label><span>Stock</span><input type="number" min="0" step="1" value={productForm.stock} onChange={(event) => setProductForm({ ...productForm, stock: event.target.value })} /></label>
     <label><span>Sizes</span><input required value={productForm.sizes} onChange={(event) => setProductForm({ ...productForm, sizes: event.target.value })} /></label>
-    <label><span>Colors (optional; first color should match the image)</span><input value={productForm.colors} onChange={(event) => setProductForm({ ...productForm, colors: event.target.value })} /></label>
     <label className="admin-toggle-label"><span>New Arrival</span><input type="checkbox" checked={productForm.newArrival} onChange={(event) => setProductForm((current) => ({ ...current, newArrival: event.target.checked }))} /><strong>{productForm.newArrival ? "Enabled" : "Disabled"}</strong></label>
     <label className="admin-toggle-label"><span>Best Selling</span><input type="checkbox" checked={productForm.bestSelling} onChange={(event) => setProductForm((current) => ({ ...current, bestSelling: event.target.checked }))} /><strong>{productForm.bestSelling ? "Enabled" : "Disabled"}</strong></label>
     <label><span>Main Category</span><select disabled={hierarchyLoading || Boolean(hierarchyError) || hierarchy.main.length === 0} value={productForm.category} onChange={(event) => updateCategory(event.target.value)}><option value="">Select category (optional)</option>{hierarchy.main.map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}</select></label>
