@@ -61,6 +61,7 @@ function Router() {
       <Route path={"/admin26/marketing/promotions"}>{() => <AdminRoute initialScreen="promotions" />}</Route>
       <Route path={"/admin26/content/banners"}>{() => <AdminRoute initialScreen="banners" />}</Route>
       <Route path={"/admin26/content/collections"}>{() => <AdminRoute initialScreen="collections" />}</Route>
+      <Route path={"/admin26/content/reviews"}>{() => <AdminRoute initialScreen="reviews" />}</Route>
       <Route path={"/admin26/content/featured-products"}>{() => <AdminRoute initialScreen="featured" />}</Route>
       <Route path={"/admin26/content/social-media"}>{() => <AdminRoute initialScreen="social-media" />}</Route>
       <Route path={"/admin26/analytics"}>{() => <AdminRoute initialScreen="analytics" />}</Route>

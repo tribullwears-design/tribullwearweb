@@ -2,7 +2,7 @@ import {
   Activity, AlertTriangle, Archive, BarChart3, Bell, Box, Boxes, ChevronDown, ChevronRight, Eye, EyeOff, Megaphone,
   ClipboardList, DollarSign, FileText, Globe2, Image, LayoutDashboard,
   LifeBuoy, Menu, MoreHorizontal, PackageCheck, PackageOpen, PanelLeftClose, PanelLeftOpen,
-  Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Store, Tag, Truck,
+  Percent, Plus, Search, Settings, ShoppingBag, SlidersHorizontal, Star, Store, Tag, Truck,
   UserRound, Users, Video, X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -12,6 +12,7 @@ import { defaultProductTypeCategories, type ProductTypeCategory } from "../../..
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocation } from "wouter";
 import { apiFetch, apiUrl } from "../lib/api";
+import { deleteAdminReview, fetchAdminReviews, type PublicReview } from "../lib/reviews";
 import { deleteAdminUserAndRefresh, saveAdminUserAndRefresh } from "../lib/adminUsers";
 import { adminPermissionSections, adminRoleTitles, defaultRolePermissions, getEffectiveAdminPermissions, hasAdminPermission, type AdminPermissions, type AdminRoleTitle, type AdminPermissionSection } from "../lib/adminAccess";
 import { getAdminProductLoadError } from "../lib/adminProductError";
@@ -96,7 +97,7 @@ const navigation: NavSection[] = [
   { label: "Orders", items: [{ label: "All Orders", icon: ClipboardList, screen: "orders" }, { label: "Pending Orders", icon: PackageOpen, screen: "orders-pending" }, { label: "Processing Orders", icon: Boxes, screen: "orders-processing" }, { label: "Shipped Orders", icon: Truck, screen: "orders-shipped" }, { label: "Delivered Orders", icon: PackageCheck, screen: "orders-delivered" }, { label: "Cancelled Orders", icon: Archive, screen: "orders-cancelled" }] },
   { label: "Customers", items: [{ label: "Customers", icon: Users, screen: "customers" }, { label: "Customer Details", icon: UserRound, screen: "customer-details" }] },
   { label: "Marketing", items: [{ label: "Discounts", icon: Percent, screen: "discounts" }, { label: "Coupons", icon: Tag, screen: "coupons" }] },
-  { label: "Content", items: [{ label: "Collections", icon: Boxes, screen: "collections" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
+  { label: "Content", items: [{ label: "Collections", icon: Boxes, screen: "collections" }, { label: "Reviews", icon: Star, screen: "reviews" }, { label: "Logo Update", icon: Image, screen: "logo-update" }, { label: "Social Media", icon: Globe2, screen: "social-media" }] },
   { label: "Analytics", items: [{ label: "Analytics", icon: BarChart3, screen: "analytics" }, { label: "Sales Reports", icon: Activity, screen: "sales-reports" }, { label: "Product Reports", icon: FileText, screen: "product-reports" }] },
   { label: "Settings", items: [{ label: "General Settings", icon: Settings, screen: "general-settings" }, { label: "Account Settings", icon: UserRound, screen: "account-settings" }, { label: "Admin Users", icon: Users, screen: "admin-users" }] },
   { label: "Help", items: [{ label: "Help Center", icon: LifeBuoy, screen: "help-center" }] },
@@ -127,6 +128,7 @@ const adminRoutes: Record<string, string> = {
   banners: "/admin26/products/banners",
   videos: "/admin26/products/videos",
   collections: "/admin26/content/collections",
+  reviews: "/admin26/content/reviews",
   featured: "/admin26/content/featured-products",
   "social-media": "/admin26/content/social-media",
   analytics: "/admin26/analytics",
@@ -156,7 +158,7 @@ function permissionSectionForScreen(screen: string): AdminPermissionSection {
   if (screen.startsWith("orders")) return "orders";
   if (["customers", "customer-details"].includes(screen)) return "customers";
   if (["discounts", "coupons", "promotions"].includes(screen)) return "marketing";
-  if (["collections", "featured", "social-media", "moving-navbar"].includes(screen)) return "content";
+  if (["collections", "featured", "reviews", "social-media", "moving-navbar"].includes(screen)) return "content";
   if (["analytics", "sales-reports", "product-reports"].includes(screen)) return "analytics";
   if (screen === "admin-users") return "adminUsers";
   if (screen === "general-settings") return "settings";
@@ -1619,6 +1621,11 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   const [customersLoading, setCustomersLoading] = useState(false);
   const [customersError, setCustomersError] = useState("");
   const [customerPage, setCustomerPage] = useState(1);
+  const [reviews, setReviews] = useState<PublicReview[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState("");
+  const [deletingReviewId, setDeletingReviewId] = useState<string | null>(null);
+  const deletingReviewRef = useRef<string | null>(null);
   const [inventoryAdjustmentProduct, setInventoryAdjustmentProduct] = useState<AdminProduct | null>(null);
   const [inventoryAdjustment, setInventoryAdjustment] = useState("");
   const [inventoryAdjustmentError, setInventoryAdjustmentError] = useState("");
@@ -1835,6 +1842,38 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
   useEffect(() => {
     if (screen === "customers" || screen === "customer-details") void refreshCustomers();
   }, [screen]);
+  const refreshReviews = async () => {
+    setReviewsLoading(true);
+    setReviewsError("");
+    try {
+      setReviews(await fetchAdminReviews());
+    } catch (error) {
+      setReviewsError(error instanceof Error ? error.message : "Unable to load reviews.");
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (screen === "reviews") void refreshReviews();
+  }, [screen]);
+  const deleteCustomerReview = async (review: PublicReview) => {
+    if (deletingReviewRef.current) return;
+    if (!window.confirm(`Delete the review from ${review.customerName}? This cannot be undone.`)) return;
+    deletingReviewRef.current = review.id;
+    setDeletingReviewId(review.id);
+    try {
+      await deleteAdminReview(review.id);
+      setReviews((current) => current.filter((item) => item.id !== review.id));
+      toast.success("Review deleted.");
+    } catch (error) {
+      toast.error("Review was not deleted.", {
+        description: error instanceof Error ? error.message : "Unable to delete review.",
+      });
+    } finally {
+      deletingReviewRef.current = null;
+      setDeletingReviewId(null);
+    }
+  };
   const refreshAdminUsers = async () => {
     setAdminUsersLoading(true);
     setAdminUsersError("");
@@ -2754,6 +2793,27 @@ export default function AdminDashboard({ initialScreen = "dashboard", productId 
     </AdminPanel>;
     if (screen === "banners") return <BannerManagement categories={categoryHierarchy.main} categoriesLoading={categoryHierarchyLoading} />;
     if (screen === "videos") return <VideoManagement />;
+    if (screen === "reviews") return <AdminPanel title="Customer Reviews" action="Refresh" onAction={() => void refreshReviews()}>
+      <p className="admin-data-caption">Submitted reviews are stored in the database and shown on the storefront.</p>
+      {reviewsError ? <EmptyState title="Unable to load reviews" message={reviewsError} action="Retry" onAction={() => void refreshReviews()} /> : reviewsLoading ? <p>Loading saved reviews...</p> : reviews.length ? (
+        <div className="admin-review-list">
+          {reviews.map((review) => (
+            <article className="admin-review-item" key={review.id}>
+              {review.photoUrl && <img className="admin-review-item__photo" src={apiUrl(review.photoUrl)} alt={`${review.productName} review`} loading="lazy" decoding="async" />}
+              <div className="admin-review-item__body">
+                <div className="admin-review-item__heading">
+                  <strong>{review.customerName}</strong>
+                  <time dateTime={review.createdAt}>{new Date(review.createdAt).toLocaleString("en-IN")}</time>
+                </div>
+                <p className="admin-review-item__product">{review.productName} · {review.rating} / 5 stars</p>
+                <p className="admin-review-item__comment">{review.comment}</p>
+              </div>
+              {canEdit("content") && <button className="admin-small-button" type="button" disabled={deletingReviewId === review.id} onClick={() => void deleteCustomerReview(review)}>{deletingReviewId === review.id ? "Deleting..." : "Delete"}</button>}
+            </article>
+          ))}
+        </div>
+      ) : <EmptyState title="No customer reviews yet." message="Reviews will appear here after customers submit them." />}
+    </AdminPanel>;
     if (screen === "logo-update") return <SiteLogoManagement canEdit={canEdit("products")} />;
     if (screen === "add-product") return <AdminPanel title="Add Product"><AddProductForm productForm={productForm} setProductForm={setProductForm} hierarchy={categoryHierarchy} hierarchyLoading={categoryHierarchyLoading} hierarchyError={categoryHierarchyError} onRetryHierarchy={retryCategoryHierarchy} onSave={saveProduct} onCancel={() => { setPendingProductSideImages(Array(MAX_PRODUCT_SIDE_IMAGES).fill(null)); setPendingProductColorImages({}); navigate("products"); }} imageError={imageError} onImageChange={handleProductImageChange} savedNotice={savedNotice} productSaving={productSaving} discountOffers={discountOffers} pendingSideImages={pendingProductSideImages} onPendingSideImagesChange={setPendingProductSideImages} pendingColorImages={pendingProductColorImages} onPendingColorImagesChange={setPendingProductColorImages} /></AdminPanel>;
     if (screen === "customize-image") return <HomeFeatureImageManagement type="customize" canEdit={canEdit("products")} />;

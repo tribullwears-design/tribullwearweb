@@ -20,6 +20,7 @@ import {
 } from "./adminUserStore.js";
 import { getEffectiveAdminPermissions } from "./adminPermissions.js";
 import { incrementAdminTokenVersion, isValidCustomerEmail, normalizeCustomerEmail, safeCustomer } from "./authStore.js";
+import { deleteReview, listPublicReviews } from "./reviewStore.js";
 import {
   authenticateAdminLoginPassword,
   clearAdminSession,
@@ -271,6 +272,24 @@ export function createAdminRouter() {
       if (error instanceof AdminUserConflictError) return res.status(409).json({ error: error.message });
       if (error instanceof AdminUserValidationError) return res.status(400).json({ error: error.message });
       sendAdminUserError(res, error);
+    }
+  });
+  router.get("/api/admin/reviews", requireAdminPermission("content", "view"), async (_req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json(await listPublicReviews());
+    } catch (error) {
+      console.error("Could not load customer reviews for admin.", error);
+      res.status(500).json({ error: "Unable to load reviews right now" });
+    }
+  });
+  router.delete("/api/admin/reviews/:id", requireAdminPermission("content", "edit"), async (req, res) => {
+    try {
+      if (!await deleteReview(req.params.id)) return res.status(404).json({ error: "Review not found" });
+      return res.json({ deleted: true });
+    } catch (error) {
+      console.error("Could not delete customer review.", error);
+      return res.status(500).json({ error: "Unable to delete review right now" });
     }
   });
 

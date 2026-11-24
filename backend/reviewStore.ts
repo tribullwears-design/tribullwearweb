@@ -3,6 +3,7 @@ import type { Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 
 const MAX_REVIEW_PHOTO_BYTES = 5 * 1024 * 1024;
+const REVIEW_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type ReviewDocument = {
   id: string;
@@ -109,8 +110,14 @@ export async function listPublicReviews() {
 }
 
 export async function getReviewPhoto(id: string) {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) return null;
+  if (!REVIEW_ID_PATTERN.test(id)) return null;
   const review = await (await getCollection()).findOne({ id }, { projection: { _id: 0, photo: 1 } });
   if (!review?.photo) return null;
   return { mimeType: review.photo.mimeType, data: Buffer.from(review.photo.data, "base64") };
+}
+
+export async function deleteReview(id: string) {
+  if (!REVIEW_ID_PATTERN.test(id)) return false;
+  const result = await (await getCollection()).deleteOne({ id });
+  return result.deletedCount > 0;
 }

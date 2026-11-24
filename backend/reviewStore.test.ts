@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   collection: vi.fn(),
   createIndex: vi.fn(),
+  deleteOne: vi.fn(),
   find: vi.fn(),
   findOne: vi.fn(),
   getDatabase: vi.fn(),
@@ -13,13 +14,14 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./database.js", () => ({ getDatabase: mocks.getDatabase }));
 
-import { createReview, getReviewPhoto, listPublicReviews } from "./reviewStore.js";
+import { createReview, deleteReview, getReviewPhoto, listPublicReviews } from "./reviewStore.js";
 
 describe("customer reviews", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.reviews = [];
     mocks.createIndex.mockResolvedValue(undefined);
+    mocks.deleteOne.mockResolvedValue({ deletedCount: 0 });
     mocks.insertOne.mockResolvedValue(undefined);
     mocks.find.mockImplementation(() => ({ sort: mocks.sort }));
     mocks.sort.mockImplementation(() => ({ toArray: async () => mocks.reviews }));
@@ -27,6 +29,7 @@ describe("customer reviews", () => {
       mocks.reviews.find((review) => review.id === id) || null);
     mocks.collection.mockReturnValue({
       createIndex: mocks.createIndex,
+      deleteOne: mocks.deleteOne,
       find: mocks.find,
       findOne: mocks.findOne,
       insertOne: mocks.insertOne,
@@ -103,5 +106,30 @@ describe("customer reviews", () => {
     expect(mocks.findOne).not.toHaveBeenCalled();
     await expect(getReviewPhoto("123e4567-e89b-12d3-a456-426614174000")).resolves.toBeNull();
     expect(mocks.findOne).toHaveBeenCalledOnce();
+  });
+
+  it("deletes only reviews with valid IDs and reports whether a review existed", async () => {
+    const id = "123e4567-e89b-42d3-a456-426614174000";
+    mocks.reviews = [{
+      id,
+      customerName: "Asha",
+      productName: "Everyday Tee",
+      rating: 5,
+      comment: "The fit is great!",
+      createdAt: new Date().toISOString(),
+    }];
+    mocks.deleteOne.mockImplementation(async ({ id: reviewId }: { id: string }) => {
+      const previousLength = mocks.reviews.length;
+      mocks.reviews = mocks.reviews.filter((review) => review.id !== reviewId);
+      return { deletedCount: previousLength - mocks.reviews.length };
+    });
+
+    await expect(deleteReview(id)).resolves.toBe(true);
+    await expect(deleteReview(id)).resolves.toBe(false);
+    await expect(deleteReview("../not-an-id")).resolves.toBe(false);
+    await expect(listPublicReviews()).resolves.toEqual([]);
+
+    expect(mocks.deleteOne).toHaveBeenCalledTimes(2);
+    expect(mocks.deleteOne).toHaveBeenCalledWith({ id });
   });
 });

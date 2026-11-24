@@ -34,3 +34,14 @@ export async function submitReview(review: ReviewSubmission) {
   if (!response.ok) throw new Error(await readError(response, "Unable to submit your review"));
   return await response.json() as PublicReview;
 }
+
+export async function fetchAdminReviews() {
+  const response = await apiFetch("/api/admin/reviews", { cache: "no-store" });
+  if (!response.ok) throw new Error(await readError(response, "Unable to load reviews"));
+  return await response.json() as PublicReview[];
+}
+
+export async function deleteAdminReview(id: string) {
+  const response = await apiFetch(`/api/admin/reviews/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await readError(response, "Unable to delete review"));
+}
