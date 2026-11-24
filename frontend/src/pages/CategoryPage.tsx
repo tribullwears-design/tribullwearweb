@@ -4,7 +4,7 @@ import { fetchProducts, getCachedProducts } from "../lib/products";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { animateAddToWishlist } from "../lib/wishlistAnimation";
 import { toggleWishlistItem } from "../lib/wishlist";
-import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
+import { defaultCategoryHierarchy, getOtherSubcategories, getStorefrontCategoryHierarchy, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import HeaderActions from "../components/HeaderActions";
@@ -218,14 +218,15 @@ function GlobalNavigation() {
   );
 }
 
-function DynamicCategoryNav({ categorySlug, hierarchy }: { categorySlug: string; hierarchy: CategoryHierarchy }) {
+function DynamicCategoryNav({ categorySlug, hierarchy, selectedSubcategorySlug }: { categorySlug: string; hierarchy: CategoryHierarchy; selectedSubcategorySlug?: string }) {
   const definition = liveCategoryDefinition(categorySlug, hierarchy);
   if (!definition) return null;
+  const subcategories = getOtherSubcategories(definition.subcategories, selectedSubcategorySlug);
 
   return (
     <nav className="category-nav" aria-label={`${definition.title} categories`}>
       <div className="category-nav__track">
-        {definition.subcategories.map(({ label, slug, image }) => (
+        {subcategories.map(({ label, slug, image }) => (
           <Link key={slug} className="category-nav__item" href={`/category/${categorySlug}/${slug}`}>
             <span className="category-nav__image"><img src={image} alt="" /></span>
             <span className="category-nav__label">{label}</span>
@@ -618,7 +619,7 @@ export default function CategoryPage() {
     return (
       <div className="category-products-page">
         <GlobalNavigation />
-        <DynamicCategoryNav categorySlug={categorySlug} hierarchy={hierarchy} />
+        <DynamicCategoryNav categorySlug={categorySlug} hierarchy={hierarchy} selectedSubcategorySlug={entrySlug} />
 
         <div className="category-hero" aria-label={`${entry.label} featured collection`}>
           <div className="category-hero__visual">

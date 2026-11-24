@@ -5,6 +5,13 @@ export type CategoryChoice = { value: string; label: string; image?: string; isV
 export type CategoryHierarchy = { main: CategoryChoice[]; subcategories: Record<string, CategoryChoice[]>; loaded?: boolean };
 type LoadedCategoryHierarchy = CategoryHierarchy & { loaded: boolean };
 
+export function getOtherSubcategories<T extends { slug: string }>(subcategories: T[], selectedSlug?: string) {
+  const selected = selectedSlug?.trim().toLowerCase();
+  return selected
+    ? subcategories.filter((subcategory) => subcategory.slug.trim().toLowerCase() !== selected)
+    : subcategories;
+}
+
 export const defaultCategoryHierarchy: CategoryHierarchy = {
   main: [
     { value: "cinema", label: "Cinema", image: "/products/cinema.png" },

@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy } from "./categoryHierarchy";
+import { defaultCategoryHierarchy, getOtherSubcategories, getStorefrontCategoryHierarchy } from "./categoryHierarchy";
 
 describe("defaultCategoryHierarchy", () => {
+  it("omits the selected subcategory while keeping the other five", () => {
+    const subcategories = ["Hollywood", "Bollywood", "Kollywood", "Tollywood", "Mollywood", "Sandalwood"]
+      .map((label) => ({ slug: label.toLowerCase(), label }));
+
+    expect(getOtherSubcategories(subcategories, "Kollywood").map(({ label }) => label)).toEqual([
+      "Hollywood",
+      "Bollywood",
+      "Tollywood",
+      "Mollywood",
+      "Sandalwood",
+    ]);
+    expect(getOtherSubcategories(subcategories)).toHaveLength(6);
+  });
+
   it("keeps Cinema as the only default storefront category", () => {
     expect(defaultCategoryHierarchy.main.map((category) => category.value)).toEqual(["cinema"]);
     expect(defaultCategoryHierarchy.main.every((category) => Boolean(category.image))).toBe(true);
