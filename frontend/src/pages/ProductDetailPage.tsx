@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingCart, Sparkles, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
@@ -829,9 +829,20 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-cta-row">
-              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart} disabled={isOutOfStock || !product.detailsLoaded}>
-                {isOutOfStock ? null : <ShoppingCart size={18} />}
-                {isOutOfStock ? "Out of stock" : "Add to cart"}
+              <button type="button" className="product-detail-add-to-cart" onClick={checkoutCurrentProduct} disabled={isOutOfStock || !product.detailsLoaded}>
+                {isOutOfStock ? null : <ShoppingBag size={18} />}
+                {isOutOfStock ? "Out of stock" : "Buy now"}
+                {!isOutOfStock && <ArrowRight size={18} />}
+              </button>
+              <button
+                type="button"
+                className="product-detail-cta-cart-icon"
+                onClick={addCurrentProductToCart}
+                disabled={isOutOfStock || !product.detailsLoaded}
+                aria-label="Add to cart"
+                title="Add to cart"
+              >
+                <ShoppingCart size={20} />
               </button>
             </div>
 
