@@ -1,4 +1,4 @@
-import { ArrowRight, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingBag, ShoppingCart, Sparkles, Truck } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Minus, PackageCheck, Plus, ShieldCheck, ShoppingCart, Sparkles, Truck } from "lucide-react";
 import HeaderActions from "../components/HeaderActions";
 import MobileCategoryMenu from "../components/MobileCategoryMenu";
 import ProductPrice from "../components/ProductPrice";
@@ -10,6 +10,7 @@ import { apiFetch } from "../lib/api";
 import { fetchProductColorImages, fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
 import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { isProductColorImageIndexes, MAX_PRODUCT_GALLERY_IMAGES } from "../../../shared/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
 import { useRouteLoading } from "../contexts/RouteLoadingContext";
@@ -502,6 +503,50 @@ export default function ProductDetailPage() {
     setLocation("/checkout");
   };
 
+  const addCurrentProductToCart = () => {
+    if (isOutOfStock || !product.detailsLoaded) return;
+    if (availableSizes.length > 0 && !selectedSize) {
+      setSizeError("Please select a size before adding to cart.");
+      return;
+    }
+
+    const productId = product.id || id || "";
+    if (!productId) {
+      toast.error("This product could not be added to cart.");
+      return;
+    }
+
+    const metadata = {
+      productId,
+      name: product.name,
+      price: priceValue,
+      originalPrice: originalPriceNumber,
+      image: selectedProductImage || product.image,
+      ...(appliedCoupon ? {
+        couponCode: appliedCoupon.code,
+        couponDiscountType: appliedCoupon.discountType,
+        couponValue: appliedCoupon.value,
+        couponMinimumOrderAmount: appliedCoupon.minimumOrderAmount,
+      } : {}),
+      size: selectedSize,
+      color: isTShirtColorVariant ? activeColor : "",
+      variant: `${selectedSize ? `Size: ${selectedSize}` : ""}${isTShirtColorVariant ? `${selectedSize ? " / " : ""}Colour: ${activeColor}` : ""}`,
+    };
+
+    try {
+      const cartItems = JSON.parse(window.localStorage.getItem("tribull-cart-items") || "{}") as Record<string, unknown>;
+      const nextCart = { ...cart, [productId]: (cart[productId] || 0) + quantity };
+      window.localStorage.setItem("tribull-cart-items", JSON.stringify({ ...cartItems, [productId]: metadata }));
+      window.localStorage.setItem("tribull-cart", JSON.stringify(nextCart));
+      setCart(nextCart);
+      window.dispatchEvent(new Event("tribull-cart-updated"));
+      toast.success(`${product.name} added to cart.`);
+    } catch (error) {
+      console.error("Could not add product details to the cart.", error);
+      toast.error("Product was not added to cart. Please try again.");
+    }
+  };
+
   const quantityControl = (
     <div className="product-detail-qty" aria-label="Quantity selector">
       <button type="button" onClick={() => setQuantity((current) => Math.max(1, current - 1))} aria-label="Decrease quantity">
@@ -784,10 +829,9 @@ export default function ProductDetailPage() {
             </div>
 
             <div className="product-detail-cta-row">
-              <button type="button" className="product-detail-add-to-cart" onClick={checkoutCurrentProduct} disabled={isOutOfStock || !product.detailsLoaded}>
-                {isOutOfStock ? null : <ShoppingBag size={18} />}
-                {isOutOfStock ? "Out of stock" : "Buy now"}
-                {!isOutOfStock && <ArrowRight size={18} />}
+              <button type="button" className="product-detail-add-to-cart" onClick={addCurrentProductToCart} disabled={isOutOfStock || !product.detailsLoaded}>
+                {isOutOfStock ? null : <ShoppingCart size={18} />}
+                {isOutOfStock ? "Out of stock" : "Add to cart"}
               </button>
             </div>
 
