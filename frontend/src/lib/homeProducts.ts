@@ -23,3 +23,7 @@ export function getBestSellingProducts(products: readonly StorefrontProduct[], h
 export function getAlternateProductImage(product: Pick<StorefrontProduct, "image" | "images">) {
   return product.images?.find((image) => image.trim() && image !== product.image);
 }
+
+export function getFirstProductSideImage(images: readonly (string | null)[]) {
+  return images.find((image): image is string => typeof image === "string" && Boolean(image.trim()));
+}

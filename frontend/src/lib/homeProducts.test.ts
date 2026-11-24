@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Product } from "../../../shared/products";
 import type { CategoryHierarchy } from "./categoryHierarchy";
-import { getAlternateProductImage, getBestSellingProducts, getNewArrivals } from "./homeProducts";
+import { getAlternateProductImage, getBestSellingProducts, getFirstProductSideImage, getNewArrivals } from "./homeProducts";
 import type { StorefrontProduct } from "./products";
 
 const hierarchy: CategoryHierarchy = {
@@ -63,6 +63,11 @@ describe("home product sections", () => {
 });
 
 describe("homepage alternate product images", () => {
+  it("uses the first uploaded side image in slot order", () => {
+    expect(getFirstProductSideImage([null, "", "/side-first.jpg", "/side-second.jpg"]))
+      .toBe("/side-first.jpg");
+  });
+
   it("uses the first available image distinct from the primary image", () => {
     expect(getAlternateProductImage({ image: "/front.jpg", images: ["/front.jpg", "", "/back.jpg", "/detail.jpg"] }))
       .toBe("/back.jpg");
