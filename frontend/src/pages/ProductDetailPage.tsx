@@ -548,6 +548,50 @@ export default function ProductDetailPage() {
     }, 1200);
   };
 
+  const renderColorPicker = (placement: "mobile" | "desktop") => hasProductColors ? (
+    <div className={`product-detail-color-option product-detail-color-option--${placement}`}>
+      <span>Colour: {activeColor}</span>
+      <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
+        {productColorOptions.map((option) => (
+          <button
+            key={option.name}
+            data-color={option.name}
+            className={activeColor === option.name ? "is-selected" : ""}
+            type="button"
+            onClick={() => {
+              const variantProduct = colorVariantProducts.find(
+                (candidate) => getProductColorFromName(candidate.name)?.toLowerCase() === option.name.toLowerCase(),
+              );
+              if (variantProduct) {
+                setLocation(`/product/${encodeURIComponent(variantProduct.id)}`);
+                return;
+              }
+              setSelectedColor(option.name);
+              const mappedImageIndex = product.colorImageIndexes?.[option.name.trim().toLowerCase()];
+              const defaultImageIndex = availableProductImageIndexes[0] ?? 0;
+              setSelectedImageIndex(
+                mappedImageIndex !== undefined && productImageViews[mappedImageIndex]
+                  ? mappedImageIndex
+                  : defaultImageIndex,
+              );
+              setImageFailed(false);
+              setIsGalleryZoomActive(false);
+            }}
+            aria-label={`Select ${option.name} T-shirt`}
+            aria-pressed={activeColor === option.name}
+            title={option.name}
+            style={{
+              background: option.value,
+              ...(option.name === "White"
+                ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
+                : {}),
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   return (
     <div className="product-detail-page">
       <MovingNavbar className="product-detail-page__announcement" />
@@ -681,7 +725,10 @@ export default function ProductDetailPage() {
               productName={product.name}
               className="product-price--detail"
             />
-            {quantityControl}
+            <div className="product-detail-quantity-color-row">
+              {quantityControl}
+              {renderColorPicker("mobile")}
+            </div>
             {typeof product.stock === "number" && (
               <p className="product-detail-stock" aria-live="polite">
                 {product.stock > 0 ? `${product.stock} available` : "Currently out of stock"}
@@ -717,49 +764,7 @@ export default function ProductDetailPage() {
               {sizeError ? <p className="product-detail-option__error">{sizeError}</p> : null}
             </div>}
 
-            {hasProductColors ? (
-              <div className="product-detail-color-option">
-                <span>Colour: {activeColor}</span>
-                <div className="product-detail-swatches" aria-label="Choose T-shirt colour">
-                  {productColorOptions.map((option) => (
-                    <button
-                      key={option.name}
-                      data-color={option.name}
-                      className={activeColor === option.name ? "is-selected" : ""}
-                      type="button"
-                      onClick={() => {
-                        const variantProduct = colorVariantProducts.find(
-                          (candidate) => getProductColorFromName(candidate.name)?.toLowerCase() === option.name.toLowerCase(),
-                        );
-                        if (variantProduct) {
-                          setLocation(`/product/${encodeURIComponent(variantProduct.id)}`);
-                          return;
-                        }
-                        setSelectedColor(option.name);
-                        const mappedImageIndex = product.colorImageIndexes?.[option.name.trim().toLowerCase()];
-                        const defaultImageIndex = availableProductImageIndexes[0] ?? 0;
-                        setSelectedImageIndex(
-                          mappedImageIndex !== undefined && productImageViews[mappedImageIndex]
-                            ? mappedImageIndex
-                            : defaultImageIndex,
-                        );
-                        setImageFailed(false);
-                        setIsGalleryZoomActive(false);
-                      }}
-                      aria-label={`Select ${option.name} T-shirt`}
-                      aria-pressed={activeColor === option.name}
-                      title={option.name}
-                      style={{
-                        background: option.value,
-                        ...(option.name === "White"
-                          ? { boxShadow: "inset 0 0 0 1px rgba(25, 25, 24, 0.5)" }
-                          : {}),
-                      }}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            {renderColorPicker("desktop")}
 
             <div className="product-detail-coupon" aria-label="Coupon code">
               <label htmlFor="product-coupon">Enter coupon code</label>
