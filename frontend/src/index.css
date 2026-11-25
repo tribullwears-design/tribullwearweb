@@ -63,6 +63,9 @@ body { margin: 0; background: #FFFFFF; color: var(--tribull-green); overflow-x: 
   .product-card--has-hover-image:hover .product-image-primary { opacity:0; }
   .product-card--has-hover-image:hover .product-image-hover { opacity:1; }
 }
+html.is-mouse-dragging .product-card:hover .product-card__image img { transform:none !important; filter:none !important; transition:none !important; }
+html.is-mouse-dragging .product-card--has-hover-image:hover .product-image-primary { opacity:1 !important; }
+html.is-mouse-dragging .product-card--has-hover-image:hover .product-image-hover { opacity:0 !important; }
 .all-products-card:hover .product-image-primary,
 .catalog-product-card:hover .product-image-primary,
 .category-cinema-product:hover .product-image-primary { opacity:0; }

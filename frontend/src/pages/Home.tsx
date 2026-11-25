@@ -70,13 +70,13 @@ function ProductCard({ item, productId, showMeta = true, href, originalPrice, ho
   const cardHoverImage = sideImage || hoverImage;
 
   return (
-    <Link href={href} className="product-card-link" aria-label={`Browse products, including ${item[1]}`}>
+    <Link href={href} className="product-card-link" aria-label={`Browse products, including ${item[1]}`} draggable={false}>
       <article
         className={cls("product-card", hoverImageLoaded ? "product-card--has-hover-image" : null)}
       >
         <div className="product-card__image">
-          <img src={item[0]} alt={item[1]} className="product-image-primary" loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" />
-          {cardHoverImage && <img src={cardHoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" fetchPriority="low" decoding="async" onLoad={() => setHoverImageLoaded(true)} />}
+          <img src={item[0]} alt={item[1]} className="product-image-primary" loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" draggable={false} />
+          {cardHoverImage && <img src={cardHoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" fetchPriority="low" decoding="async" draggable={false} onLoad={() => setHoverImageLoaded(true)} />}
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -112,6 +112,40 @@ export default function Home() {
   const [lifestyleSectionVisible, setLifestyleSectionVisible] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const lifestyleVideoRefs = useRef(new Map<string, HTMLVideoElement>());
+
+  useEffect(() => {
+    let dragStart: { x: number; y: number } | null = null;
+    const draggingClass = "is-mouse-dragging";
+    const clearDrag = () => {
+      dragStart = null;
+      document.documentElement.classList.remove(draggingClass);
+    };
+    const handlePointerDown = (event: PointerEvent) => {
+      dragStart = event.pointerType === "mouse" && event.button === 0
+        ? { x: event.clientX, y: event.clientY }
+        : null;
+    };
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragStart || !(event.buttons & 1)) return;
+      if (Math.hypot(event.clientX - dragStart.x, event.clientY - dragStart.y) >= 5) {
+        document.documentElement.classList.add(draggingClass);
+      }
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", clearDrag);
+    window.addEventListener("pointercancel", clearDrag);
+    window.addEventListener("blur", clearDrag);
+    return () => {
+      clearDrag();
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", clearDrag);
+      window.removeEventListener("pointercancel", clearDrag);
+      window.removeEventListener("blur", clearDrag);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;

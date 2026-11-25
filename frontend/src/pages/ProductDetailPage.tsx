@@ -9,7 +9,7 @@ import { getFrequentlyBoughtTogether } from "../lib/productRecommendations";
 import { apiFetch } from "../lib/api";
 import { fetchProductColorImages, fetchProductSideImages } from "../lib/productSideImages";
 import { Link, useLocation, useParams } from "wouter";
-import { type PointerEvent as ReactPointerEvent, useEffect, useState } from "react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { isProductColorImageIndexes, MAX_PRODUCT_GALLERY_IMAGES } from "../../../shared/products";
 import { useSiteLogo } from "../contexts/SiteLogoContext";
@@ -92,6 +92,8 @@ export default function ProductDetailPage() {
   const routeProductId = productIdFromRouteParam(id);
   const [, setLocation] = useLocation();
   const [storedProduct, setStoredProduct] = useState<ProductData | null>(() => getCachedProduct(routeProductId));
+  const pendingColorVariantImage = useRef<{ productId: string; imageIndex: number } | null>(null);
+  const initializedProductId = useRef<string | null>(null);
   const [catalogProducts, setCatalogProducts] = useState<StorefrontProduct[]>(() => getCachedProducts());
   const [recommendationProducts, setRecommendationProducts] = useState<ProductData[]>([]);
   const [quantity, setQuantity] = useState(1);
@@ -100,6 +102,7 @@ export default function ProductDetailPage() {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [sideImages, setSideImages] = useState<Array<string | null>>([]);
   const [colorImages, setColorImages] = useState<Array<string | null> | null>(null);
+  const [isColorImagesLoading, setIsColorImagesLoading] = useState(false);
   const [isSideImagesLoading, setIsSideImagesLoading] = useState(true);
   const [imageFailed, setImageFailed] = useState(false);
   const [isGalleryZoomActive, setIsGalleryZoomActive] = useState(false);
@@ -341,18 +344,25 @@ export default function ProductDetailPage() {
   useEffect(() => {
     let active = true;
     setColorImages(null);
-    if (!routeProductId || !activeColor) return () => { active = false; };
+    if (!routeProductId || !activeColor) {
+      setIsColorImagesLoading(false);
+      return () => { active = false; };
+    }
+    setIsColorImagesLoading(true);
     void fetchProductColorImages(routeProductId, activeColor)
       .then((images) => {
         if (!active) return;
-        if (!images.some(Boolean)) return;
-        setColorImages(images);
-        const firstImageIndex = images.findIndex(Boolean);
-        if (firstImageIndex >= 0) setSelectedImageIndex(firstImageIndex);
-        setImageFailed(false);
+        if (images.some(Boolean)) {
+          setColorImages(images);
+          setImageFailed(false);
+        }
+        setIsColorImagesLoading(false);
       })
       .catch((error: unknown) => {
-        if (active) console.error("Product color gallery request failed.", error);
+        if (active) {
+          console.error("Product color gallery request failed.", error);
+          setIsColorImagesLoading(false);
+        }
       });
     return () => { active = false; };
   }, [routeProductId, activeColor]);
@@ -362,12 +372,18 @@ export default function ProductDetailPage() {
   const selectedProductImagePosition = availableProductImageIndexes.indexOf(selectedImageIndex);
 
   useEffect(() => {
+    if (isColorImagesLoading) return;
     if (selectedProductImage) return;
-    const firstAvailableImageIndex = availableProductImageIndexes[0];
-    if (firstAvailableImageIndex !== undefined && firstAvailableImageIndex !== selectedImageIndex) {
-      setSelectedImageIndex(firstAvailableImageIndex);
+    const mappedImageIndex = activeColor
+      ? product?.colorImageIndexes?.[activeColor.trim().toLowerCase()]
+      : undefined;
+    const nextImageIndex = mappedImageIndex !== undefined && availableProductImageIndexes.includes(mappedImageIndex)
+      ? mappedImageIndex
+      : availableProductImageIndexes[0];
+    if (nextImageIndex !== undefined && nextImageIndex !== selectedImageIndex) {
+      setSelectedImageIndex(nextImageIndex);
     }
-  }, [availableProductImageIndexes, selectedImageIndex, selectedProductImage]);
+  }, [activeColor, availableProductImageIndexes, isColorImagesLoading, product?.colorImageIndexes, selectedImageIndex, selectedProductImage]);
 
   const updateGalleryZoomPosition = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== "mouse" && !isDraggingGalleryZoom) return;
@@ -392,14 +408,16 @@ export default function ProductDetailPage() {
   };
 
   useEffect(() => {
-    if (product?.image) {
-      setSelectedImageIndex(0);
-      setSelectedColor(getProductColorFromName(product.name) || getDefaultProductColor(product.colors));
-      setImageFailed(false);
-      setIsGalleryZoomActive(false);
-      setIsDraggingGalleryZoom(false);
-      setFailedThumbnailIndexes([]);
-    }
+    if (!product?.id || !product.image || initializedProductId.current === product.id) return;
+    initializedProductId.current = product.id;
+    const pendingImage = pendingColorVariantImage.current;
+    pendingColorVariantImage.current = null;
+    setSelectedImageIndex(pendingImage && pendingImage.productId === product.id ? pendingImage.imageIndex : 0);
+    setSelectedColor(getProductColorFromName(product.name) || getDefaultProductColor(product.colors));
+    setImageFailed(false);
+    setIsGalleryZoomActive(false);
+    setIsDraggingGalleryZoom(false);
+    setFailedThumbnailIndexes([]);
   }, [product?.id, product?.image, product?.colors, product?.name]);
 
   useEffect(() => {
@@ -609,17 +627,15 @@ export default function ProductDetailPage() {
                 (candidate) => getProductColorFromName(candidate.name)?.toLowerCase() === option.name.toLowerCase(),
               );
               if (variantProduct) {
+                pendingColorVariantImage.current = {
+                  productId: variantProduct.id,
+                  imageIndex: selectedImageIndex,
+                };
                 setLocation(productHref(variantProduct));
                 return;
               }
+              if (option.name !== activeColor) setIsColorImagesLoading(true);
               setSelectedColor(option.name);
-              const mappedImageIndex = product.colorImageIndexes?.[option.name.trim().toLowerCase()];
-              const defaultImageIndex = availableProductImageIndexes[0] ?? 0;
-              setSelectedImageIndex(
-                mappedImageIndex !== undefined && productImageViews[mappedImageIndex]
-                  ? mappedImageIndex
-                  : defaultImageIndex,
-              );
               setImageFailed(false);
               setIsGalleryZoomActive(false);
             }}
