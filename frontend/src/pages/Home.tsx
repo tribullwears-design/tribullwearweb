@@ -9,9 +9,8 @@ import ProductPrice from "../components/ProductPrice";
 import { defaultCategoryHierarchy, getStorefrontCategoryHierarchy, getStorefrontHomeCategories, useCategoryHierarchy, type CategoryHierarchy } from "../lib/categoryHierarchy";
 import { getShowcaseProductImage } from "../lib/storefrontProductImage";
 import { fetchProducts, getEligibleStorefrontProducts, productHref, refreshProducts } from "../lib/products";
-import { getAlternateProductImage, getBestSellingProducts, getFirstProductSideImage, getNewArrivals } from "../lib/homeProducts";
+import { getBestSellingProducts, getNewArrivals } from "../lib/homeProducts";
 import type { StorefrontProduct } from "../lib/products";
-import { fetchProductSideImages } from "../lib/productSideImages";
 import { loadCategoryBanner } from "../lib/categoryBanners";
 import { featureImagesUpdatedEvent, loadFeatureImages, type FeatureImages } from "../lib/featureImages";
 import { fetchPublicReviews, type PublicReview } from "../lib/reviews";
@@ -51,32 +50,12 @@ function Reveal({ children, className = "", id }: {
   return <div id={id} className={className}>{children}</div>;
 }
 
-function ProductCard({ item, productId, showMeta = true, href, originalPrice, hoverImage, loading = "lazy" }: { item: string[]; productId: string; showMeta?: boolean; href: string; originalPrice?: number; hoverImage?: string; loading?: "eager" | "lazy" }) {
-  const [hoverImageLoaded, setHoverImageLoaded] = useState(false);
-  const [sideImage, setSideImage] = useState<string>();
-
-  useEffect(() => {
-    let active = true;
-    void fetchProductSideImages(productId).then((images) => {
-      if (active) setSideImage(getFirstProductSideImage(images));
-    }).catch((error: unknown) => {
-      console.error(`Could not load side images for product ${productId}.`, error);
-    });
-    return () => {
-      active = false;
-    };
-  }, [productId]);
-
-  const cardHoverImage = sideImage || hoverImage;
-
+function ProductCard({ item, showMeta = true, href, originalPrice, loading = "lazy" }: { item: string[]; showMeta?: boolean; href: string; originalPrice?: number; loading?: "eager" | "lazy" }) {
   return (
     <Link href={href} className="product-card-link" aria-label={`Browse products, including ${item[1]}`} draggable={false}>
-      <article
-        className={cls("product-card", hoverImageLoaded ? "product-card--has-hover-image" : null)}
-      >
+      <article className="product-card">
         <div className="product-card__image">
-          <img src={item[0]} alt={item[1]} className="product-image-primary" loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" draggable={false} />
-          {cardHoverImage && <img src={cardHoverImage} alt="" aria-hidden="true" className="product-image-hover" loading="lazy" fetchPriority="low" decoding="async" draggable={false} onLoad={() => setHoverImageLoaded(true)} />}
+          <img src={item[0]} alt={item[1]} loading={loading} fetchPriority={loading === "eager" ? "high" : "auto"} decoding="async" draggable={false} />
         </div>
         {showMeta && <div className="product-card__meta"><h3>{item[1]}</h3><ProductPrice sellingPrice={item[2]} originalPrice={originalPrice} productName={item[1]} /></div>}
       </article>
@@ -382,18 +361,14 @@ export default function Home() {
   const eligibleProducts = hierarchy.loaded ? getEligibleStorefrontProducts(catalogProducts, hierarchy) : catalogProducts;
   const arrivals = getNewArrivals(eligibleProducts, hierarchy);
   const arrivalCards = arrivals.map((product) => ({
-    productId: product.id,
     item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
     href: productHref(product),
     originalPrice: product.originalPrice,
-    hoverImage: getAlternateProductImage(product),
   }));
   const bestSellingCards = getBestSellingProducts(eligibleProducts, hierarchy).map((product) => ({
-      productId: product.id,
       item: [product.image, product.name, `₹${product.price.toLocaleString("en-IN")}`],
       href: productHref(product),
       originalPrice: product.originalPrice,
-      hoverImage: getAlternateProductImage(product),
     }));
   const customerReviews = submittedReviews.map((review, index) => {
     const matchedProduct = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
@@ -497,14 +472,12 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--featured">
-              {arrivalCards.map(({ item, productId, href, originalPrice, hoverImage }, idx) => (
+              {arrivalCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
                   item={item}
-                  productId={productId}
                   key={`${item[1]}-${idx}`}
                   href={href}
                   originalPrice={originalPrice}
-                  hoverImage={hoverImage}
                   loading={idx < 2 ? "eager" : "lazy"}
                 />
               ))}
@@ -521,14 +494,12 @@ export default function Home() {
               </div>
             </Reveal>
             <div className="product-grid product-grid--image-only product-grid--featured">
-              {bestSellingCards.map(({ item, productId, href, originalPrice, hoverImage }, idx) => (
+              {bestSellingCards.map(({ item, href, originalPrice }, idx) => (
                 <ProductCard
                   item={item}
-                  productId={productId}
                   key={`${item[1]}-${idx}`}
                   href={href}
                   originalPrice={originalPrice}
-                  hoverImage={hoverImage}
                 />
               ))}
             </div>
