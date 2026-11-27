@@ -212,7 +212,7 @@ async function startServer() {
         if (normalizeCustomerEmail(linked.email) !== profile.email) {
           return res.status(409).json({ error: "This Google account is linked to a different email address." });
         }
-        const linkedCustomer = profile.picture
+        const linkedCustomer = profile.picture && linked.googlePhoto !== profile.picture
           ? await updateGoogleCustomerPhoto(profile.sub, profile.picture) ?? linked
           : linked;
         const name = typeof linkedCustomer.name === "string" && linkedCustomer.name.trim() ? linkedCustomer.name.trim() : profile.name;
@@ -298,7 +298,7 @@ async function startServer() {
           return res.status(409).json({ error: "This email already has an account. Sign in with its existing method." });
         }
       }
-      if (profile.picture) {
+      if (profile.picture && customer.googlePhoto !== profile.picture) {
         customer = await updateGoogleCustomerPhoto(profile.sub, profile.picture) ?? customer;
       }
       issueCustomerSession(res, customer);
@@ -1081,9 +1081,9 @@ async function startServer() {
       res.status(500).json({ error: "Unable to submit your review right now" });
     }
   });
-  app.get("/api/reviews/:id/photo", async (req, res) => {
+  const sendReviewPhoto = async (id: string, res: express.Response, index = 0) => {
     try {
-      const photo = await getReviewPhoto(req.params.id);
+      const photo = await getReviewPhoto(id, index);
       if (!photo) return res.status(404).end();
       res.set({
         "Cache-Control": "public, max-age=31536000, immutable",
@@ -1095,6 +1095,14 @@ async function startServer() {
       console.error("Could not load customer review photo.", error);
       res.status(500).json({ error: "Unable to load the review photo right now" });
     }
+  };
+  app.get("/api/reviews/:id/photos/:index", async (req, res) => {
+    const index = Number(req.params.index);
+    if (!Number.isSafeInteger(index) || index < 0) return res.status(404).end();
+    return sendReviewPhoto(req.params.id, res, index);
+  });
+  app.get("/api/reviews/:id/photo", async (req, res) => {
+    return sendReviewPhoto(req.params.id, res);
   });
   app.get("/api/admin/videos", requireAdminPermission("products", "view"), async (_req, res) => {
     try { res.json(await listVideos()); } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load videos" }); }
@@ -1257,9 +1265,6 @@ async function startServer() {
         }
         if (color !== undefined && (typeof color !== "string" || !product.colors.some((entry) => entry.toLowerCase() === color.toLowerCase()))) {
           return res.status(400).json({ error: `The selected colour for ${product.name} is not available` });
-        }
-        if (product.colors.length > 0 && !color) {
-          return res.status(400).json({ error: `Select a colour for ${product.name}` });
         }
         const requestedQuantity = (requestedByProduct.get(product.id) || 0) + item.quantity;
         requestedByProduct.set(product.id, requestedQuantity);

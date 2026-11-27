@@ -72,7 +72,7 @@ describe("customer data store", () => {
   });
 
   it("updates only the authenticated profile document and retains the verified account email", async () => {
-    mocks.findOne.mockResolvedValue({
+    mocks.findOneAndUpdate.mockResolvedValue({
       userId: "customer-a",
       name: "Updated Name",
       email: "customer-a@example.com",
@@ -88,7 +88,7 @@ describe("customer data store", () => {
     });
 
     expect(profile).toMatchObject({ userId: "customer-a", email: "customer-a@example.com", name: "Updated Name" });
-    expect(mocks.updateOne).toHaveBeenLastCalledWith(
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       { userId: "customer-a" },
       {
         $set: {
@@ -97,9 +97,13 @@ describe("customer data store", () => {
           phone: "9876543211",
           updatedAt: expect.any(Date),
         },
+        $setOnInsert: { userId: "customer-a", createdAt: expect.any(Date) },
         $unset: { photo: "" },
       },
+      { upsert: true, returnDocument: "after" },
     );
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+    expect(mocks.findOne).not.toHaveBeenCalled();
   });
 
   it("reads back the complete saved profile image representation without truncation", async () => {
@@ -108,7 +112,7 @@ describe("customer data store", () => {
       Buffer.alloc(3_999_992, 0x5a),
     ]);
     const photo = `data:image/png;base64,${imageBytes.toString("base64")}`;
-    mocks.findOne.mockResolvedValue({
+    mocks.findOneAndUpdate.mockResolvedValue({
       userId: "customer-a",
       name: "Customer A",
       email: "customer-a@example.com",
@@ -125,7 +129,7 @@ describe("customer data store", () => {
     });
 
     expect(profile?.photo).toBe(photo);
-    expect(mocks.updateOne).toHaveBeenLastCalledWith(
+    expect(mocks.findOneAndUpdate).toHaveBeenCalledWith(
       { userId: "customer-a" },
       {
         $set: {
@@ -135,7 +139,9 @@ describe("customer data store", () => {
           updatedAt: expect.any(Date),
           photo,
         },
+        $setOnInsert: { userId: "customer-a", createdAt: expect.any(Date) },
       },
+      { upsert: true, returnDocument: "after" },
     );
   });
 

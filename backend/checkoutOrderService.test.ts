@@ -93,6 +93,22 @@ describe("prepareCheckoutOrder", () => {
     })]);
   });
 
+  it("accepts a selected size without requiring a colour", async () => {
+    const checkout = await prepareCheckoutOrder({
+      ...request,
+      items: [{ id: "product-1", quantity: 1, variant: { size: "L" } }],
+    });
+
+    expect(checkout.orderItems).toMatchObject([{ variant: "Size: L" }]);
+  });
+
+  it("still requires a size when a product has sizes", async () => {
+    await expect(prepareCheckoutOrder({
+      ...request,
+      items: [{ id: "product-1", quantity: 1, variant: { color: "Black" } }],
+    })).rejects.toMatchObject({ status: 400, message: "Select a size for Catalog-priced shirt" });
+  });
+
   it("rejects an out-of-stock product even when the client requests one unit", async () => {
     mocks.getProduct.mockResolvedValue({ ...product, stock: 0 });
     await expect(prepareCheckoutOrder({

@@ -7,11 +7,13 @@ export type PublicReview = {
   rating: number;
   comment: string;
   photoUrl?: string;
+  photoUrls?: string[];
   createdAt: string;
 };
 
-export type ReviewSubmission = Omit<PublicReview, "id" | "createdAt" | "photoUrl"> & {
+export type ReviewSubmission = Omit<PublicReview, "id" | "createdAt" | "photoUrl" | "photoUrls"> & {
   photo?: string;
+  photos?: string[];
 };
 
 async function readError(response: Response, fallback: string) {

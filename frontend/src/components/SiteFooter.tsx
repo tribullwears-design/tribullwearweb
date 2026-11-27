@@ -53,8 +53,8 @@ export default function SiteFooter({ className = "" }: SiteFooterProps) {
             <Link href={footerInfoPaths.account}>My Account</Link>
           </div>
           <div className="footer__badges">
-            <Link className="footer__badge" href={footerInfoPaths.shipping}><span className="footer__badge-icon">↗</span> Free Shipping</Link>
-            <Link className="footer__badge" href={footerInfoPaths.exchange}><span className="footer__badge-icon">↻</span> No Returns or Refunds — Exchange Only</Link>
+            <Link className="footer__badge" href={footerInfoPaths.shipping}><span className="footer__badge-icon">↗</span><span className="footer__badge-label">Free Shipping</span></Link>
+            <Link className="footer__badge" href={footerInfoPaths.exchange}><span className="footer__badge-icon">↻</span><span className="footer__badge-label">No Returns or Refunds — Exchange Only</span></Link>
           </div>
         </div>
 

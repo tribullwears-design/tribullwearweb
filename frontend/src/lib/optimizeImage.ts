@@ -12,7 +12,7 @@ function readAsDataUrl(blob: Blob) {
   });
 }
 
-export async function optimizeImageForUpload(file: File) {
+export async function optimizeImageForUpload(file: File, maxBytes = 6 * 1024 * 1024) {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file);
@@ -21,22 +21,30 @@ export async function optimizeImageForUpload(file: File) {
   }
 
   try {
-    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    let scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    let quality = 0.82;
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Image optimization is unavailable in this browser.");
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
-    const optimized = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (blob) => blob ? resolve(blob) : reject(new Error("The selected image could not be optimized.")),
-        "image/webp",
-        0.82,
-      );
-    });
-    if (optimized.size > 6 * 1024 * 1024) {
+    let optimized: Blob | undefined;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      optimized = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (blob) => blob ? resolve(blob) : reject(new Error("The selected image could not be optimized.")),
+          "image/webp",
+          quality,
+        );
+      });
+      if (optimized.size <= maxBytes) break;
+      scale *= 0.82;
+      quality = Math.max(0.52, quality - 0.05);
+    }
+
+    if (!optimized || optimized.size > maxBytes) {
       throw new Error("The optimized image is still too large. Choose a smaller image.");
     }
     return readAsDataUrl(optimized);

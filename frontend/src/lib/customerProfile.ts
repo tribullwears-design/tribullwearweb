@@ -44,15 +44,28 @@ export function readProfilePhotoFile(file: File): Promise<string> {
   });
 }
 
+async function readCustomerProfileResponse(response: Response, fallbackMessage: string): Promise<CustomerProfile> {
+  const data = await response.json().catch(() => undefined) as { profile?: unknown; error?: string } | undefined;
+  const profile = data?.profile;
+  if (!response.ok || typeof profile !== "object" || profile === null
+    || !("name" in profile) || typeof profile.name !== "string"
+    || !("email" in profile) || typeof profile.email !== "string"
+    || !("phone" in profile) || typeof profile.phone !== "string"
+    || ("photo" in profile && profile.photo !== undefined && typeof profile.photo !== "string")) {
+    throw new Error(data?.error || fallbackMessage);
+  }
+  const photo = "photo" in profile && typeof profile.photo === "string" ? profile.photo : undefined;
+  return {
+    name: profile.name,
+    email: profile.email,
+    phone: profile.phone,
+    ...(photo !== undefined ? { photo } : {}),
+  };
+}
+
 export async function fetchCustomerProfile(): Promise<CustomerProfile> {
   const response = await apiFetch("/api/customer/profile", { cache: "no-store" });
-  const data = await response.json().catch(() => undefined) as { profile?: CustomerProfile; error?: string } | undefined;
-  const profile = data?.profile;
-  if (!response.ok || !profile || typeof profile.name !== "string" || typeof profile.email !== "string"
-    || typeof profile.phone !== "string" || (profile.photo !== undefined && typeof profile.photo !== "string")) {
-    throw new Error(data?.error || "Unable to load your saved profile.");
-  }
-  return profile;
+  return readCustomerProfileResponse(response, "Unable to load your saved profile.");
 }
 
 export async function saveCustomerProfile(patch: CustomerProfilePatch): Promise<CustomerProfile> {
@@ -61,7 +74,5 @@ export async function saveCustomerProfile(patch: CustomerProfilePatch): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
   });
-  const data = await response.json().catch(() => undefined) as { error?: string } | undefined;
-  if (!response.ok) throw new Error(data?.error || "Unable to save your profile.");
-  return fetchCustomerProfile();
+  return readCustomerProfileResponse(response, "Unable to save your profile.");
 }

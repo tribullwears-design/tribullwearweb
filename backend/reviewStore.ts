@@ -3,7 +3,11 @@ import type { Collection } from "mongodb";
 import { getDatabase } from "./database.js";
 
 const MAX_REVIEW_PHOTO_BYTES = 5 * 1024 * 1024;
+const MAX_REVIEW_GALLERY_PHOTO_BYTES = 1_200_000;
+const MAX_REVIEW_PHOTOS = 5;
 const REVIEW_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type ReviewPhoto = { mimeType: string; data: string };
 
 export type ReviewDocument = {
   id: string;
@@ -11,7 +15,8 @@ export type ReviewDocument = {
   productName: string;
   rating: number;
   comment: string;
-  photo?: { mimeType: string; data: string };
+  photo?: ReviewPhoto;
+  photos?: ReviewPhoto[];
   createdAt: string;
 };
 
@@ -34,10 +39,10 @@ function requiredText(value: unknown, label: string, maxLength: number) {
   return text;
 }
 
-function readPhoto(value: unknown): ReviewDocument["photo"] {
+function readPhoto(value: unknown, maxBytes = MAX_REVIEW_PHOTO_BYTES): ReviewPhoto | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (typeof value !== "string" || value.length > Math.ceil(MAX_REVIEW_PHOTO_BYTES * 4 / 3) + 128) {
-    throw new ReviewValidationError("Photo must be smaller than 5 MB");
+  if (typeof value !== "string" || value.length > Math.ceil(maxBytes * 4 / 3) + 128) {
+    throw new ReviewValidationError(`Photo must be smaller than ${(maxBytes / 1_000_000).toFixed(1)} MB`);
   }
 
   const match = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(value);
@@ -46,8 +51,8 @@ function readPhoto(value: unknown): ReviewDocument["photo"] {
   }
   const encoded = match[2];
   const bytes = Buffer.from(encoded, "base64");
-  if (bytes.length < 1 || bytes.length > MAX_REVIEW_PHOTO_BYTES || bytes.toString("base64") !== encoded) {
-    throw new ReviewValidationError("Photo must be smaller than 5 MB and use a valid image format");
+  if (bytes.length < 1 || bytes.length > maxBytes || bytes.toString("base64") !== encoded) {
+    throw new ReviewValidationError("Photo exceeds the allowed size or uses an invalid image format");
   }
 
   const mimeType = `image/${match[1].toLowerCase() === "jpg" ? "jpeg" : match[1].toLowerCase()}`;
@@ -62,6 +67,31 @@ function readPhoto(value: unknown): ReviewDocument["photo"] {
   return { mimeType, data: encoded };
 }
 
+function readPhotos(value: unknown, legacyPhoto: unknown): ReviewPhoto[] | undefined {
+  if (value === undefined) {
+    const photo = readPhoto(legacyPhoto);
+    return photo ? [photo] : undefined;
+  }
+  if (!Array.isArray(value) || value.length > MAX_REVIEW_PHOTOS) {
+    throw new ReviewValidationError(`Upload no more than ${MAX_REVIEW_PHOTOS} photos`);
+  }
+  const photos: ReviewPhoto[] = [];
+  for (const rawPhoto of value) {
+    const photo = readPhoto(rawPhoto, MAX_REVIEW_GALLERY_PHOTO_BYTES);
+    if (!photo) throw new ReviewValidationError("Each uploaded photo must be valid");
+    photos.push(photo);
+  }
+  return photos.length ? photos : undefined;
+}
+
+function publicPhotoFields(id: string, photos: ReviewPhoto[]) {
+  if (!photos.length) return {};
+  return {
+    photoUrl: `/api/reviews/${id}/photo`,
+    photoUrls: photos.map((_, index) => `/api/reviews/${id}/photos/${index}`),
+  };
+}
+
 function validateReview(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new ReviewValidationError("Review details are required");
@@ -73,13 +103,13 @@ function validateReview(value: unknown) {
   }
   const comment = requiredText(input.comment, "Review", 1000);
   if (comment.length < 5) throw new ReviewValidationError("Review must be at least 5 characters long");
-  const photo = readPhoto(input.photo);
+  const photos = readPhotos(input.photos, input.photo);
   return {
     customerName: requiredText(input.customerName, "Name", 80),
     productName: requiredText(input.productName, "Product name", 120),
     rating,
     comment,
-    ...(photo ? { photo } : {}),
+    ...(photos ? { photos } : {}),
   };
 }
 
@@ -90,30 +120,31 @@ export async function createReview(value: unknown) {
     createdAt: new Date().toISOString(),
   };
   await (await getCollection()).insertOne(review);
-  const { photo: _photo, ...publicReview } = review;
+  const { photo: _photo, photos: storedPhotos, ...publicReview } = review;
   return {
     ...publicReview,
-    ...(review.photo ? { photoUrl: `/api/reviews/${review.id}/photo` } : {}),
+    ...publicPhotoFields(review.id, storedPhotos || (review.photo ? [review.photo] : [])),
   };
 }
 
 export async function listPublicReviews() {
   const reviews = await (await getCollection())
-    .find({}, { projection: { _id: 0, "photo.data": 0 } })
+    .find({}, { projection: { _id: 0, "photo.data": 0, "photos.data": 0 } })
     .sort({ createdAt: -1 })
     .toArray();
-  return reviews.map(({ id, photo, ...review }) => ({
+  return reviews.map(({ id, photo, photos, ...review }) => ({
     id,
     ...review,
-    ...(photo ? { photoUrl: `/api/reviews/${id}/photo` } : {}),
+    ...publicPhotoFields(id, photos || (photo ? [photo] : [])),
   }));
 }
 
-export async function getReviewPhoto(id: string) {
-  if (!REVIEW_ID_PATTERN.test(id)) return null;
-  const review = await (await getCollection()).findOne({ id }, { projection: { _id: 0, photo: 1 } });
-  if (!review?.photo) return null;
-  return { mimeType: review.photo.mimeType, data: Buffer.from(review.photo.data, "base64") };
+export async function getReviewPhoto(id: string, index = 0) {
+  if (!REVIEW_ID_PATTERN.test(id) || !Number.isSafeInteger(index) || index < 0) return null;
+  const review = await (await getCollection()).findOne({ id }, { projection: { _id: 0, photo: 1, photos: 1 } });
+  const photo = review?.photos?.[index] || (index === 0 ? review?.photo : undefined);
+  if (!photo) return null;
+  return { mimeType: photo.mimeType, data: Buffer.from(photo.data, "base64") };
 }
 
 export async function deleteReview(id: string) {

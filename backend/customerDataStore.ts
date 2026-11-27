@@ -131,23 +131,21 @@ export async function updateCustomerProfile(
   patch: { name: string; phone: string; photo?: string | null },
 ): Promise<CustomerProfile | null> {
   const collection = await getCollection();
-  await ensureDataDocument(collection, userId);
-  await collection.updateOne(
+  const now = new Date();
+  const profile = await collection.findOneAndUpdate(
     { userId },
     {
       $set: {
         name: patch.name,
         email: identityEmail,
         phone: patch.phone,
-        updatedAt: new Date(),
+        updatedAt: now,
         ...(typeof patch.photo === "string" ? { photo: patch.photo } : {}),
       },
+      $setOnInsert: { userId, createdAt: now },
       ...(patch.photo === null ? { $unset: { photo: "" } } : {}),
     },
-  );
-  const profile = await collection.findOne(
-    { userId },
-    { projection: { _id: 0, userId: 1, name: 1, email: 1, phone: 1, photo: 1, createdAt: 1, updatedAt: 1 } },
+    { upsert: true, returnDocument: "after" },
   );
   if (!profile) return null;
   return {

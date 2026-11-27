@@ -101,7 +101,6 @@ export async function prepareCheckoutOrder(
     if (color !== undefined && (typeof color !== "string" || !product.colors.some((entry) => entry.toLowerCase() === color.toLowerCase()))) {
       throw new CheckoutValidationError(`The selected colour for ${product.name} is not available`);
     }
-    if (product.colors.length > 0 && !color) throw new CheckoutValidationError(`Select a colour for ${product.name}`);
 
     const quantity = requested.quantity as number;
     const requestedQuantity = (requestedByProduct.get(product.id) || 0) + quantity;

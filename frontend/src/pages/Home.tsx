@@ -94,7 +94,10 @@ export default function Home() {
   const [submittedReviews, setSubmittedReviews] = useState<PublicReview[]>([]);
   const [reviewsLoaded, setReviewsLoaded] = useState(false);
   const [reviewsError, setReviewsError] = useState("");
-  const [customerReviewPage, setCustomerReviewPage] = useState(0);
+  const [isReviewsBookOpen, setIsReviewsBookOpen] = useState(false);
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  const [reviewTurnDirection, setReviewTurnDirection] = useState<"forward" | "backward">("forward");
   const [homeBanner, setHomeBanner] = useState<Awaited<ReturnType<typeof loadCategoryBanner>>>(null);
   const [homeBannerImageLoaded, setHomeBannerImageLoaded] = useState(false);
   const [homeBannerImageFailed, setHomeBannerImageFailed] = useState(false);
@@ -108,6 +111,7 @@ export default function Home() {
   const [lifestyleStep, setLifestyleStep] = useState(0);
   const [lifestyleVisibleCount, setLifestyleVisibleCount] = useState(3);
   const [lifestyleTransitioning, setLifestyleTransitioning] = useState(false);
+  const [lifestylePendingIndex, setLifestylePendingIndex] = useState<number | null>(null);
   const [lifestyleMediaReady, setLifestyleMediaReady] = useState(false);
   const [lifestyleSectionVisible, setLifestyleSectionVisible] = useState(false);
   const touchStartX = useRef<number | null>(null);
@@ -229,7 +233,6 @@ export default function Home() {
     void fetchPublicReviews().then((reviews) => {
       if (active) {
         setSubmittedReviews(reviews);
-        setCustomerReviewPage(0);
       }
     }).catch((error: unknown) => {
       console.error("Could not load customer reviews for the storefront.", error);
@@ -301,13 +304,20 @@ export default function Home() {
 
   const lifestyleSlides = homeVideos;
   const maxLifestyleIndex = Math.max(0, lifestyleSlides.length - lifestyleVisibleCount);
-  const lifestylePreloadEnd = lifestyleIndex + Math.max(1, Math.min(lifestyleVisibleCount, 2));
+  const lifestylePreloadStart = Math.max(0, lifestyleIndex - 1);
+  const lifestylePreloadEnd = lifestyleIndex + Math.max(2, Math.min(lifestyleVisibleCount, 2));
 
   const scrollLifestyle = (direction: "left" | "right") => {
-    if (lifestyleTransitioning) return;
+    if (lifestyleTransitioning || lifestylePendingIndex !== null) return;
 
     const nextIndex = direction === "left" ? lifestyleIndex - 1 : lifestyleIndex + 1;
     if (nextIndex < 0 || nextIndex > maxLifestyleIndex) return;
+
+    const nextVideo = lifestyleVideoRefs.current.get(lifestyleSlides[nextIndex].id);
+    if (!nextVideo || nextVideo.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      setLifestylePendingIndex(nextIndex);
+      return;
+    }
 
     setLifestyleTransitioning(true);
     setLifestyleIndex(nextIndex);
@@ -336,6 +346,21 @@ export default function Home() {
   const handleLifestyleTransitionEnd = (event: React.TransitionEvent<HTMLDivElement>) => {
     if (event.propertyName !== "transform") return;
     setLifestyleTransitioning(false);
+  };
+
+  const handleLifestyleVideoLoadedData = (index: number) => {
+    if (index !== lifestylePendingIndex) return;
+    setLifestyleTransitioning(true);
+    setLifestyleIndex(index);
+    setLifestylePendingIndex(null);
+  };
+
+  const handleLifestyleVideoError = (index: number) => {
+    if (index !== lifestylePendingIndex) return;
+    const video = lifestyleSlides[index];
+    console.error(`Could not load lifestyle video "${video.title}".`);
+    setVideosError("A lifestyle video could not be loaded.");
+    setLifestylePendingIndex(null);
   };
 
   const handleLifestyleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
@@ -371,13 +396,25 @@ export default function Home() {
       hoverImage: getAlternateProductImage(product),
     }));
   const customerReviews = submittedReviews.map((review, index) => {
-    const product = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
+    const matchedProduct = eligibleProducts.find((item) => item.name.trim().toLowerCase() === review.productName.trim().toLowerCase());
+    const fallbackProduct = matchedProduct || (eligibleProducts.length ? eligibleProducts[index % eligibleProducts.length] : undefined);
+    const uploadedPhotos = review.photoUrls?.length ? review.photoUrls : review.photoUrl ? [review.photoUrl] : [];
     return {
       ...review,
-      productImage: review.photoUrl || product?.image || getShowcaseProductImage(index),
+      hasCustomerPhotos: uploadedPhotos.length > 0,
+      displayPhotos: uploadedPhotos.length ? uploadedPhotos : [fallbackProduct?.image || getShowcaseProductImage(index)],
     };
   });
-  const reviewPageCount = Math.ceil(customerReviews.length / 2);
+  const activeReviewIndex = Math.min(currentReviewIndex, Math.max(customerReviews.length - 1, 0));
+  const activeReview = customerReviews[activeReviewIndex];
+  const activePhotoIndex = Math.min(currentPhotoIndex, Math.max((activeReview?.displayPhotos.length || 1) - 1, 0));
+  const turnReviewPage = (direction: "forward" | "backward") => {
+    const nextIndex = activeReviewIndex + (direction === "forward" ? 1 : -1);
+    if (nextIndex < 0 || nextIndex >= customerReviews.length) return;
+    setCurrentPhotoIndex(0);
+    setReviewTurnDirection(direction);
+    setCurrentReviewIndex(nextIndex);
+  };
 
   return (
     <div id="top" className="tribull-page" ref={pageRef}>
@@ -551,47 +588,147 @@ export default function Home() {
           </div>
           <div className="customer-reviews__carousel">
             <div className="customer-reviews__grid">
-              {customerReviews.length ? customerReviews.map((review, index) => (
-                <article
-                  className={cls("customer-review-card", Math.floor(index / 2) !== customerReviewPage ? "customer-review-card--mobile-hidden" : null)}
-                  key={review.id}
-                >
-                  <img className="customer-review-card__image" src={review.productImage} alt={`${review.productName} review`} loading="lazy" decoding="async" />
-                  <div className="customer-review-card__content">
-                    <h3>{review.customerName}</h3>
-                    <div className="customer-review-card__stars" aria-label={`${review.rating} out of 5 stars`}>
-                      {Array.from({ length: 5 }, (_, index) => <Star key={index} size={16} fill={index < review.rating ? "currentColor" : "none"} aria-hidden="true" />)}
+              {customerReviews.length ? (
+                <article className={cls("customer-review-card", isReviewsBookOpen ? "customer-review-card--open" : null)}>
+                  {isReviewsBookOpen && activeReview ? (
+                    <div className="customer-review-book customer-review-book--open" role="group" aria-label="Customer review book">
+                      <span className="customer-review-book__pages">
+                        <span
+                          className="customer-review-book__page customer-review-book__page--left"
+                          onClick={() => turnReviewPage("backward")}
+                        >
+                          <span className="customer-review-book__photo-frame" key={`${activeReview.id}-${activePhotoIndex}`}>
+                            <img
+                              className="customer-review-book__photo"
+                              src={activeReview.displayPhotos[activePhotoIndex]}
+                              alt={activeReview.hasCustomerPhotos ? `${activeReview.customerName}'s photo ${activePhotoIndex + 1} with their ${activeReview.productName} review` : activeReview.productName}
+                              loading="lazy"
+                              decoding="async"
+                            />
+                          </span>
+                          {activeReview.displayPhotos.length > 1 && (
+                            <span
+                              className="customer-review-book__photo-controls"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <button
+                                className="customer-review-book__photo-button"
+                                type="button"
+                                aria-label="Previous customer photo"
+                                disabled={activePhotoIndex === 0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setCurrentPhotoIndex((index) => Math.max(index - 1, 0));
+                                }}
+                              >
+                                <ArrowLeft size={17} aria-hidden="true" />
+                              </button>
+                              <span className="customer-review-book__photo-count" aria-live="polite">
+                                PHOTO {activePhotoIndex + 1} OF {activeReview.displayPhotos.length}
+                              </span>
+                              <button
+                                className="customer-review-book__photo-button"
+                                type="button"
+                                aria-label="Next customer photo"
+                                disabled={activePhotoIndex >= activeReview.displayPhotos.length - 1}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setCurrentPhotoIndex((index) => Math.min(index + 1, activeReview.displayPhotos.length - 1));
+                                }}
+                              >
+                                <ArrowRight size={17} aria-hidden="true" />
+                              </button>
+                            </span>
+                          )}
+                        </span>
+                        <span
+                          className={`customer-review-book__page customer-review-book__page--right customer-review-book__page--turn-${reviewTurnDirection}`}
+                          key={activeReview.id}
+                          onClick={() => turnReviewPage("forward")}
+                        >
+                          <span className="customer-review-book__review">
+                            <span className="customer-review-book__eyebrow">Customer review {activeReviewIndex + 1}</span>
+                            <span className="customer-review-book__name">{activeReview.customerName}</span>
+                            <span className="customer-review-book__stars" role="img" aria-label={`${activeReview.rating} out of 5 stars`}>
+                              {Array.from({ length: 5 }, (_, starIndex) => <Star key={starIndex} size={18} fill={starIndex < activeReview.rating ? "currentColor" : "none"} aria-hidden="true" />)}
+                            </span>
+                            <span className="customer-review-book__product">{activeReview.productName}</span>
+                            <span className="customer-review-book__quote">“{activeReview.comment}”</span>
+                          </span>
+                          <span
+                            className="customer-review-book__page-controls"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <button
+                              className="customer-review-book__page-button"
+                              type="button"
+                              aria-label="Previous review"
+                              disabled={activeReviewIndex === 0}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                turnReviewPage("backward");
+                              }}
+                            >
+                              <ArrowLeft size={17} aria-hidden="true" />
+                            </button>
+                            <span className="customer-review-book__page-count" aria-live="polite">PAGE {activeReviewIndex + 1} OF {customerReviews.length}</span>
+                            <button
+                              className="customer-review-book__page-button"
+                              type="button"
+                              aria-label="Next review"
+                              disabled={activeReviewIndex >= customerReviews.length - 1}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                turnReviewPage("forward");
+                              }}
+                            >
+                              <ArrowRight size={17} aria-hidden="true" />
+                            </button>
+                            <button
+                              className="customer-review-book__close"
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                setIsReviewsBookOpen(false);
+                                setCurrentReviewIndex(0);
+                                setCurrentPhotoIndex(0);
+                              }}
+                            >
+                              Close book <span aria-hidden="true">×</span>
+                            </button>
+                          </span>
+                        </span>
+                      </span>
                     </div>
-                    <p className="customer-review-card__product">{review.productName}</p>
-                    <p className="customer-review-card__comment">“{review.comment}”</p>
-                  </div>
+                  ) : (
+                    <button
+                      className="customer-review-book"
+                      type="button"
+                      aria-expanded={false}
+                      aria-label="Open all customer reviews"
+                      onClick={() => {
+                        setCurrentReviewIndex(0);
+                        setCurrentPhotoIndex(0);
+                        setReviewTurnDirection("forward");
+                        setIsReviewsBookOpen(true);
+                      }}
+                    >
+                      <span className="customer-review-book__cover">
+                        <span className="customer-review-book__cover-kicker">TRIBULL · CUSTOMER STORIES</span>
+                        <span className="customer-review-book__cover-title">REVIEWS</span>
+                        <span className="customer-review-book__cover-ornament" aria-hidden="true">✦</span>
+                        <span className="customer-review-book__cover-count">{customerReviews.length} {customerReviews.length === 1 ? "STORY" : "STORIES"}</span>
+                        <span className="customer-review-book__cover-hint">Tap to open</span>
+                      </span>
+                    </button>
+                  )}
                 </article>
-              )              ) : reviewsLoaded ? (
+              ) : reviewsLoaded ? (
                 <p className="customer-reviews__status" role={reviewsError ? "alert" : "status"}>
                   {reviewsError || "No customer reviews yet."}
                 </p>
               ) : null}
             </div>
-            {reviewPageCount > 1 && <div className="customer-reviews__controls" aria-label="Customer review pages">
-              <button
-                className="customer-reviews__arrow"
-                type="button"
-                aria-label="Previous customer reviews"
-                disabled={customerReviewPage === 0}
-                onClick={() => setCustomerReviewPage((page) => Math.max(0, page - 1))}
-              >
-                <ArrowLeft size={18} strokeWidth={1.5} />
-              </button>
-              <button
-                className="customer-reviews__arrow"
-                type="button"
-                aria-label="Next customer reviews"
-                disabled={customerReviewPage >= reviewPageCount - 1}
-                onClick={() => setCustomerReviewPage((page) => Math.min(reviewPageCount - 1, page + 1))}
-              >
-                <ArrowRight size={18} strokeWidth={1.5} />
-              </button>
-            </div>}
           </div>
           <div className="customer-reviews__view-all">
             <Link className="review-primary-button" href="/reviews">View all reviews</Link>
@@ -607,7 +744,7 @@ export default function Home() {
               className="lifestyle-slider__arrow lifestyle-slider__arrow--left"
               type="button"
               aria-label="Previous lifestyle videos"
-              disabled={lifestyleTransitioning || lifestyleIndex <= 0 || lifestyleStep === 0}
+              disabled={lifestyleTransitioning || lifestylePendingIndex !== null || lifestyleIndex <= 0 || lifestyleStep === 0}
               onClick={() => scrollLifestyle("left")}
             >
               <ArrowLeft size={18} strokeWidth={1.5} />
@@ -633,13 +770,15 @@ export default function Home() {
                         if (element) lifestyleVideoRefs.current.set(video.id, element);
                         else lifestyleVideoRefs.current.delete(video.id);
                       }}
-                      src={lifestyleMediaReady && index >= lifestyleIndex && index < lifestylePreloadEnd ? video.url : undefined}
+                      src={lifestyleMediaReady && (index === lifestylePendingIndex || (index >= lifestylePreloadStart && index < lifestylePreloadEnd)) ? video.url : undefined}
                       poster={video.thumbnail}
                       autoPlay={lifestyleMediaReady && lifestyleSectionVisible && index === lifestyleIndex}
                       loop
                       muted
                       playsInline
-                      preload={!lifestyleMediaReady || index < lifestyleIndex || index >= lifestylePreloadEnd ? "none" : index === lifestyleIndex ? "auto" : "metadata"}
+                      preload={!lifestyleMediaReady || (index < lifestylePreloadStart && index !== lifestylePendingIndex) || (index >= lifestylePreloadEnd && index !== lifestylePendingIndex) ? "none" : "auto"}
+                      onLoadedData={() => handleLifestyleVideoLoadedData(index)}
+                      onError={() => handleLifestyleVideoError(index)}
                       aria-label={`${video.title} lifestyle video`}
                     />
                   </div>
@@ -650,7 +789,7 @@ export default function Home() {
               className="lifestyle-slider__arrow lifestyle-slider__arrow--right"
               type="button"
               aria-label="Next lifestyle videos"
-              disabled={lifestyleTransitioning || lifestyleIndex >= maxLifestyleIndex || lifestyleStep === 0}
+              disabled={lifestyleTransitioning || lifestylePendingIndex !== null || lifestyleIndex >= maxLifestyleIndex || lifestyleStep === 0}
               onClick={() => scrollLifestyle("right")}
             >
               <ArrowRight size={18} strokeWidth={1.5} />

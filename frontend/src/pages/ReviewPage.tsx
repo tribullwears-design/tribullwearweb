@@ -5,35 +5,52 @@ import { optimizeImageForUpload } from "../lib/optimizeImage";
 import { submitReview } from "../lib/reviews";
 import "./ReviewPage.css";
 
+const MAX_REVIEW_PHOTOS = 5;
+const MAX_REVIEW_PHOTO_BYTES = 1_200_000;
+
 export default function ReviewPage() {
   const [customerName, setCustomerName] = useState("");
   const [productName, setProductName] = useState("");
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
-  const [photo, setPhoto] = useState("");
-  const [photoName, setPhotoName] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [processingPhotos, setProcessingPhotos] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   const handlePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+    if (files.some((file) => !file.type.startsWith("image/"))) {
       setError("Please choose an image file.");
-      event.target.value = "";
+      return;
+    }
+    if (photos.length + files.length > MAX_REVIEW_PHOTOS) {
+      setError(`You can add up to ${MAX_REVIEW_PHOTOS} photos.`);
       return;
     }
     setError("");
+    setProcessingPhotos(true);
     try {
-      setPhoto(await optimizeImageForUpload(file));
-      setPhotoName(file.name);
+      const optimizedPhotos: string[] = [];
+      for (const file of files) {
+        optimizedPhotos.push(await optimizeImageForUpload(file, MAX_REVIEW_PHOTO_BYTES));
+      }
+      setPhotos((current) => [...current, ...optimizedPhotos]);
+      setPhotoNames((current) => [...current, ...files.map((file) => file.name)]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The photo could not be prepared.");
-      setPhoto("");
-      setPhotoName("");
-      event.target.value = "";
+    } finally {
+      setProcessingPhotos(false);
     }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((current) => current.filter((_, photoIndex) => photoIndex !== index));
+    setPhotoNames((current) => current.filter((_, photoIndex) => photoIndex !== index));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -50,7 +67,7 @@ export default function ReviewPage() {
         productName,
         rating,
         comment,
-        ...(photo ? { photo } : {}),
+        ...(photos.length ? { photos } : {}),
       });
       setSubmitted(true);
     } catch (cause) {
@@ -134,18 +151,27 @@ export default function ReviewPage() {
                   placeholder="What did you like about the product?"
                 />
               </label>
-              <label className="review-photo">
-                <span>Photo <small>(optional)</small></span>
-                <span className="review-photo__picker">
+              <div className="review-photo">
+                <span>Photos <small>(optional, up to {MAX_REVIEW_PHOTOS})</small></span>
+                <label className="review-photo__picker" htmlFor="review-photos">
                   <Upload size={18} />
-                  {photoName || "Take or choose a photo"}
-                </span>
-                <input type="file" accept="image/*" capture="environment" onChange={(event) => void handlePhoto(event)} />
-                {photo && <img className="review-photo__preview" src={photo} alt="Review upload preview" />}
-              </label>
+                  {processingPhotos ? "Preparing photos..." : photoNames.length ? `${photoNames.length} photo${photoNames.length === 1 ? "" : "s"} selected` : "Choose photos"}
+                </label>
+                <input id="review-photos" type="file" accept="image/*" multiple disabled={processingPhotos || photos.length >= MAX_REVIEW_PHOTOS} onChange={(event) => void handlePhoto(event)} />
+                {photos.length > 0 && (
+                  <div className="review-photo__previews">
+                    {photos.map((photo, index) => (
+                      <div className="review-photo__preview-item" key={`${photoNames[index]}-${index}`}>
+                        <img className="review-photo__preview" src={photo} alt={`Review upload preview ${index + 1}`} />
+                        <button type="button" aria-label={`Remove photo ${index + 1}`} onClick={() => removePhoto(index)}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               {error && <p className="review-form__error" role="alert">{error}</p>}
-              <button className="review-primary-button" type="submit" disabled={saving}>
-                {saving ? "Submitting..." : "Submit review"}
+              <button className="review-primary-button" type="submit" disabled={saving || processingPhotos}>
+                {processingPhotos ? "Preparing photos..." : saving ? "Submitting..." : "Submit review"}
               </button>
               <p className="review-form__privacy">Your review and any photo you add may be shown on our website.</p>
             </form>

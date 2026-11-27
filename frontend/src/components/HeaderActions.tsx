@@ -171,7 +171,30 @@ export default function HeaderActions() {
   const loginCloseTimerRef = useRef<number | undefined>(undefined);
   const resetRedirectTimerRef = useRef<number | undefined>(undefined);
   const googleScriptPromiseRef = useRef<Promise<void> | null>(null);
+  const loadGoogleIdentityServices = () => {
+    if (getGoogleIdentityAPI()) return Promise.resolve();
+    if (!googleScriptPromiseRef.current) {
+      googleScriptPromiseRef.current = new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Unable to load Google Identity Services"));
+        document.head.appendChild(script);
+      }).catch((error: unknown) => {
+        googleScriptPromiseRef.current = null;
+        throw error;
+      });
+    }
+    return googleScriptPromiseRef.current;
+  };
   const isLoginPanelOpen = overlay === "account" && (loginStep !== "profile" || !authUser.isAuthenticated);
+
+  useEffect(() => {
+    if (overlay !== "account" || authUser.isAuthenticated || !import.meta.env.VITE_GOOGLE_CLIENT_ID) return;
+    void loadGoogleIdentityServices().catch(() => undefined);
+  }, [overlay, authUser.isAuthenticated]);
 
   useEffect(() => {
     let active = true;
@@ -662,20 +685,7 @@ export default function HeaderActions() {
     const flow = loginStep === "signup" ? "signup" : "signin";
     setIsSigningIn(true);
     try {
-      if (!getGoogleIdentityAPI()) {
-        if (!googleScriptPromiseRef.current) {
-          googleScriptPromiseRef.current = new Promise<void>((resolve, reject) => {
-            const script = document.createElement("script");
-            script.src = "https://accounts.google.com/gsi/client";
-            script.async = true;
-            script.defer = true;
-            script.onload = () => resolve();
-            script.onerror = () => reject(new Error("Unable to load Google Identity Services"));
-            document.head.appendChild(script);
-          });
-        }
-        await googleScriptPromiseRef.current;
-      }
+      await loadGoogleIdentityServices();
       const googleIdentity = getGoogleIdentityAPI();
       if (!googleIdentity) throw new Error("Google Identity Services did not initialize");
       googleIdentity.initialize({
@@ -687,6 +697,7 @@ export default function HeaderActions() {
             return;
           }
           try {
+            setLoginSuccess("Verifying your Google account…");
             const response = await apiFetch("/api/auth/google", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -698,6 +709,7 @@ export default function HeaderActions() {
                 ? data.error
                 : "Google sign-in failed.";
               setLoginError(message);
+              setLoginSuccess("");
               return;
             }
             if (isCustomerLoginResponse(data)) {
@@ -727,8 +739,10 @@ export default function HeaderActions() {
               setLoginSuccess("");
               return;
             }
+            setLoginSuccess("");
             setLoginError("Google sign-in returned an invalid response.");
           } catch {
+            setLoginSuccess("");
             setLoginError("Unable to reach the Google sign-in service.");
           } finally {
             setIsSigningIn(false);
@@ -742,6 +756,7 @@ export default function HeaderActions() {
         }
       });
     } catch {
+      setLoginSuccess("");
       setLoginError("Google sign-in could not start. Check the Google client ID and allowed website origins.");
       setIsSigningIn(false);
     }
@@ -1567,11 +1582,11 @@ export default function HeaderActions() {
               {(loginStep === "forgot" || loginStep === "new-password" || loginStep === "google-profile") && <p className="header-signup-prompt"><button type="button" onClick={switchToLogin}>Back to Sign In</button></p>}
               {loginStep === "login" && <>
                 <div className="header-login-divider"><span>OR</span></div>
-                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn}><GoogleLogo />Continue with Google</button>
+                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn} disabled={isSigningIn}><GoogleLogo />{isSigningIn ? "Connecting to Google…" : "Continue with Google"}</button>
               </>}
               {loginStep === "signup" && <>
                 <div className="header-login-divider"><span>OR</span></div>
-                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn} disabled={isSigningIn}><GoogleLogo />Continue with Google</button>
+                <button className="google-sign-in" type="button" onClick={handleGoogleSignIn} disabled={isSigningIn}><GoogleLogo />{isSigningIn ? "Connecting to Google…" : "Continue with Google"}</button>
               </>}
             </div>
           )}

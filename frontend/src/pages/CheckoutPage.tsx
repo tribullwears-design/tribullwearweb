@@ -354,7 +354,11 @@ export default function CheckoutPage() {
       const item = metadata || product || {};
 
       const price = Number(product?.price ?? 0);
-      const image = product?.image ?? item.image ?? siteLogo;
+      const selectedColor = metadata?.color?.trim()
+        || metadata?.variant?.match(/Colour:\s*([^/]+)/i)?.[1]?.trim();
+      const image = selectedColor
+        ? metadata?.image ?? product?.image ?? siteLogo
+        : product?.image ?? metadata?.image ?? siteLogo;
       const lineTotal = price * quantity;
 
       entries.push({
@@ -911,8 +915,19 @@ export default function CheckoutPage() {
               </div>
               <div className="checkout-review__actions">
                 <button type="button" className="checkout-secondary-button" onClick={() => setReviewMode(false)}>Edit details</button>
-                <button type="button" className="checkout-primary-button" onClick={() => void handlePlaceOrder()} disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}>
-                  {isSubmitting ? "PROCESSING…" : "PAY NOW"}
+                <button
+                  type="button"
+                  className={`checkout-primary-button${isSubmitting ? " checkout-primary-button--processing" : ""}`}
+                  onClick={() => void handlePlaceOrder()}
+                  disabled={isSubmitting || !cartDetails.entries.length || !cartDetails.entries.every((item) => item.available)}
+                  aria-busy={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <img className="checkout-processing-icon" src="/products/icons/checkout-shirt-spinner.png" alt="" aria-hidden="true" />
+                      <span>PROCESSING…</span>
+                    </>
+                  ) : "PAY NOW"}
                 </button>
               </div>
               {checkoutError && <p className="checkout-inline-error" role="alert">{checkoutError}</p>}
@@ -994,11 +1009,11 @@ export default function CheckoutPage() {
               </label>
             </div>
             {customerAuthenticated && (
-              <div>
-                {!savedAddressId && <button type="button" className="checkout-secondary-button" onClick={() => void saveCheckoutAddress()} disabled={saveAddressLoading}>
-                  {saveAddressLoading ? "Saving address…" : "Save this address to my account"}
+              <div className="checkout-save-address-wrap">
+                {!savedAddressId && <button type="button" className="checkout-primary-button checkout-save-address" onClick={() => void saveCheckoutAddress()} disabled={saveAddressLoading}>
+                  {saveAddressLoading ? "Saving address…" : "Save this address"}
                 </button>}
-                {saveAddressMessage && <p className={saveAddressMessageIsError ? "checkout-inline-error" : ""} role={saveAddressMessageIsError ? "alert" : "status"}>{saveAddressMessage}</p>}
+                {saveAddressMessage && <p className={`checkout-save-address-message${saveAddressMessageIsError ? " checkout-inline-error" : ""}`} role={saveAddressMessageIsError ? "alert" : "status"}>{saveAddressMessage}</p>}
               </div>
             )}
           </div>

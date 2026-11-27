@@ -85,8 +85,34 @@ describe("customer reviews", () => {
       id: result.id,
       photoUrl: `/api/reviews/${result.id}/photo`,
     }]);
-    expect(mocks.find).toHaveBeenCalledWith({}, { projection: { _id: 0, "photo.data": 0 } });
+    expect(mocks.find).toHaveBeenCalledWith({}, { projection: { _id: 0, "photo.data": 0, "photos.data": 0 } });
     await expect(getReviewPhoto(result.id)).resolves.toMatchObject({ mimeType: "image/png", data: png });
+  });
+
+  it("saves multiple review photos and returns stable photo URLs for each one", async () => {
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]);
+    const photo = `data:image/png;base64,${png.toString("base64")}`;
+    const result = await createReview({
+      customerName: "Asha",
+      productName: "Everyday Tee",
+      rating: 5,
+      comment: "The fit is great!",
+      photos: [photo, photo],
+    });
+    const savedReview = mocks.insertOne.mock.calls[0]?.[0] as Record<string, unknown>;
+    mocks.reviews = [savedReview];
+
+    await expect(listPublicReviews()).resolves.toMatchObject([{
+      id: result.id,
+      photoUrl: `/api/reviews/${result.id}/photo`,
+      photoUrls: [
+        `/api/reviews/${result.id}/photos/0`,
+        `/api/reviews/${result.id}/photos/1`,
+      ],
+    }]);
+    await expect(getReviewPhoto(result.id, 0)).resolves.toMatchObject({ mimeType: "image/png", data: png });
+    await expect(getReviewPhoto(result.id, 1)).resolves.toMatchObject({ mimeType: "image/png", data: png });
+    await expect(getReviewPhoto(result.id, 2)).resolves.toBeNull();
   });
 
   it.each([
@@ -96,6 +122,7 @@ describe("customer reviews", () => {
     [{ customerName: "Asha", productName: "Tee", rating: 6, comment: "Nice one" }, "Choose a rating"],
     [{ customerName: "Asha", productName: "Tee", rating: 5, comment: "No" }, "at least 5 characters"],
     [{ customerName: "Asha", productName: "Tee", rating: 5, comment: "Great product", photo: "data:image/svg+xml;base64,PHN2Zz4=" }, "Upload a JPG, PNG, or WEBP photo"],
+    [{ customerName: "Asha", productName: "Tee", rating: 5, comment: "Great product", photos: Array(6).fill("data:image/png;base64,iVBORw0KGgoB") }, "no more than 5 photos"],
   ])("rejects invalid review submissions", async (review, error) => {
     await expect(createReview(review)).rejects.toThrow(error);
     expect(mocks.insertOne).not.toHaveBeenCalled();

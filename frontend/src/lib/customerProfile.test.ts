@@ -61,20 +61,20 @@ describe("customer profile photo handling", () => {
     expect(photo).not.toContain("blob:");
   });
 
-  it("saves the image through the authenticated profile API then reloads the persisted profile", async () => {
+  it("returns the saved profile from the update response without a second request", async () => {
     const photo = `data:image/png;base64,${Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64")}`;
     const savedProfile = { name: "Customer", email: "customer@example.com", phone: "9876543210", photo };
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(saveCustomerProfile({ name: "Customer", phone: "9876543210", photo })).resolves.toEqual(savedProfile);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0][0]).toContain("/api/customer/profile");
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string).photo).toBe(photo);
     await expect(fetchCustomerProfile()).resolves.toEqual(savedProfile);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("does not reload or change the displayed profile when the upload request fails", async () => {
@@ -90,12 +90,12 @@ describe("customer profile photo handling", () => {
     const savedProfile = { name: "Customer", email: "customer@example.com", phone: "", photo: "https://example.com/photo.png" };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ profile: savedProfile }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await saveCustomerProfile({ name: "Customer", phone: "" });
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).not.toHaveProperty("photo");
     expect((await fetchCustomerProfile()).photo).toBe(savedProfile.photo);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

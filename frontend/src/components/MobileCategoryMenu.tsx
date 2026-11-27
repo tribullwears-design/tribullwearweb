@@ -65,7 +65,7 @@ export default function MobileCategoryMenu() {
                     onClick={() => setCinemaExpanded((current) => !current)}
                   >
                     <span className="mobile-category-menu__label">
-                      <img className="mobile-category-menu__icon" src="/products/cinemamenu.png" alt="" />
+                      <img className="mobile-category-menu__icon mobile-category-menu__icon--cinema" src="/products/cinemamenu.png" alt="" />
                       Cinema
                     </span>
                     <ChevronRight
@@ -96,11 +96,11 @@ export default function MobileCategoryMenu() {
               )}
               <div className="mobile-category-menu__links">
                 <a href="/#corporate" onClick={closeMenu}>
-                  <img className="mobile-category-menu__icon" src="/products/corporate.png" alt="" />
+                  <img className="mobile-category-menu__icon mobile-category-menu__icon--feature" src="/products/corporate.png" alt="" />
                   Corporate
                 </a>
                 <a href="/#customize" onClick={closeMenu}>
-                  <img className="mobile-category-menu__icon" src="/products/customize.png" alt="" />
+                  <img className="mobile-category-menu__icon mobile-category-menu__icon--feature" src="/products/customize.png" alt="" />
                   Customize
                 </a>
               </div>
